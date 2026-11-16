@@ -342,6 +342,7 @@ func (r *resume) rebase() (wtsync.Result, error) {
 		Onto: st.Onto, Upstream: st.Upstream, Epoch: st.Epoch, Work: name, Total: st.Total,
 		Unavailable: r.unavailable,
 	}
+	req.UncheckedBefore = st.Unchecked
 	// A run with per-layer steps goes on as it was: the same layers, the
 	// same steps, and what its stops did before the handover.
 	if l := st.Layers; l != nil {

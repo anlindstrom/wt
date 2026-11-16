@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -172,6 +173,9 @@ type Request struct {
 	// Resumed is what the layer stops did before the handover a resume
 	// goes on from; nil for a run.
 	Resumed *LayerState
+	// UncheckedBefore is the checks the run did not run before the handover
+	// a resume goes on from: they stay owed.
+	UncheckedBefore []Unchecked
 }
 
 // target is the request as wtsync assesses it: onto, above the upstream.
@@ -282,6 +286,8 @@ type driver struct {
 	stepFailed map[string]int
 	// made is the commits the per-layer steps committed.
 	made map[string]bool
+	// declared is the steps whose missing script was already said.
+	declared map[string]bool
 	// planned is each layer's count from the new base as the list planned
 	// it, before any stop changed the plan.
 	planned []int
@@ -603,6 +609,7 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true,
 		res: Result{Branch: req.Branch, OldTip: old, Safety: safety}, stepFailed: map[string]int{}, made: map[string]bool{}}
 	d.restoreLayers(req.Resumed)
+	d.res.Unchecked = slices.Clone(req.UncheckedBefore)
 	var err error
 	if d.res.SignaturesDropped, err = signedCount(req.Path, req.base(), old); err != nil {
 		return d.res, err
