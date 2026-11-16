@@ -93,6 +93,9 @@ type StackOptions struct {
 	// Autosquash folds the line's fixups: onto its own base, in place, or,
 	// with Onto, as the line moves there.
 	Autosquash bool
+	// Edit is the commit of the line the run stops at for a person to
+	// amend (--edit), as given; empty for none.
+	Edit string
 	// AfterMove is a test's hook into the layer moves: an error stops them
 	// there, as an interrupt would. Nil in a real run.
 	AfterMove func(wtsync.LayerMove) error

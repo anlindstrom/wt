@@ -541,6 +541,8 @@ type syncVerbFlags struct {
 	stack      bool
 	layers     []string
 	autosquash bool
+	// edit is the commit of the line a --stack run stops at for a person.
+	edit string
 	// onto is the ref the named worktrees are looked at against, or
 	// rebased onto, instead of trunk; upstream where their commits start.
 	onto, upstream string

@@ -25,6 +25,11 @@ type todoPlan struct {
 	// belongs to it. due says the group is to be checked, so the break that
 	// ends it is written even where no line of the list asks for one.
 	open, due bool
+	// edit is the full id of the commit a --stack --edit run stops at for a
+	// person; final ends the list in a break, where the run checks the
+	// line's content before git finishes. Empty and false for any other.
+	edit  string
+	final bool
 }
 
 // stackMarks is where a run rebasing a stack held on one line puts each

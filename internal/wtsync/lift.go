@@ -569,6 +569,8 @@ func touchesAny(patterns, paths []string) bool {
 // plainEditor writes the sequence editor that takes a run's stops out of the
 // list again: every break dropped, every edit a pick. A run's list holds no
 // edit or break of anybody else's, so nothing else is touched.
+func plainEditorKeeping(w io.Writer, keep string) { plainEditor(w) }
+
 func plainEditor(w io.Writer) {
 	fmt.Fprintln(w, "#!/bin/sh")
 	fmt.Fprintln(w, "# wt sync: the list a plain rebase would have, for a person to continue")

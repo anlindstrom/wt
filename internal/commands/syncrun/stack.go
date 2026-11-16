@@ -70,6 +70,25 @@ type Stack struct {
 	// fold that changed the line's content. Null in the look, and when the
 	// layers were moved or held one by one.
 	Refusal *string `json:"refusal"`
+	// Edit is what a run with --edit did to the commit it stopped at; null
+	// in the look and for any other run.
+	Edit *StackEdit `json:"-"`
+}
+
+// StackEdit is the commit a --edit run stopped at, what it was amended to,
+// the paths the amend changed, and the commits above it the amend emptied.
+type StackEdit struct {
+	Commit  string        `json:"commit"`
+	Subject string        `json:"subject"`
+	Amended string        `json:"amended"`
+	Paths   []string      `json:"paths"`
+	Emptied []StackCommit `json:"emptied"`
+}
+
+// StackCommit is one commit of the line: its id and its subject.
+type StackCommit struct {
+	SHA     string `json:"sha"`
+	Subject string `json:"subject"`
 }
 
 // StackOf is the look's report of a line: its layers and what holds each.
