@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.8.0",
+  "x-version": "1.9.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync [<work>...] --rebase --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -139,7 +139,7 @@
     "stack": {
       "type": "object",
       "description": "Since 1.6.0: a stack held on one line, for --stack: the line from where it leaves trunk (base) to its tip (head), and its layer branches, bottom first. See docs/json.md.",
-      "required": ["branch", "base", "head", "autosquash", "layers", "skipped", "refusal"],
+      "required": ["branch", "base", "head", "autosquash", "layers", "skipped", "refusal", "edit"],
       "properties": {
         "branch": { "type": "string", "description": "The line's own branch: the worktree named." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where the line leaves trunk: the merge base." },
@@ -147,7 +147,28 @@
         "autosquash": { "type": "boolean", "description": "A fold of the line's fixups (--autosquash): onto its own base, or, with --onto, as the line moves onto the target." },
         "layers": { "type": "array", "items": { "$ref": "#/$defs/stackLayer" } },
         "skipped": { "type": "array", "items": { "$ref": "#/$defs/stackSkipped" } },
-        "refusal": { "type": ["string", "null"], "description": "The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held." }
+        "refusal": { "type": ["string", "null"], "description": "The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held." },
+        "edit": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stackEdit" }], "description": "Since 1.9.0: what a run with --edit did to the commit it stopped at. Null in the look and for any other run." }
+      }
+    },
+    "stackEdit": {
+      "type": "object",
+      "description": "Since 1.9.0: the commit wt sync rebase <work> --stack --edit <rev> stopped at for a person, what they amended it to, and what that did to the line.",
+      "required": ["commit", "subject", "amended", "paths", "emptied"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit as the line had it." },
+        "subject": { "type": "string", "description": "Its subject." },
+        "amended": { "type": "string", "pattern": "^([0-9a-f]{40,64})?$", "description": "What the run went on from at the edit stop: the amended commit, or the last commit added there; empty if the run never went on from it." },
+        "paths": { "type": "array", "items": { "type": "string" }, "description": "The paths the amend changed, sorted; empty when it changed nothing." },
+        "emptied": { "type": "array", "items": { "$ref": "#/$defs/stackCommit" }, "description": "The commits above it that the amend emptied, which the rebase dropped, oldest first." }
+      }
+    },
+    "stackCommit": {
+      "type": "object",
+      "required": ["sha", "subject"],
+      "properties": {
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit as the old line had it." },
+        "subject": { "type": "string" }
       }
     },
     "stackLayer": {

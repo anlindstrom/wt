@@ -569,13 +569,19 @@ func touchesAny(patterns, paths []string) bool {
 // plainEditor writes the sequence editor that takes a run's stops out of the
 // list again: every break dropped, every edit a pick. A run's list holds no
 // edit or break of anybody else's, so nothing else is touched.
-func plainEditor(w io.Writer) {
+func plainEditor(w io.Writer) { plainEditorKeeping(w, "") }
+
+// plainEditorKeeping is plainEditor keeping the edit of keep, a full id:
+// the stop --edit asked for is the person's, not the run's.
+func plainEditorKeeping(w io.Writer, keep string) {
 	fmt.Fprintln(w, "#!/bin/sh")
 	fmt.Fprintln(w, "# wt sync: the list a plain rebase would have, for a person to continue")
+	fmt.Fprintf(w, "keep=%s\n", shellQuote(keep))
 	fmt.Fprintln(w, `while IFS= read -r line || [ -n "$line" ]; do`)
 	fmt.Fprintln(w, `  case "$line" in`)
 	fmt.Fprintln(w, `    break) ;;`)
-	fmt.Fprintf(w, "%s\n", "    \"edit \"*) printf '%s\\n' \"pick ${line#edit }\" ;;")
+	fmt.Fprintln(w, `    "edit "*) rest=${line#edit }; id=${rest%% *}`)
+	fmt.Fprintf(w, "%s\n", "      case \"$keep\" in \"$id\"*) printf '%s\\n' \"$line\" ;; *) printf '%s\\n' \"pick $rest\" ;; esac ;;")
 	fmt.Fprintf(w, "%s\n", "    *) printf '%s\\n' \"$line\" ;;")
 	fmt.Fprintln(w, `  esac`)
 	fmt.Fprintln(w, `done < "$1" > "$1.wt" && mv "$1.wt" "$1"`)

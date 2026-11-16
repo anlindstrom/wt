@@ -176,6 +176,21 @@ type Request struct {
 	// UncheckedBefore is the checks the run did not run before the handover
 	// a resume goes on from: they stay owed.
 	UncheckedBefore []Unchecked
+	// Edit is the commit a --stack --edit run stops at for a person, and,
+	// in a resume past that stop, what it was amended to; nil for any other
+	// run. The rebase is in place, onto the line's own base.
+	Edit *EditStop
+	// HandedAt is the stop the handover a resume goes on from recorded,
+	// 1-based; zero for a run.
+	HandedAt int
+	// HandedHead is HEAD as that handover recorded it: a stop a person
+	// reached past it must be on top of it.
+	HandedHead string
+	// Content is the content check of an edit run at the end of its list,
+	// before the line's branch moves: given the rebased tip, the edit as the
+	// run went on from it, and the paths this rebase stopped on, why the
+	// content is refused, "" when it holds.
+	Content func(head string, edit EditStop, stopped []string) string
 }
 
 // target is the request as wtsync assesses it: onto, above the upstream.
@@ -216,6 +231,9 @@ type Handover struct {
 	// Check is the each_commit check that failed at this stop, when that is
 	// what stopped it: nothing is unmerged, and HEAD is the commit checked.
 	Check *CheckFailure
+	// Edit says this is the stop --edit asked for: HEAD is the commit, for
+	// a person to amend, and nothing is unmerged.
+	Edit bool
 }
 
 // Result is what a rebase did.
@@ -250,6 +268,14 @@ type Result struct {
 	// in progress in the worktree, with every strategy's answer staged.
 	// Nil when the rebase finished or was restored.
 	Left *Handover
+	// Edit is the request's edit as the rebase left it: Amended filled once
+	// it went on from the edit stop. Nil for any other run.
+	Edit *EditStop
+	// ByHand is, in an edit run's resume, the paths that really conflicted
+	// at the stop it went on from when that is not the stop the handover
+	// recorded: one a person reached with git alone and resolved, rebuilt
+	// from the pick.
+	ByHand []string
 }
 
 // driver is one rebase in flight: Rebase starts one and drives it, Resume
@@ -294,6 +320,8 @@ type driver struct {
 	// subjectMoved says the last layer stop moved its layer's planned tip
 	// subject, which a layer above with no commit of its own follows.
 	subjectMoved bool
+	// liftMarks is the picks a lifting rule marked, full ids.
+	liftMarks []string
 }
 
 func (d *driver) git(args ...string) (string, error) {
@@ -402,7 +430,7 @@ func (d *driver) fail(err error) (Result, error) {
 // children. An error is a git failure, after a restore to the safety ref,
 // or a restore that could not be verified.
 func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, error) {
-	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, res: Result{Branch: req.Branch},
+	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, res: Result{Branch: req.Branch, Edit: req.Edit},
 		stepFailed: map[string]int{}, made: map[string]bool{}}
 	old, err := d.git("rev-parse", "--verify", req.Branch)
 	if err != nil {
@@ -467,8 +495,10 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 	if err := d.planChecks(); err != nil {
 		return early(err)
 	}
+	d.liftMarks = lift.marks
 	plan := todoPlan{liftPlan: lift, checks: d.checks}
 	plan.stops, plan.tail = d.layerStops()
+	plan.edit, plan.final = d.editMarks()
 	if req.Stack != nil {
 		if plan.stack, err = stackMarksFor(req); err != nil {
 			return early(err)
@@ -607,7 +637,7 @@ func shellQuote(s string) string {
 // made.
 func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety, log io.Writer) (Result, error) {
 	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true,
-		res: Result{Branch: req.Branch, OldTip: old, Safety: safety}, stepFailed: map[string]int{}, made: map[string]bool{}}
+		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, Edit: req.Edit}, stepFailed: map[string]int{}, made: map[string]bool{}}
 	d.restoreLayers(req.Resumed)
 	d.res.Unchecked = slices.Clone(req.UncheckedBefore)
 	var err error
@@ -637,7 +667,23 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 	if err != nil {
 		return d.fail(err)
 	}
-	atPick := false
+	atPick, atEdit := false, false
+	if e := req.Edit; e != nil {
+		// The note is the latest amend there is: written when a resume went
+		// on from the edit stop or took a second amend at the edited
+		// commit's check stop, and read even when the handover names an
+		// amend, since a resume cut short after either never recorded it.
+		amended, err := readAmended(req.Path)
+		if err != nil {
+			return d.fail(err)
+		}
+		if amended != "" && amended != e.Amended {
+			e2 := *e
+			e2.Amended = amended
+			d.req.Edit, d.res.Edit = &e2, &e2
+			req.Edit = &e2
+		}
+	}
 	switch {
 	case p.Command == "break":
 		// The loop takes the break as a run would: a lift's break before a
@@ -647,8 +693,27 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		if err := d.markTodo(); err != nil {
 			return d.fail(err)
 		}
+		if err := d.refreshAmend(); err != nil {
+			return d.fail(err)
+		}
 		d.recheck = true
 		return d.drive(nil)
+	case d.isEdit(p):
+		// The edit stop: what HEAD is now is what the person made of the
+		// commit, which the rest of the line is replayed onto and the
+		// content check holds the line to. A check of the commit runs
+		// again at HEAD, whatever git recorded of the amend.
+		head, err := d.git("rev-parse", "HEAD")
+		if err != nil {
+			return d.fail(err)
+		}
+		if err := noteAmended(req.Path, head); err != nil {
+			return d.fail(err)
+		}
+		e := *req.Edit
+		e.Amended = head
+		d.req.Edit, d.res.Edit = &e, &e
+		atEdit = true
 	case p.Command == "edit" && p.Applied:
 		before, ok, err := readBefore(req.Path)
 		if err != nil {
@@ -660,6 +725,20 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 	// still to come that may need a version lift get them back.
 	if err := d.markTodo(); err != nil {
 		return d.fail(err)
+	}
+	if atEdit {
+		d.recheck = slices.Contains(d.checks, d.req.Edit.Commit)
+	}
+	if d.req.Edit != nil && !atEdit && !atPick && !p.Applied && p.Index != req.HandedAt {
+		// A conflict no handover recorded, which a person reached with git
+		// alone and resolved. Which files it really conflicted on is
+		// rebuilt from the pick itself; only those are the person's. At the
+		// stop the handover recorded, the handover already says which.
+		paths, err := d.conflictedAt(p)
+		if err != nil {
+			return d.fail(fmt.Errorf("the rebase is at %d/%d, a stop no handover recorded, and which files conflicted there cannot be told (%w): nothing is held for you, so it stays paused", p.Index, p.Total, err))
+		}
+		d.res.ByHand = append(d.res.ByHand, paths...)
 	}
 	if atPick {
 		return d.drive(nil)
@@ -743,8 +822,10 @@ func (d *driver) markTodo() error {
 	if err := d.planChecks(); err != nil {
 		return err
 	}
+	d.liftMarks = lift.marks
 	plan := todoPlan{liftPlan: lift, checks: d.checks}
 	plan.stops, plan.tail = d.layerStops()
+	plan.edit, plan.final = d.editMarks()
 	if plan.open, plan.due, err = d.stoppedGroup(); err != nil {
 		return err
 	}
@@ -784,8 +865,13 @@ func StripMarks(wtPath string) error {
 	if !marked {
 		return nil
 	}
+	// The edit --edit asked for is a person's stop, not the run's: it stays.
+	keep, err := readEditMarker(wtPath)
+	if err != nil {
+		return err
+	}
 	var b strings.Builder
-	plainEditor(&b)
+	plainEditorKeeping(&b, keep)
 	return editTodo(wtPath, b.String())
 }
 
@@ -1065,7 +1151,20 @@ func (d *driver) drive(err error) (Result, error) {
 					return d.fail(lerr)
 				}
 			}
+			if refused, res, ferr := d.atFinal(); refused || ferr != nil {
+				if ferr != nil && !refused {
+					return d.fail(ferr)
+				}
+				return res, ferr
+			}
 			if sha != "" || end {
+				_, err = d.git("rebase", "--continue")
+				continue
+			}
+			if left, lerr := d.todoLeft(); lerr != nil {
+				return d.fail(lerr)
+			} else if !left && d.req.Edit != nil {
+				// The break that ends an edit run's list: checked above.
 				_, err = d.git("rebase", "--continue")
 				continue
 			}
@@ -1104,7 +1203,15 @@ func (d *driver) drive(err error) (Result, error) {
 			}
 			stop.Files = append(stop.Files, r.Outcome)
 		}
-		lifts, lerr := d.liftStop(p, conflicts, d.before)
+		edit := d.isEdit(p)
+		var lifts []FileOutcome
+		var lerr error
+		if !edit || d.liftMarked(d.req.Edit.Commit) {
+			// At the edit stop of a commit no lifting rule marked there is
+			// no break before it recording what it was applied on: there is
+			// nothing to lift.
+			lifts, lerr = d.liftStop(p, conflicts, d.before)
+		}
 		if lerr != nil {
 			return d.fail(lerr)
 		}
@@ -1118,6 +1225,9 @@ func (d *driver) drive(err error) (Result, error) {
 				unresolved = true
 			}
 			stop.Files = append(stop.Files, l)
+		}
+		if edit && !unresolved {
+			return d.editStop(p)
 		}
 		if len(stop.Files) == 0 {
 			if p.Applied {

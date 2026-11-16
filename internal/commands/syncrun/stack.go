@@ -70,6 +70,28 @@ type Stack struct {
 	// fold that changed the line's content. Null in the look, and when the
 	// layers were moved or held one by one.
 	Refusal *string `json:"refusal"`
+	// Edit is what a run with --edit did to the commit it stopped at; null
+	// in the look and for any other run.
+	Edit *StackEdit `json:"edit"`
+	// Restored says an edit run's line was put back at the tip the run
+	// found, its layers refused: the participant is restored, not rebased.
+	Restored bool `json:"-"`
+}
+
+// StackEdit is the commit a --edit run stopped at, what it was amended to,
+// the paths the amend changed, and the commits above it the amend emptied.
+type StackEdit struct {
+	Commit  string        `json:"commit"`
+	Subject string        `json:"subject"`
+	Amended string        `json:"amended"`
+	Paths   []string      `json:"paths"`
+	Emptied []StackCommit `json:"emptied"`
+}
+
+// StackCommit is one commit of the line: its id and its subject.
+type StackCommit struct {
+	SHA     string `json:"sha"`
+	Subject string `json:"subject"`
 }
 
 // StackOf is the look's report of a line: its layers and what holds each.
@@ -183,6 +205,11 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	}
 	s = StackOf(rec.Line, rec.Autosquash, holders)
 	refuse := func(why string) (*Stack, string, error) {
+		if rec.Edit != nil {
+			// An edit run is never left rebased under layers that did not
+			// follow: the line goes back where the run found it.
+			why, s.Restored = putBackLine(main, rec, why)
+		}
 		fmt.Fprintf(w, "  ✗ no layer moved: %s\n", why)
 		s.Refusal = jsonout.Strp(why)
 		if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
@@ -190,13 +217,41 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		}
 		return s, "no layer moved", nil
 	}
-	if rec.Autosquash || rec.InPlace {
+	if rec.Edit != nil {
+		// What the edit did, whatever comes of the layers; its content was
+		// held to the old line with the amend merged in inside the rebase,
+		// before the line's branch moved.
+		e, eerr := stackEdit(main, rec, in.OldTip, in.NewTip)
+		s.Edit = e
+		printEdit(w, e)
+		if eerr != nil {
+			fmt.Fprintf(w, "      note: what the amend changed could not all be read: %v\n", eerr)
+		}
+	}
+	if e := rec.Edit; e != nil {
+		// Held inside the rebase already, before the line's branch moved;
+		// held again here for a rebase a person finished by hand, which
+		// never reached that check, before any layer moves.
+		if e.Amended == "" {
+			return refuse(fmt.Sprintf("the rebase went on from the edit stop by hand, so what %s was amended to is not known and the line cannot be checked", git.ShortID(e.Commit, 7)))
+		}
+		if why := EditContent(main, in.OldTip, in.Folds, nil)(in.NewTip, *e, in.Stopped); why != "" {
+			return refuse(why)
+		}
+	}
+	if (rec.Autosquash || rec.InPlace) && rec.Edit == nil {
 		if why := foldChanged(main, rec.Line.Base, in.Onto, in.OldTip, in.NewTip, in.Folds, in.Stopped); why != "" {
 			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", why, rec.Work))
 		}
 	}
 	plans := rec.Plans
-	if rec.Upstream != "" {
+	if rec.Edit != nil {
+		// The commits the amend emptied were dropped: the plan follows.
+		var rerr error
+		if plans, rerr = wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit); rerr != nil {
+			return refuse(rerr.Error())
+		}
+	} else if rec.Upstream != "" {
 		// Above an upstream git empties the picks the target already has:
 		// the plan follows what the finished rebase dropped.
 		var rerr error
@@ -235,6 +290,12 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		case perr != nil:
 			patch, why = "unknown", perr.Error()
 		case same:
+		case rec.Edit != nil && t.Mapped == wtsync.MappedEmptied:
+			patch, why = "changed", "the edit emptied every commit of it"
+		case rec.Edit != nil && t.LeftOut > 0:
+			patch, why = "changed", fmt.Sprintf("the edit emptied %s of it", kit.Count(t.LeftOut, "commit"))
+		case rec.Edit != nil:
+			patch, why = "changed", "the edit of "+git.ShortID(rec.Edit.Commit, 7)+" changed it, or a stop after it was resolved"
 		case t.Mapped == wtsync.MappedEmptied:
 			patch, why = "changed", carrier+" already carries all of its commits"
 		case t.LeftOut > 0:
@@ -250,6 +311,10 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		}
 		mapped := map[string]string{wtsync.MappedTip: "", wtsync.MappedTipDropped: ", tip dropped: " + carrier + " carries it",
 			wtsync.MappedEmptied: ", emptied: " + carrier + " carries every commit of it"}[t.Mapped]
+		if rec.Edit != nil {
+			mapped = map[string]string{wtsync.MappedTip: "", wtsync.MappedTipDropped: ", tip dropped: the edit emptied it",
+				wtsync.MappedEmptied: ", emptied: the edit emptied every commit of it"}[t.Mapped]
+		}
 		switch m.Result {
 		case wtsync.MoveMoved:
 			how := "branch moved"

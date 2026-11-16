@@ -1642,6 +1642,7 @@ what it sees; a run (`wt sync rebase <work> --stack --json`) fills the rest.
 | `layers` | array | the layer branches, bottom first (below) |
 | `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name; `--layer` takes it) |
 | `refusal` | string \| null | the run's: why no layer moved, a new tip that failed its check, or a fold that changed the line's content; the line itself is left rebased, and `wt sync undo` puts it back. Null in the look, and when each layer was moved or held |
+| `edit` | object \| null | since 1.9.0: what a run with `--edit <rev>` did to that commit (below); null in the look and for any other run |
 
 Each layer:
 
@@ -1669,6 +1670,21 @@ Each layer:
 A moved layer has a safety ref and a result ref under the run's epoch, so
 `wt sync undo <line>` puts it back with the line; a held one has none and is no
 part of that undo.
+
+`edit`, since 1.9.0, for `wt sync rebase <work> --stack --edit <rev>`: the line
+replayed in place with a stop at `<rev>` for a person to amend.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `commit`, `subject` | string | the commit `--edit` named, as the line had it |
+| `amended` | string | what the run went on from at the edit stop: the amended commit, or the last commit added there; empty if it never went on |
+| `paths` | array of string | the paths the amend changed, sorted; empty when it changed nothing |
+| `emptied` | array | the commits above it that the amend emptied and the rebase dropped, oldest first: `sha` (as the old line had it), `subject`. A layer all of whose commits emptied is `mapped` `emptied` and ends where the layer below does |
+
+The line's content was held, before its branch or any layer moved, to the old
+line with the amend merged in. A run whose content was refused is not here: it
+is `restored`, with nothing moved and what it came to kept under
+`refs/wt-sync-kept/<branch>/<epoch>`, which its `reason` names.
 
 ### `layerSteps` — a step at every layer tip
 
@@ -2212,3 +2228,4 @@ change made it.
 | `sync` 1.7.0, `sync-run` 1.6.0 | `stack`: the stack held on one line, on the overview (`--stack`) and on a `--stack` run's participant, with each layer and what came of it |
 | `sync-run` 1.7.0 | [`layerSteps`](#layersteps--a-step-at-every-layer-tip) and `rechecked` on each participant: what a step with `each: layer` or `fold: owner` came to at each layer; `command` `sync steps` for `wt sync steps` |
 | `sync` 1.8.0, `sync-run` 1.8.0, `up` 1.6.0 | [`target`](#target--trunk-or---onto): what `onto` is, trunk or the ref `--onto` names, with `--upstream`'s commit; `onto` is that target's commit. `wt sync <work> --onto <ref> --json` is the overview of that one worktree, and its `token` covers the target |
+| `sync` 1.9.0, `sync-run` 1.9.0 | `edit` on [`stack`](#stack--a-stack-held-on-one-line): what `wt sync rebase <work> --stack --edit <rev>` did to that commit, the paths its amend changed and the commits it emptied; null in the look and for any other run |

@@ -121,6 +121,13 @@ func TestSyncVerbFlagsRefuseAFlagWithoutItsVerb(t *testing.T) {
 		{syncVerbFlags{rebase: true, layers: []string{"a"}}, "--layer needs --stack"},
 		{syncVerbFlags{rebase: true, autosquash: true}, "--autosquash needs --stack"},
 		{syncVerbFlags{stack: true, autosquash: true}, "--autosquash needs --rebase"},
+		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d"}, ""},
+		{syncVerbFlags{rebase: true, edit: "a1b2c3d"}, "--edit needs --stack"},
+		{syncVerbFlags{stack: true, edit: "a1b2c3d"}, "--edit needs --rebase"},
+		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", autosquash: true},
+			"--edit and --autosquash are two runs: edit in place first (--stack --edit <rev>), then fold (--stack --autosquash)"},
+		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", onto: "main"},
+			"--edit and --onto are two runs: edit in place first (--stack --edit <rev>), then move (--stack --onto <ref>)"},
 	} {
 		if got := errString(tc.flags.check()); got != tc.err {
 			t.Errorf("%+v: error %q, want %q", tc.flags, got, tc.err)

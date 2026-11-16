@@ -122,7 +122,8 @@ func (d *driver) planChecks() error {
 	for _, c := range commits {
 		d.checks = append(d.checks, c.SHA)
 	}
-	return nil
+	d.checks, err = d.editChecks(d.checks)
+	return err
 }
 
 // checkAt reports whether the break the sequencer stopped at is a check

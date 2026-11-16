@@ -25,6 +25,11 @@ type todoPlan struct {
 	// belongs to it. due says the group is to be checked, so the break that
 	// ends it is written even where no line of the list asks for one.
 	open, due bool
+	// edit is the full id of the commit a --stack --edit run stops at for a
+	// person; final ends the list in a break, where the run checks the
+	// line's content before git finishes. Empty and false for any other.
+	edit  string
+	final bool
 }
 
 // stackMarks is where a run rebasing a stack held on one line puts each
@@ -42,7 +47,7 @@ type stackMarks struct {
 }
 
 func (p todoPlan) edits() bool {
-	return p.liftPlan.edits() || len(p.checks) > 0 || p.stack.top > 0 || p.stops
+	return p.liftPlan.edits() || len(p.checks) > 0 || p.stack.top > 0 || p.stops || p.edit != "" || p.final
 }
 
 // todoEditor writes the script a run hands git as its sequence editor:
@@ -85,6 +90,8 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "copy=%s\n", shellQuote(p.stack.copy))
 	fmt.Fprintf(w, "stops=%s\n", map[bool]string{true: "1"}[p.stops])
 	fmt.Fprintf(w, "tail=%s\n", map[bool]string{true: "1"}[p.stops && p.tail])
+	fmt.Fprintf(w, "edit=%s\n", shellQuote(p.edit))
+	fmt.Fprintf(w, "final=%s\n", map[bool]string{true: "1"}[p.final])
 	fmt.Fprintf(w, "pend=%s; open=%s; marked=0; brk=\n", map[bool]string{true: "1"}[p.open && p.due], map[bool]string{true: "1"}[p.open])
 	fmt.Fprintf(w, "%s\n", `close_group() { if [ -n "$pend" ]; then printf 'break\n'; pend=; brk=1; fi; }`)
 	fmt.Fprintf(w, "%s\n", `stop() { [ -z "$stops" ] || [ -n "$brk" ] || printf 'break\n'; brk=; }`)
@@ -92,9 +99,10 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintln(w, `{`)
 	fmt.Fprintln(w, `while IFS= read -r line || [ -n "$line" ]; do`)
 	fmt.Fprintln(w, `  case "$line" in`)
-	fmt.Fprintln(w, `    "pick "*)`)
-	fmt.Fprintln(w, `      id=${line#pick }; id=${id%% *}; out=$line; check=; pre=`)
-	fmt.Fprintln(w, `      for m in $marks; do case "$m" in "$id"*) pre=1; out="edit ${line#pick }"; break ;; esac; done`)
+	fmt.Fprintln(w, `    "pick "*|"edit "*)`)
+	fmt.Fprintln(w, `      rest=${line#* }; id=${rest%% *}; out=$line; check=; pre=`)
+	fmt.Fprintln(w, `      for m in $marks; do case "$m" in "$id"*) pre=1; out="edit $rest"; break ;; esac; done`)
+	fmt.Fprintln(w, `      case "$edit" in "$id"*) out="edit $rest" ;; esac`)
 	fmt.Fprintln(w, `      for m in $drops; do case "$m" in "$id"*) out=""; break ;; esac; done`)
 	fmt.Fprintln(w, `      for m in $checks; do case "$m" in "$id"*) check=1; break ;; esac; done`)
 	fmt.Fprintln(w, `      if [ -n "$out" ]; then`)
@@ -114,8 +122,10 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "%s\n", `    *) printf '%s\n' "$line"; brk= ;;`)
 	fmt.Fprintln(w, `  esac`)
 	fmt.Fprintln(w, `done < "$1"`)
-	fmt.Fprintln(w, `close_group; flush "$top"; [ -z "$tail" ] || [ -n "$brk" ] || printf 'break\n'`)
-	fmt.Fprintln(w, `} > "$1.wt" && mv "$1.wt" "$1" && { [ -z "$copy" ] || cp "$1" "$copy"; }`)
+	fmt.Fprintln(w, `close_group; flush "$top"`)
+	fmt.Fprintln(w, `if { [ -n "$tail" ] || [ -n "$final" ]; } && [ -z "$brk" ]; then printf 'break\n'; fi`)
+	fmt.Fprintln(w, `} > "$1.wt" && mv "$1.wt" "$1" && { [ -z "$copy" ] || cp "$1" "$copy"; } &&`)
+	fmt.Fprintf(w, "%s\n", `{ [ -z "$edit" ] || printf '%s\n' "$edit" > "$(dirname "$1")/wt-sync-edit"; }`)
 }
 
 // sequenceEditor is todoEditor for a list with nothing to check.

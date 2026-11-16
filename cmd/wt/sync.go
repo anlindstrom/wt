@@ -174,7 +174,7 @@ func newSyncCmd() *cobra.Command {
 		ValidArgsFunction: completeWork,
 	}
 	var rebase, resume, undo, yes, force, ifReady, allowDiverged, allowOwed, asJSON, stack, autosquash bool
-	var expect, onto, upstream string
+	var expect, onto, upstream, edit string
 	var layers []string
 	var sel selectionFlags
 	var push func() syncrun.PushMode
@@ -182,7 +182,7 @@ func newSyncCmd() *cobra.Command {
 		return syncVerbFlags{rebase: rebase, resume: resume, undo: undo,
 			yes: yes, force: force, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, push: push(),
 			allowDiverged: allowDiverged, allowOwed: allowOwed, json: asJSON, expect: expect,
-			stack: stack, layers: layers, autosquash: autosquash, onto: onto, upstream: upstream}
+			stack: stack, layers: layers, autosquash: autosquash, edit: edit, onto: onto, upstream: upstream}
 	}
 	// The count rule is the verb's own. Two verbs at once is a flag mistake,
 	// which RunE reports the way --push with --no-push is reported.
@@ -260,12 +260,13 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&stack, "stack", false, "list the layer branches on the line of the worktree named, and what holds each")
 	sync.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
 	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --rebase --stack: fold the line's fixups in place; with --onto, as the line moves there")
+	sync.Flags().StringVar(&edit, "edit", "", "with --rebase --stack: stop at this commit of the line for you to amend, in place")
 	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk; with --rebase, rebase onto it")
 	sel.add(sync, true)
 	// The verbs spelled as flags, and their own flags, work on this line but
 	// belong to the verbs: their help is wt sync rebase, resume and undo --help,
 	// and the table here keeps to what the overview itself takes.
-	for _, name := range []string{"rebase", "resume", "undo", "yes", "push", "no-push", "force", "if-ready", "expect", "no-ff-trunk", "allow-diverged", "allow-owed", "autosquash"} {
+	for _, name := range []string{"rebase", "resume", "undo", "yes", "push", "no-push", "force", "if-ready", "expect", "no-ff-trunk", "allow-diverged", "allow-owed", "autosquash", "edit"} {
 		_ = sync.Flags().MarkHidden(name)
 	}
 	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncStepsCmd(), newSyncPushToCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
@@ -541,6 +542,8 @@ type syncVerbFlags struct {
 	stack      bool
 	layers     []string
 	autosquash bool
+	// edit is the commit of the line a --stack run stops at for a person.
+	edit string
 	// onto is the ref the named worktrees are looked at against, or
 	// rebased onto, instead of trunk; upstream where their commits start.
 	onto, upstream string
@@ -604,6 +607,14 @@ func (f syncVerbFlags) check() error {
 		return usagef("--autosquash needs --stack")
 	case f.autosquash && verb != "rebase":
 		return usagef("--autosquash needs --rebase")
+	case f.edit != "" && !f.stack:
+		return usagef("--edit needs --stack")
+	case f.edit != "" && verb != "rebase":
+		return usagef("--edit needs --rebase")
+	case f.edit != "" && f.autosquash:
+		return usagef("--edit and --autosquash are two runs: edit in place first (--stack --edit <rev>), then fold (--stack --autosquash)")
+	case f.edit != "" && f.onto != "":
+		return usagef("--edit and --onto are two runs: edit in place first (--stack --edit <rev>), then move (--stack --onto <ref>)")
 	case f.upstream != "" && f.onto == "":
 		return usagef("--upstream needs --onto: it says where the commits rebased onto --onto's ref start")
 	case f.onto != "" && verb != "" && verb != "rebase":
@@ -637,7 +648,7 @@ func (f syncVerbFlags) stackOptions() *synccmd.StackOptions {
 	if !f.stack {
 		return nil
 	}
-	return &synccmd.StackOptions{Layers: f.layers, Autosquash: f.autosquash}
+	return &synccmd.StackOptions{Layers: f.layers, Autosquash: f.autosquash, Edit: f.edit}
 }
 
 // syncOverviewJSON is wt sync --json: the overview as one object, or with
@@ -681,7 +692,7 @@ func syncArgs(verb string) cobra.PositionalArgs {
 
 func newSyncRebaseCmd() *cobra.Command {
 	var noFetch, noFFTrunk, yes, ifReady, force, allowDiverged, allowOwed, asJSON, stack, autosquash bool
-	var expect, onto, upstream string
+	var expect, onto, upstream, edit string
 	var layers []string
 	var sel selectionFlags
 	var push func() syncrun.PushMode
@@ -863,11 +874,27 @@ func newSyncRebaseCmd() *cobra.Command {
 			"resolved is held to the rest of that merge. A fixup that does not name\n" +
 			"exactly one commit to be replayed (<ref> carries it, it is ambiguous or\n" +
 			"missing) is refused before anything moves.\n\n" +
+			"--stack --edit <rev> moves a change down the line to an earlier commit:\n" +
+			"the fix a review asks of a low commit that a later one already carries.\n" +
+			"The line is replayed in place, onto its own base, and stops at <rev>,\n" +
+			"which must name one commit of the line, or nothing moves. Amend it\n" +
+			"(git commit --amend) and wt sync resume replays the rest onto what you\n" +
+			"made of it: a commit that already carried the change shrinks to what is\n" +
+			"still its own, one that carried nothing else is dropped and reported, and\n" +
+			"a conflict with the change is a stop like any other. Before the line or\n" +
+			"any layer moves, its content must be what it was with your change merged\n" +
+			"in, outside a stop's resolved files and the per-layer steps' paths, or\n" +
+			"the rebase is put back and what it came to kept under\n" +
+			"refs/wt-sync-kept/<branch>/<epoch>. The end names the commit and the\n" +
+			"paths its amend changed. wt sync undo <work> from the edit stop or any\n" +
+			"later one puts everything back and keeps the amend under a safety ref.\n" +
+			"One --edit per run; to fold or move the line too, run that after.\n\n" +
 			"Also spelled wt sync <work>... --rebase, with the same flags.",
 		Example: "  wt sync rebase login-crash api-tidy --yes --json --expect 1:0123abcd # a tool\n" +
 			"  wt sync rebase tmp/stack --stack   # the whole line once, then every layer\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash  # fold review fixes in place\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash --onto main  # fold and move\n" +
+			"  wt sync rebase tmp/stack --stack --edit 1a2b3c4  # stop there to amend\n" +
 			"  wt sync rebase login-crash --force --allow-diverged  # past session, origin\n" +
 			"  wt sync rebase login-crash --onto test_wt/integration  # onto that branch\n" +
 			"  wt sync rebase ui --onto origin/main --upstream feat_wt/api  # move a layer\n" +
@@ -879,7 +906,7 @@ func newSyncRebaseCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f := syncVerbFlags{rebase: true, yes: yes, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, force: force,
 				allowDiverged: allowDiverged, allowOwed: allowOwed, push: push(), json: asJSON, expect: expect,
-				stack: stack, layers: layers, autosquash: autosquash, onto: onto, upstream: upstream}
+				stack: stack, layers: layers, autosquash: autosquash, edit: edit, onto: onto, upstream: upstream}
 			if err := f.check(); err != nil {
 				return err
 			}
@@ -909,6 +936,7 @@ func newSyncRebaseCmd() *cobra.Command {
 	rebase.Flags().BoolVar(&stack, "stack", false, "rebase the line of the worktree named once, and move every layer branch on it")
 	rebase.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
 	rebase.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: fold the line's fixups, in place; with --onto <ref>, as the line moves onto it")
+	rebase.Flags().StringVar(&edit, "edit", "", "with --stack: stop at this commit of the line for you to amend, and replay the rest onto it, in place")
 	addOntoFlags(rebase, &onto, &upstream, "rebase the worktrees named onto <ref> instead of trunk: a branch, origin/<branch>, a tag or a commit")
 	sel.add(rebase, true)
 	push = addPushFlags(rebase, "push the worktrees that finish, without asking",
@@ -1116,6 +1144,12 @@ func newSyncResumeCmd() *cobra.Command {
 			"back instead.\n\n" +
 			"A --stack run handed over moves its layers here, once the rebase is\n" +
 			"finished, exactly as the run would have.\n\n" +
+			"At the stop --stack --edit asked for, HEAD is that commit: amend it, or\n" +
+			"add commits, leaving nothing uncommitted, and this replays the rest of\n" +
+			"the line onto what HEAD is then. Before the line moves its content is\n" +
+			"held to the old line with your change merged in; a difference outside\n" +
+			"it refuses, puts the rebase back and keeps what it came to under\n" +
+			"refs/wt-sync-kept/<branch>/<epoch>.\n\n" +
 			"--json prints one result object on stdout and the rest on stderr, as\n" +
 			"wt sync rebase --json does.\n\n" +
 			"Also spelled wt sync <work> --resume, with the same flags.",
@@ -1181,6 +1215,11 @@ func newSyncUndoCmd() *cobra.Command {
 			"branch still is.\n" +
 			"Running it again after it already restored a branch reports that branch\n" +
 			"already at its old tip.\n\n" +
+			"From a --stack --edit run's edit stop, or any stop after it, the commits\n" +
+			"the abort discards are what you made of the edited commit and the line\n" +
+			"replayed onto it: they are kept under a fresh safety ref, which the line\n" +
+			"put back names, without --force. A commit made by hand at a later stop\n" +
+			"is refused as at any other.\n\n" +
 			"An agent session idle in a checkout is named and you are asked first\n" +
 			"(--yes skips; with no terminal it goes ahead), and each branch put back\n" +
 			"under one ends with a wt: line to pass on to it. The session wt itself\n" +

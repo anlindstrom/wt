@@ -95,3 +95,29 @@ func TestTodoEditorChecksAGroupWhoseFixupIsToBeChecked(t *testing.T) {
 		t.Errorf("list:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+// With an edit, the pick of that commit becomes an edit, its check break
+// follows it, and with final the list ends in a break; the plain list a
+// person continues keeps that one edit and drops every other mark.
+func TestTodoEditorStopsAtTheEditAndThePlainListKeepsIt(t *testing.T) {
+	t.Parallel()
+	list := "pick aaa1111 one\npick bbb2222 two\npick ccc3333 three\n# Rebase\n"
+	var b strings.Builder
+	todoEditor(&b, todoPlan{edit: fullB, final: true, checks: []string{fullB}, liftPlan: liftPlan{marks: []string{fullC}}})
+	got := runEditor(t, b.String(), list)
+	want := "pick aaa1111 one\nedit bbb2222 two\nbreak\nbreak\nedit ccc3333 three\n# Rebase\nbreak\n"
+	if got != want {
+		t.Errorf("list:\n%s\nwant:\n%s", got, want)
+	}
+	b.Reset()
+	plainEditorKeeping(&b, fullB)
+	if plain := runEditor(t, b.String(), got); plain != "pick aaa1111 one\nedit bbb2222 two\npick ccc3333 three\n# Rebase\n" {
+		t.Errorf("plain list:\n%s", plain)
+	}
+	// Resumed, a list whose edit was kept gets its check break back.
+	b.Reset()
+	todoEditor(&b, todoPlan{edit: fullB, final: true, checks: []string{fullB}})
+	if again := runEditor(t, b.String(), "edit bbb2222 two\npick ccc3333 three\n"); again != "edit bbb2222 two\nbreak\npick ccc3333 three\nbreak\n" {
+		t.Errorf("resumed list:\n%s", again)
+	}
+}

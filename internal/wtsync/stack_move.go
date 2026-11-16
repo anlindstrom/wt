@@ -166,11 +166,14 @@ type StackRecord struct {
 	Autosquash bool   `json:"autosquash"`
 	// InPlace is a run onto the line's own base that is not a fold of its
 	// fixups: wt sync steps.
-	InPlace bool        `json:"inPlace,omitempty"`
-	Force   bool        `json:"force"`
-	Line    Line        `json:"line"`
-	Plans   []LayerPlan `json:"plans"`
-	Moves   []LayerMove `json:"moves"`
+	InPlace bool `json:"inPlace,omitempty"`
+	// Edit is the commit a --stack --edit run stops at for a person: the
+	// run is in place, onto the line's own base.
+	Edit  *EditStop   `json:"edit,omitempty"`
+	Force bool        `json:"force"`
+	Line  Line        `json:"line"`
+	Plans []LayerPlan `json:"plans"`
+	Moves []LayerMove `json:"moves"`
 }
 
 func stackRecordPath(mainRoot string, epoch int64) (string, error) {

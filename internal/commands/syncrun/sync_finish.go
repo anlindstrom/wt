@@ -142,10 +142,12 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 		Stop: in.Res.Left.Index, Total: in.Res.Left.Total,
 		Resolved: in.Res.Left.Staged, Strategy: map[string]string{}, Lifted: map[string]string{},
 		Deleted: in.Res.Left.Deleted, Left: in.Res.Left.Left,
-		Stopped:   PathsOnce(in.Earlier, wtsync.StopPaths(in.Res.Stops)),
+		Stopped:   PathsOnce(in.Earlier, wtsync.StopPaths(in.Res.Stops), in.Res.ByHand),
 		Check:     wtsync.CheckStopOf(in.Res.Left.Check),
 		Layers:    in.Res.LayerState,
 		Unchecked: in.Res.Unchecked,
+		Edit:      in.Res.Edit,
+		AtEdit:    in.Res.Left.Edit,
 	}
 	if in.Found != "" && in.Found != in.Res.OldTip {
 		st.Found = in.Found
@@ -170,6 +172,8 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 	}
 	if c := in.Res.Left.Check; c != nil {
 		fmt.Fprintf(w, "  ⚠ %s\n", wtsync.CheckFailedLine(in.Work, *c))
+	} else if in.Res.Left.Edit {
+		fmt.Fprintf(w, "  ⚠ %s\n", wtsync.EditStopLine(in.Work, in.Res.Left.Commit, in.Res.Left.Subject))
 	} else {
 		fmt.Fprintf(w, "  ⚠ %s\n", wtsync.NeedsYouLine(in.Work, in.Res.Left.Left))
 	}

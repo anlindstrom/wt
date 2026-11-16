@@ -270,6 +270,16 @@ func (u *undo) checkHandover(s Safety, wt repo.Worktree, st State, stateOK, forc
 		foreign.Inside = 1 // commits it cannot name, which an abort loses
 		return fmt.Errorf("%s: %w; %s; nothing undone", s.Branch, err, WayOut(foreign))
 	}
+	if keep, err := editKept(wt.Path, st, in); err != nil {
+		return fmt.Errorf("%s: %w; nothing undone", s.Branch, err)
+	} else if keep {
+		// What the person made of the commit --edit stopped at, and
+		// every pick replayed onto it since: the abort would discard
+		// them, so the undo keeps them under a safety ref, forced or not.
+		u.insideHead[s.Branch] = in.Head
+		u.aborting[s.Branch] = true
+		return nil
+	}
 	if len(in.Commits) > 0 || in.Unproven {
 		if !force {
 			work := cmp.Or(st.Work, s.Branch)
@@ -721,4 +731,23 @@ func (u *undo) noPlanFinished(s Safety) bool {
 		return false
 	}
 	return VerifyFinished(wt.Path, s.Branch, cmp.Or(st.Work, s.Branch), st.Onto, st.OldTip, st.Total) == nil
+}
+
+// editKept says whether an undo of the handover st, of a --stack --edit run,
+// keeps the rebase's HEAD: at the edit stop, whatever was committed there is
+// the edit's own; past it, once the run went on from a commit that is not
+// the old one, every stop's HEAD carries that amend. A commit made by hand
+// inside a later stop is not the edit's, and is refused as any other is.
+func editKept(wtPath string, st State, in Inside) (bool, error) {
+	if st.Edit == nil || in.Unproven {
+		return false, nil
+	}
+	if st.AtEdit {
+		return in.Head != st.Head, nil
+	}
+	if len(in.Commits) > 0 || st.Edit.Amended == "" || st.Edit.Amended == st.Edit.Commit {
+		return false, nil
+	}
+	_, code, err := gitEnvAllow(wtPath, nil, nil, 1, "merge-base", "--is-ancestor", in.Head, st.OldTip)
+	return code == 1, err
 }
