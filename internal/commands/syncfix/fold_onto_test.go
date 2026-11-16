@@ -254,3 +254,61 @@ func TestFoldOntoTrunkInOneRunEqualsTheTwoRunWay(t *testing.T) {
 		}
 	}
 }
+
+// A check skipped for a script the tree predates is owed for the whole run,
+// also when a later conflict hands the run over and a resume finishes it:
+// the resume ends owed, not clean.
+func TestResumeKeepsAChecksSkippedBeforeTheHandover(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	yaml := "conflicts: []\neach_commit:\n  - run: bin/check.sh\n    paths: [a2.txt]\n"
+	ctx, s := synccmdtest.StackLine(t, yaml)
+	main := ctx.Repo.MainRoot
+	testkit.WriteFile(t, main, "bin/check.sh", "#!/bin/sh\nexit 0\n")
+	if err := os.Chmod(filepath.Join(main, "bin", "check.sh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testkit.GitIn(t, main, "add", "-A")
+	testkit.GitIn(t, main, "commit", "-q", "--no-verify", "-m", "chore: add the check script")
+	testkit.GitIn(t, main, "fetch", "-q", "origin")
+	tmp := s.Paths[gittest.StackTmp]
+	commit := func(file, content, msg string) {
+		if err := os.WriteFile(filepath.Join(tmp, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testkit.GitIn(t, tmp, "add", file)
+		testkit.GitIn(t, tmp, "commit", "-q", "--no-verify", "-m", msg)
+	}
+	// The first fixup makes the replay start at s1's first commit, so a2's
+	// pick is checked (and skipped); the pair at the top conflicts later.
+	commit("a1.txt", "fixed\n", "fixup! feat(s1): a1.txt")
+	commit("e1.txt", "x\n", "feat: rewrite e1")
+	commit("e1.txt", "y\n", "fixup! feat(s5): e1.txt")
+	opts := synccmdtest.NoAgents()
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	_, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, opts)
+	if err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v, want a handover\n%s", err, human)
+	}
+	if !strings.Contains(human, "not checked") {
+		t.Fatalf("the check was not skipped before the handover:\n%s", human)
+	}
+	ropts := noResumeAgents()
+	ropts.Push = syncrun.PushNever
+	// Folding the fixup and replaying the rewrite on top of it each conflict;
+	// both are resolved to what the line had, so its content is unchanged.
+	var rerr error
+	for i := 0; i < 2; i++ {
+		testkit.WriteFile(t, tmp, "e1.txt", "y\n")
+		testkit.GitIn(t, tmp, "add", "e1.txt")
+		_, rerr = syncResumeJSON(t, ctx, gittest.StackTmp, ropts)
+		if rerr == nil || !strings.Contains(rerr.Error(), "needs you") {
+			break
+		}
+	}
+	if rerr == nil || !strings.Contains(rerr.Error(), "bin/check.sh") {
+		t.Fatalf("the resume forgot the skipped check: err %v", rerr)
+	}
+}
