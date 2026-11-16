@@ -481,3 +481,37 @@ func TestSyncRebaseStackEditRefusesARevisionNotOnTheLine(t *testing.T) {
 		c.back(t)
 	}
 }
+
+// A rebase a person finished by hand past the edit, with a stray change,
+// never met the check inside the rebase: the resume holds the content
+// before any layer moves.
+func TestSyncResumeOfAnEditFinishedByHandHoldsItsContentBeforeTheLayersMove(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCase(t, false)
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	c.amendA(t, nil)
+	if _, human, err := c.resume(t); err == nil {
+		t.Fatalf("resume did not stop at B:\n%s", human)
+	}
+	testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\nname = new\n")
+	testkit.WriteFile(t, c.tmp, "one.txt", "stray\n")
+	testkit.GitIn(t, c.tmp, "add", "lib.txt", "one.txt")
+	testkit.GitIn(t, c.tmp, "-c", "core.editor=true", "rebase", "--continue")
+	res, human, err := c.resume(t)
+	if err == nil || !strings.Contains(err.Error(), "no layer moved") || !strings.Contains(human, "one.txt") {
+		t.Fatalf("resume: %v, want no layer moved over one.txt\n%s", err, human)
+	}
+	for _, l := range c.s.Layers {
+		if got := testkit.GitOut(t, c.main, "rev-parse", l); got != c.tips[l] {
+			t.Errorf("%s moved to %s", l, got)
+		}
+	}
+	if s := synccmdtest.Participant(t, res, gittest.EditTmp).Stack; s == nil || s.Refusal == nil {
+		t.Errorf("stack %+v, want a refusal", s)
+	}
+}
