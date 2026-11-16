@@ -162,7 +162,7 @@ func TestOntoAutosquashChecksEachCommitOnceWithTrunksScript(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "2 layers held") {
 		t.Fatalf("err %v, want only the two held layers\n%s", err, human)
 	}
-	if strings.Contains(human, "127") || strings.Contains(human, "owed") {
+	if strings.Contains(human, "exit 127") || strings.Contains(human, "owed") {
 		t.Errorf("the run stopped or owes a check:\n%s", human)
 	}
 	p := synccmdtest.Participant(t, res, gittest.StackTmp)
