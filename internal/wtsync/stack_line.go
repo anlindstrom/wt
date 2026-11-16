@@ -373,6 +373,11 @@ func CheckLayers(dir, head, onto string, plans []LayerPlan) ([]LayerTip, error) 
 		} else if code == 1 {
 			return bad(fmt.Sprintf("its marker %s is not on the rebased line", git.ShortID(tip, 7)))
 		}
+		if _, code, err := gitEnvAllow(dir, nil, nil, 1, "merge-base", "--is-ancestor", onto, tip); err != nil {
+			return nil, err
+		} else if code == 1 {
+			return bad(fmt.Sprintf("its new tip %s does not descend from %s, where the line was put", git.ShortID(tip, 7), onto))
+		}
 		out, err := gitEnv(dir, nil, nil, "rev-list", "--count", onto+".."+tip)
 		if err != nil {
 			return nil, err
@@ -556,4 +561,145 @@ func ReconcileDropped(dir, onto string, plans []LayerPlan) ([]LayerPlan, error) 
 		from = tip
 	}
 	return got, nil
+}
+
+// FixupOfCarried is why a fold cannot take the line onto onto, "" when it
+// can. Every fixup!, squash! or amend! commit that will be replayed must name
+// exactly one commit that will be replayed too, found as git's autosquash
+// finds it: after the prefix and its whitespace, a commit named by id, tag or
+// any revision that is on the line, else an earlier commit of the line with
+// that subject, else one whose subject begins with it. A fixup whose target
+// onto already carries (patch for patch, or by reachability), that is outside
+// the replayed range, that is ambiguous, or that cannot be found, is refused:
+// git would leave it alone or fold it into another commit, which may be in
+// another layer. upstream, when not empty, starts the replayed range there.
+func FixupOfCarried(dir, onto, upstream, branch string, commits []string) (string, error) {
+	if len(commits) == 0 {
+		return "", nil
+	}
+	args := []string{"cherry", onto, branch}
+	if upstream != "" {
+		args = append(args, upstream)
+	}
+	out, err := gitEnv(dir, nil, nil, args...)
+	if err != nil {
+		return "", err
+	}
+	carried := map[string]bool{}
+	for _, l := range strings.Split(out, "\n") {
+		if sha, ok := strings.CutPrefix(l, "- "); ok {
+			carried[strings.TrimSpace(sha)] = true
+		}
+	}
+	subjects, err := gitEnv(dir, nil, nil, append([]string{"log", "--no-walk=unsorted", "--format=%H %s"}, commits...)...)
+	if err != nil {
+		return "", err
+	}
+	type entry struct{ sha, subject string }
+	var all []entry
+	for _, l := range strings.Split(subjects, "\n") {
+		if sha, subject, ok := strings.Cut(l, " "); ok {
+			all = append(all, entry{sha, subject})
+		}
+	}
+	ancestor := func(a, of string) (bool, error) {
+		_, code, err := gitEnvAllow(dir, nil, nil, 1, "merge-base", "--is-ancestor", a, of)
+		return code == 0, err
+	}
+	// carriedOrOutside is why a commit of the line is not replayed, "" when it is.
+	status := map[string]string{}
+	notReplayed := func(sha string) (string, error) {
+		if why, ok := status[sha]; ok {
+			return why, nil
+		}
+		why := ""
+		switch {
+		case carried[sha]:
+			why = onto + " already carries"
+		default:
+			if reach, err := ancestor(sha, onto); err != nil {
+				return "", err
+			} else if reach {
+				why = onto + " already carries"
+			} else if upstream != "" {
+				if below, err := ancestor(sha, upstream); err != nil {
+					return "", err
+				} else if below {
+					why = "lies below the replayed range"
+				}
+			}
+		}
+		status[sha] = why
+		return why, nil
+	}
+	for i, e := range all {
+		target, folding := e.subject, false
+		for {
+			rest, ok := cutFoldPrefix(target)
+			if !ok {
+				break
+			}
+			target, folding = strings.TrimSpace(rest), true
+		}
+		if !folding {
+			continue
+		}
+		if why, err := notReplayed(e.sha); err != nil || why != "" {
+			continue // the fixup itself is not replayed: nothing of it lands
+		}
+		refuse := func(format string, a ...any) (string, error) {
+			return fmt.Sprintf("the fixup %q (%s) %s; drop it or fold it by hand, then run again; nothing is rebased",
+				e.subject, git.ShortID(e.sha, 7), fmt.Sprintf(format, a...)), nil
+		}
+		var named *entry
+		if sha, err := gitEnv(dir, nil, nil, "rev-parse", "--verify", "--quiet", target+"^{commit}"); err == nil {
+			for j := range all[:i] {
+				if all[j].sha == strings.TrimSpace(sha) {
+					named = &all[j]
+				}
+			}
+		}
+		if named == nil {
+			var exact, prefix []*entry
+			for j := range all[:i] {
+				switch c := &all[j]; {
+				case c.subject == target:
+					exact = append(exact, c)
+				case strings.HasPrefix(c.subject, target):
+					prefix = append(prefix, c)
+				}
+			}
+			candidates := exact
+			if len(candidates) == 0 {
+				candidates = prefix
+			}
+			switch len(candidates) {
+			case 0:
+				return refuse("names no commit earlier on the line (%q)", target)
+			case 1:
+				named = candidates[0]
+			default:
+				return refuse("names more than one commit on the line (%q)", target)
+			}
+		}
+		why, err := notReplayed(named.sha)
+		if err != nil {
+			return "", err
+		}
+		if why != "" {
+			return refuse("is for %q (%s), which %s: there is nothing to fold it into",
+				named.subject, git.ShortID(named.sha, 7), why)
+		}
+	}
+	return "", nil
+}
+
+// cutFoldPrefix is s without a leading fixup!, squash! or amend!.
+func cutFoldPrefix(s string) (string, bool) {
+	for _, p := range []string{"fixup! ", "squash! ", "amend! "} {
+		if rest, ok := strings.CutPrefix(s, p); ok {
+			return rest, true
+		}
+	}
+	return s, false
 }

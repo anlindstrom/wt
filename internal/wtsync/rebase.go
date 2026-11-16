@@ -406,6 +406,22 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 	if why := cfg.StackFoldRefusal(); req.Stack != nil && why != "" {
 		return d.res, errors.New(why)
 	}
+	// A fold that has a fixup of a carried commit is refused before any ref
+	// is written; the one thing a run may have done by now is the
+	// fast-forward, which is put back.
+	if req.Stack != nil && req.Stack.Autosquash {
+		why, err := FixupOfCarried(req.Path, req.Onto, req.Upstream, req.Branch, req.Stack.Line.Commits)
+		if err == nil && why != "" {
+			err = errors.New(why)
+		}
+		if err != nil {
+			if req.Safety.Ref != "" {
+				d.res.Safety = req.Safety
+				return d.fail(err)
+			}
+			return d.res, err
+		}
+	}
 	if req.Safety.Ref != "" {
 		d.res.Safety = req.Safety
 	} else if d.res.Safety, err = WriteSafety(mainRoot, req.Branch, old, req.Epoch); err != nil {

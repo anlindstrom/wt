@@ -608,8 +608,6 @@ func (f syncVerbFlags) check() error {
 		return usagef("--upstream needs --onto: it says where the commits rebased onto --onto's ref start")
 	case f.onto != "" && verb != "" && verb != "rebase":
 		return usagef("--onto needs --rebase, or no verb")
-	case f.onto != "" && f.autosquash:
-		return usagef("--autosquash folds in place, onto the line's own base; rebase onto <ref> with a second run, --stack --onto <ref>")
 	}
 	return nil
 }

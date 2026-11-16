@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -187,7 +188,7 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		return s, "no layer moved", nil
 	}
 	if rec.Autosquash || rec.InPlace {
-		if why := foldChanged(main, in.OldTip, in.NewTip, in.Folds); why != "" {
+		if why := foldChanged(main, rec.Line.Base, in.Onto, in.OldTip, in.NewTip, in.Folds); why != "" {
 			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", why, rec.Work))
 		}
 	}
@@ -296,17 +297,30 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	return s, "", nil
 }
 
-// foldChanged is how a fold in place changed the line's content, outside
-// the per-layer steps' paths (folds), which their output may change; "" for
-// not at all.
-func foldChanged(main, oldTip, newTip string, folds []string) string {
+// foldChanged is how a fold changed the line's content, outside the
+// per-layer steps' paths (folds), which their output may change; "" for not
+// at all. A fold in place (onto is the line's own base) keeps the tree. A
+// fold that moves the line onto another commit has the trunk's own changes
+// in its tree as well: the paths that differ between the line's base and
+// onto are not held to the old tree, every other path is.
+func foldChanged(main, base, onto, oldTip, newTip string, folds []string) string {
 	was, err1 := git.Run(main, "rev-parse", oldTip+"^{tree}")
 	is, err2 := git.Run(main, "rev-parse", newTip+"^{tree}")
 	if err1 == nil && err2 == nil && was == is {
 		return ""
 	}
 	tree := fmt.Sprintf("tree %s before, %s after", git.ShortID(was, 7), git.ShortID(is, 7))
-	if err1 != nil || err2 != nil || len(folds) == 0 {
+	if err1 != nil || err2 != nil {
+		return tree
+	}
+	var moved []string
+	if onto != base {
+		var err error
+		if moved, err = wtsync.ChangedPaths(main, base, onto); err != nil {
+			return tree + ": " + err.Error()
+		}
+	}
+	if len(folds) == 0 && len(moved) == 0 {
 		return tree
 	}
 	paths, err := wtsync.ChangedPaths(main, oldTip, newTip)
@@ -314,7 +328,7 @@ func foldChanged(main, oldTip, newTip string, folds []string) string {
 		return tree + ": " + err.Error()
 	}
 	for _, p := range paths {
-		if !matchesAnyGlob(folds, p) {
+		if !matchesAnyGlob(folds, p) && !slices.Contains(moved, p) {
 			return tree + ", " + p + " among them"
 		}
 	}
