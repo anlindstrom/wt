@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-16 17:24 — a resume that meets a new conflict stops like any stop
+
+A fixup that conflicts after `wt sync resume` no longer ends with "no record of
+what it was applied on". The resume hands it over: a fresh plan and state for
+the new stop, and `wt sync resume` goes on from there. The commit a resolved
+stop completes, with its fixups, is now checked by the `each_commit` steps
+before the run moves on, where it used to be skipped.
+
 ## 2026-11-16 16:40 — an each_commit step can retry before it stops the run
 
 A step in `.wt-sync.yaml`'s `each_commit:` takes an optional `retry:` command,
