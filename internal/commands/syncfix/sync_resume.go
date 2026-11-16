@@ -610,7 +610,16 @@ func verifyHandover(wtPath string, st wtsync.State, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if st.AtEdit {
+	atEdit, atCheck := st.AtEdit, st.Check != nil
+	if atEdit || (atCheck && st.Edit != nil) {
+		// Past the edit stop, or in an edit run past a check stop, by a
+		// person's own continue or a resume cut short, what is left is an
+		// ordinary stop.
+		if p, err := wtsync.RebaseProgress(wtPath); err == nil && p.Index != st.Stop {
+			atEdit, atCheck = false, false
+		}
+	}
+	if atEdit {
 		// The edit stop: what HEAD is when the resume goes on is what the
 		// rest of the line is replayed onto, so the change must be
 		// committed; git would amend staged changes into the commit on its
@@ -621,7 +630,7 @@ func verifyHandover(wtPath string, st wtsync.State, w io.Writer) error {
 		}
 		return nil
 	}
-	if st.Check != nil {
+	if atCheck {
 		// A failed check: HEAD is the commit, and resume runs the check
 		// there again. Nothing a strategy staged is waiting, so there is
 		// nothing to compare; what must hold is that the fix is committed,

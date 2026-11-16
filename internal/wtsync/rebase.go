@@ -668,6 +668,22 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		return d.fail(err)
 	}
 	atPick, atEdit := false, false
+	if e := req.Edit; e != nil {
+		// The note is the latest amend there is: written when a resume went
+		// on from the edit stop or took a second amend at the edited
+		// commit's check stop, and read even when the handover names an
+		// amend, since a resume cut short after either never recorded it.
+		amended, err := readAmended(req.Path)
+		if err != nil {
+			return d.fail(err)
+		}
+		if amended != "" && amended != e.Amended {
+			e2 := *e
+			e2.Amended = amended
+			d.req.Edit, d.res.Edit = &e2, &e2
+			req.Edit = &e2
+		}
+	}
 	switch {
 	case p.Command == "break":
 		// The loop takes the break as a run would: a lift's break before a
@@ -675,6 +691,9 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		// that failed and was handed over, which a person has amended or
 		// added to since, or one an interrupt cut short.
 		if err := d.markTodo(); err != nil {
+			return d.fail(err)
+		}
+		if err := d.refreshAmend(); err != nil {
 			return d.fail(err)
 		}
 		d.recheck = true
@@ -686,6 +705,9 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		// again at HEAD, whatever git recorded of the amend.
 		head, err := d.git("rev-parse", "HEAD")
 		if err != nil {
+			return d.fail(err)
+		}
+		if err := noteAmended(req.Path, head); err != nil {
 			return d.fail(err)
 		}
 		e := *req.Edit

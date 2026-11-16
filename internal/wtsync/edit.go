@@ -218,3 +218,60 @@ func (d *driver) editMarks() (edit string, final bool) {
 	}
 	return edit, true
 }
+
+// amendedPath is where a resume notes, before it goes on from the edit stop,
+// what HEAD was there, so that a resume interrupted past it still knows
+// what the commit was amended to. Kept in the sequencer's own directory.
+func amendedPath(wtPath string) (string, error) {
+	dir, err := rebaseDir(wtPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "wt-sync-amended"), nil
+}
+
+func noteAmended(wtPath, head string) error {
+	path, err := amendedPath(wtPath)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(head+"\n"), 0o644)
+}
+
+func readAmended(wtPath string) (string, error) {
+	path, err := amendedPath(wtPath)
+	if err != nil {
+		return "", err
+	}
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	return strings.TrimSpace(string(b)), err
+}
+
+// refreshAmend takes HEAD as what the edited commit was amended to when a
+// resume finds the rebase at that commit's own check stop: the check that
+// failed there is fixed by amending the commit again, and the line is then
+// held to that amend, not to the one the run first went on from.
+func (d *driver) refreshAmend() error {
+	e := d.req.Edit
+	if !e.passed() {
+		return nil
+	}
+	sha, _, err := d.checkAt()
+	if err != nil || sha != e.Commit {
+		return err
+	}
+	head, err := d.git("rev-parse", "HEAD")
+	if err != nil || head == e.Amended {
+		return err
+	}
+	if err := noteAmended(d.req.Path, head); err != nil {
+		return err
+	}
+	again := *e
+	again.Amended = head
+	d.req.Edit, d.res.Edit = &again, &again
+	return nil
+}
