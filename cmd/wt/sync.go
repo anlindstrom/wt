@@ -259,7 +259,7 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&allowOwed, "allow-owed", false, "with --rebase or --resume: rebase now even when a step's need does not answer; the step is owed")
 	sync.Flags().BoolVar(&stack, "stack", false, "list the layer branches on the line of the worktree named, and what holds each")
 	sync.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
-	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --rebase --stack: fold the line's fixups in place")
+	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --rebase --stack: fold the line's fixups in place; with --onto, as the line moves there")
 	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk; with --rebase, rebase onto it")
 	sel.add(sync, true)
 	// The verbs spelled as flags, and their own flags, work on this line but
@@ -811,8 +811,8 @@ func newSyncRebaseCmd() *cobra.Command {
 			"With --onto a run moves exactly the worktrees named, none of their\n" +
 			"stack: each worktree stacked above one it moved is listed, bottom first,\n" +
 			"with the wt sync rebase --onto --upstream line that moves it next.\n" +
-			"--stack --onto rebases a line onto <ref>; --autosquash folds in place\n" +
-			"and takes no --onto: fold first, then rebase. A target is chosen per piece\n" +
+			"--stack --onto rebases a line onto <ref>; with --autosquash it folds the\n" +
+			"line's fixups in the same run. A target is chosen per piece\n" +
 			"of work: --onto needs a worktree named, and takes no --all, --roots or\n" +
 			"--profile. --expect with --onto takes the token of\n" +
 			"wt sync <work> --onto <ref> --json, which covers the target.\n\n" +
@@ -854,12 +854,20 @@ func newSyncRebaseCmd() *cobra.Command {
 			"into their targets in place, onto the line's own base, and re-points every\n" +
 			"layer: the way to fold review fixes into a stack without rebasing it. A\n" +
 			"check runs at each target with its fixups folded in. The line's content\n" +
-			"must come out the same outside the per-layer steps' paths, or no layer moves. Rebasing onto trunk is then a\n" +
-			"second run, with --stack alone.\n\n" +
+			"must come out the same outside the per-layer steps' paths, or no layer moves.\n" +
+			"--autosquash alone folds in place: a check whose script the replayed tree\n" +
+			"predates is not run there, and is owed. --stack --autosquash --onto <ref>\n" +
+			"folds and rebases onto <ref> (trunk: main) in one run, so the checks run with\n" +
+			"its scripts at each commit once; the content check then holds every file that\n" +
+			"merges cleanly to what merging the old line onto <ref> gives; a file a stop\n" +
+			"resolved is held to the rest of that merge. A fixup that does not name\n" +
+			"exactly one commit to be replayed (<ref> carries it, it is ambiguous or\n" +
+			"missing) is refused before anything moves.\n\n" +
 			"Also spelled wt sync <work>... --rebase, with the same flags.",
 		Example: "  wt sync rebase login-crash api-tidy --yes --json --expect 1:0123abcd # a tool\n" +
 			"  wt sync rebase tmp/stack --stack   # the whole line once, then every layer\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash  # fold review fixes in place\n" +
+			"  wt sync rebase tmp/stack --stack --autosquash --onto main  # fold and move\n" +
 			"  wt sync rebase login-crash --force --allow-diverged  # past session, origin\n" +
 			"  wt sync rebase login-crash --onto test_wt/integration  # onto that branch\n" +
 			"  wt sync rebase ui --onto origin/main --upstream feat_wt/api  # move a layer\n" +
@@ -900,7 +908,7 @@ func newSyncRebaseCmd() *cobra.Command {
 	rebase.Flags().StringVar(&expect, "expect", "", "refuse unless the overview still matches this token from wt sync --json")
 	rebase.Flags().BoolVar(&stack, "stack", false, "rebase the line of the worktree named once, and move every layer branch on it")
 	rebase.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
-	rebase.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: fold the line's fixups onto its own base, in place; no trunk")
+	rebase.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: fold the line's fixups, in place; with --onto <ref>, as the line moves onto it")
 	addOntoFlags(rebase, &onto, &upstream, "rebase the worktrees named onto <ref> instead of trunk: a branch, origin/<branch>, a tag or a commit")
 	sel.add(rebase, true)
 	push = addPushFlags(rebase, "push the worktrees that finish, without asking",

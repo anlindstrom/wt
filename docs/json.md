@@ -1638,7 +1638,7 @@ what it sees; a run (`wt sync rebase <work> --stack --json`) fills the rest.
 | `branch` | string | the line's branch |
 | `base` | string | where the line leaves trunk, the merge base |
 | `head` | string | the line's tip before the run |
-| `autosquash` | bool | a fold of the line's fixups onto its own base (`--autosquash`), not a rebase onto trunk |
+| `autosquash` | bool | a fold of the line's fixups (`--autosquash`): onto its own base, or, with `--onto`, as the line moves onto the target |
 | `layers` | array | the layer branches, bottom first (below) |
 | `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name; `--layer` takes it) |
 | `refusal` | string \| null | the run's: why no layer moved, a new tip that failed its check, or a fold that changed the line's content; the line itself is left rebased, and `wt sync undo` puts it back. Null in the look, and when each layer was moved or held |
