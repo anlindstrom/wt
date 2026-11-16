@@ -132,6 +132,8 @@ type EachCommit struct {
 	Paths []string `yaml:"paths"`
 	// Needs is as on a deferred step.
 	Needs []string `yaml:"needs"`
+	// Retry runs, as Run does, only when Run fails.
+	Retry string `yaml:"retry"`
 }
 
 // Config is one repository's .wt-sync.yaml.

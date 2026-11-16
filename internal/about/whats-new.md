@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-16 16:40 — an each_commit step can retry before it stops the run
+
+A step in `.wt-sync.yaml`'s `each_commit:` takes an optional `retry:` command,
+run at the same commit only when `run` fails, for build output that is stale
+from the commit before (`./gradlew ... --rerun-tasks`). If it passes, the
+check passes and the rebase goes on, and the progress says so. If it fails
+too, the stop names both and shows the retry's output.
+
 ## 2026-11-13 20:32 — wt lives at github.com/anlindstrom/wt
 
 The repository moved to the anlindstrom organisation. Install with

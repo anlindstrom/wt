@@ -709,6 +709,11 @@ func newSyncRebaseCmd() *cobra.Command {
 			"commit, nothing is unmerged, and a plan file names the check. Amend the\n" +
 			"fix into the commit, or add one, and wt sync resume runs the check again\n" +
 			"before it goes on. A stack parent is put back instead.\n\n" +
+			"A step with a retry: command runs it at the same commit when its run\n" +
+			"fails, under its own 30-minute limit. If the retry passes, so does the\n" +
+			"check; if it fails too, the stop names both and shows the retry's output.\n" +
+			"A run that left tracked files changed, or whose git status could not be\n" +
+			"read, is not retried: the stop is the run's.\n\n" +
 			"A step that declares needs: [docker] needs Docker. Before anything moves,\n" +
 			"the run asks docker info once, when a step that needs it may run: an\n" +
 			"each_commit step with a commit to check, or a deferred step whose paths\n" +
