@@ -641,7 +641,7 @@ func (d *driver) recheckFold(rewritten, files []string) (*CheckFailure, error) {
 			if d.unavailable(s.Needs) != "" {
 				continue
 			}
-			if why, output := runCheck(d.req.Path, s.Run, EachCommitTimeout); why != "" {
+			if why, output, _ := runEachCommit(d.req.Path, s, EachCommitTimeout); why != "" {
 				return &CheckFailure{Step: s.Run, Commit: c, Err: why, Output: output}, nil
 			}
 		}

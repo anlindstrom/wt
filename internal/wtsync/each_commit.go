@@ -17,7 +17,7 @@ import (
 // EachCommitTimeout bounds one each_commit check at one commit. The run's
 // own git calls are bounded by GitTimeout; a check is not one of them, and
 // is bounded on its own.
-const EachCommitTimeout = 30 * time.Minute
+var EachCommitTimeout = 30 * time.Minute
 
 // checkTail is how many lines of a failing check's output are kept.
 const checkTail = 20
@@ -274,7 +274,7 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 		fmt.Fprintf(d.log, "  ▸ check %d/%d %s %s\n", at, max(len(d.checks), at), git.ShortID(head, 7), subject)
 	}
 	for _, s := range run {
-		why, output := runCheck(d.req.Path, s.Run, EachCommitTimeout)
+		why, output, _ := runEachCommit(d.req.Path, s, EachCommitTimeout)
 		if why == "" {
 			continue
 		}
@@ -343,6 +343,12 @@ func runCheck(wtPath, run string, timeout time.Duration) (why, output string) {
 		return "changed tracked files: " + strings.Join(files, ", "), output
 	}
 	return "", output
+}
+
+// runEachCommit runs one each_commit step. Scaffold: no retry yet.
+func runEachCommit(wtPath string, s EachCommit, timeout time.Duration) (why, output string, retried bool) {
+	why, output = runCheck(wtPath, s.Run, timeout)
+	return why, output, false
 }
 
 // tailLines keeps the last n lines of s.
