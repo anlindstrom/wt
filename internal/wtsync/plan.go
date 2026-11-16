@@ -93,6 +93,9 @@ type State struct {
 	// Layers is what the per-layer steps did at the layer stops before the
 	// handover, for resume to go on from; absent when none is declared.
 	Layers *LayerState `json:"layers,omitempty"`
+	// Unchecked is the each_commit checks the run did not run before the
+	// handover, owed for the whole branch: resume carries them on.
+	Unchecked []Unchecked `json:"unchecked,omitempty"`
 }
 
 // CheckStop is a failed check as the handover records it.

@@ -2,10 +2,12 @@ package wtsync
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -45,8 +47,8 @@ func (c CheckFailure) Line() string {
 // Unchecked is an each_commit check a run did not run because a need of it
 // failed its probe: owed for the whole branch.
 type Unchecked struct {
-	Step string
-	Why  string
+	Step string `json:"step"`
+	Why  string `json:"why"`
 }
 
 // Owed is how the run names the unchecked step among the owed ones.
@@ -325,15 +327,25 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 	if len(run) == 0 {
 		return nil, nil
 	}
-	d.res.Checked++
-	if d.log != nil {
-		at := slices.Index(d.checks, sha) + 1
-		if at == 0 {
-			at = d.res.Checked
-		}
-		fmt.Fprintf(d.log, "  ▸ check %d/%d %s %s\n", at, max(len(d.checks), at), git.ShortID(head, 7), subject)
-	}
+	started := false
 	for _, s := range run {
+		// Judged now, not before the first step ran: an earlier step may
+		// have generated the executable this one runs.
+		if why := d.scriptMissing(s.Run, head); why != "" {
+			d.uncheck(s.Run, why)
+			continue
+		}
+		if !started {
+			started = true
+			d.res.Checked++
+			if d.log != nil {
+				at := slices.Index(d.checks, sha) + 1
+				if at == 0 {
+					at = d.res.Checked
+				}
+				fmt.Fprintf(d.log, "  ▸ check %d/%d %s %s\n", at, max(len(d.checks), at), git.ShortID(head, 7), subject)
+			}
+		}
 		why, output, retried := runEachCommit(d.req.Path, s, EachCommitTimeout)
 		if why == "" {
 			if retried && d.log != nil {
@@ -359,6 +371,67 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 // answer of the first need the run was told is missing, "" when none is.
 func (d *driver) unavailable(needs []string) string {
 	return unavailableWhy(needs, d.req.Unavailable)
+}
+
+// scriptMissing is why a step whose command starts with a repository path
+// (bin/x.sh, ./gradlew) cannot run at the commit head: the script is not in
+// its tree. A tree that predates a script trunk declares is the usual
+// reason, and the step is owed, not failed with exit 127. A script trunk
+// does not have either is a declaration error. A file the worktree has is
+// there, tracked or not. "" when the command does not
+// start with a repository path, or the script is there.
+func (d *driver) scriptMissing(run, head string) string {
+	script := repoScript(run)
+	if script == "" || gitHas(d.req.Path, head, script) {
+		return ""
+	}
+	// A tool the worktree has but git does not track (.venv/bin/pytest,
+	// node_modules/.bin/tsc) is there.
+	if _, err := os.Stat(filepath.Join(d.req.Path, script)); err == nil {
+		return ""
+	}
+	trunk := cmp.Or(d.req.Trunk, d.req.Onto)
+	if gitHas(d.req.Path, trunk, script) {
+		why := fmt.Sprintf("%s is not in the tree at %s: the commit predates it", script, git.ShortID(head, 7))
+		if d.log != nil {
+			fmt.Fprintf(d.log, "  ⏭ %s not checked at %s: %s\n", run, git.ShortID(head, 7), why)
+		}
+		return why
+	}
+	why := fmt.Sprintf("%s is in neither the tree nor trunk: the declaration names a script that is not there", script)
+	if d.log != nil && !d.declared[run] {
+		if d.declared == nil {
+			d.declared = map[string]bool{}
+		}
+		d.declared[run] = true
+		fmt.Fprintf(d.log, "  ✗ declaration: %s: %s\n", run, why)
+	}
+	return why
+}
+
+// repoScript is the repository path a step's command starts with, "" when
+// it starts with a program looked up on the PATH, an absolute path or a
+// shell expansion.
+func repoScript(run string) string {
+	f := strings.Fields(run)
+	if len(f) == 0 {
+		return ""
+	}
+	first := f[0]
+	if strings.ContainsAny(first, "$`~\"'=;|&<>(){}*?") || strings.HasPrefix(first, "/") || strings.HasPrefix(first, "../") {
+		return ""
+	}
+	first = strings.TrimPrefix(first, "./")
+	if !strings.Contains(first, "/") && first == f[0] {
+		return ""
+	}
+	return path.Clean(first)
+}
+
+// gitHas is whether rev has a file at p.
+func gitHas(dir, rev, p string) bool {
+	_, err := gitEnv(dir, nil, nil, "cat-file", "-e", rev+":"+p)
+	return err == nil
 }
 
 // uncheck records a check the run did not run, once per step.

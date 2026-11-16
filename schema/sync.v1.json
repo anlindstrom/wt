@@ -199,7 +199,7 @@
         "branch": { "type": "string", "description": "The line's own branch: the worktree named." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where the line leaves trunk: the merge base." },
         "head": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's tip before the run." },
-        "autosquash": { "type": "boolean", "description": "A fold of the line's fixups onto its own base (--autosquash), not a rebase onto trunk." },
+        "autosquash": { "type": "boolean", "description": "A fold of the line's fixups (--autosquash): onto its own base, or, with --onto, as the line moves onto the target." },
         "layers": { "type": "array", "items": { "$ref": "#/$defs/stackLayer" } },
         "skipped": { "type": "array", "items": { "$ref": "#/$defs/stackSkipped" } },
         "refusal": { "type": ["string", "null"], "description": "The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held." }

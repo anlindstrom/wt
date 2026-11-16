@@ -194,6 +194,26 @@ In `wt sync rebase <work> --stack --autosquash`, which folds a line's
 fixups are folded in. `.wt-sync.yaml` has no key for `--stack`: a stack
 held on one line is rebased with the same declaration as any branch.
 
+`--autosquash` alone folds in place, onto the line's own base, so the replayed
+trees can predate a script trunk declared since. A step whose `run` starts
+with a repository path (`bin/check.sh`, `./gradlew`) that is not in the
+replayed commit's tree is not run there and does not stop the rebase with
+exit 127: it is reported as not checked at that commit, owed, and a run with
+anything owed is not pushed or landed, as with an unmet `needs:`. A path that
+trunk does not have either is a declaration error, said once, and owed the
+same way. A step whose script is there and fails still stops. To check each
+commit with trunk's scripts, fold and move in one run:
+`wt sync rebase <work> --stack --autosquash --onto <trunk>`. The line's
+content must then come out as git merges the old line onto trunk in every
+file that merges cleanly, outside the paths the per-layer steps own; a file a
+stop resolved, by a strategy or a person, is theirs in its conflicting region,
+and the rest of the merge must still be in it. A fixup is refused before
+anything moves unless it names exactly one commit that will be replayed, found
+as git finds it (a commit id, tag or revision on the line, else the subject,
+whitespace after `fixup!` ignored); one whose target trunk already carries or
+reaches, or that is ambiguous or names nothing, is refused with both commits
+named. Every new layer tip must descend from the destination.
+
 `wt sync` says how many commits a run would check, and `wt sync <work>` which,
 without running anything. After the last commit, `defer` is still the place
 for work that runs once.
@@ -290,7 +310,7 @@ writes the file again. Such a conflict is never handed to a person.
 
 An `each_commit` check runs after each pick as before, so before the fold;
 one whose `paths` take in a file the step wrote is run again at every commit
-the fold rewrote, and at the step's own commit. `--autosquash` and
+the fold rewrote, and at the step's own commit. `--autosquash` without `--onto` and
 `wt sync steps --stack` move nothing onto trunk, and the line's content must
 come out the same outside the per-layer steps' `paths`.
 

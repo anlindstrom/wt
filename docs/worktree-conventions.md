@@ -95,7 +95,7 @@ carry are shims that call `wt`.
    happen and changes nothing, `wt sync rebase <work>` does it, and
    `wt sync undo <work>` puts a run back. `wt up` is the same for the worktree you
    are in, only when it goes through without you. A stack held on one line is
-   `wt sync rebase <work> --stack`, with `--autosquash` to fold its fixups in place,
+   `wt sync rebase <work> --stack`, with `--autosquash` to fold its fixups in place (and `--onto <trunk>` to fold and move in one run),
    and `wt sync steps <work>` runs the steps a run left owed. `wt sync --rebase` does
    every worktree the table calls ready except `recipe?`. Without a terminal, a run
    with nothing named rebases nothing unless `--yes` says so, and nothing is pushed

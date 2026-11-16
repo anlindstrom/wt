@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -157,6 +158,9 @@ type StackFinish struct {
 	// Folds is the paths of the per-layer steps that folded their output
 	// into the line: a fold in place may change them, and nothing else.
 	Folds []string
+	// Stopped is the paths the rebase stopped on, resolved by a strategy or
+	// by a person.
+	Stopped []string
 	// AfterMove and Between are a test's hooks into the moves; nil in a
 	// real run.
 	AfterMove func(wtsync.LayerMove) error
@@ -187,7 +191,7 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		return s, "no layer moved", nil
 	}
 	if rec.Autosquash || rec.InPlace {
-		if why := foldChanged(main, in.OldTip, in.NewTip, in.Folds); why != "" {
+		if why := foldChanged(main, rec.Line.Base, in.Onto, in.OldTip, in.NewTip, in.Folds, in.Stopped); why != "" {
 			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", why, rec.Work))
 		}
 	}
@@ -296,27 +300,94 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	return s, "", nil
 }
 
-// foldChanged is how a fold in place changed the line's content, outside
-// the per-layer steps' paths (folds), which their output may change; "" for
-// not at all.
-func foldChanged(main, oldTip, newTip string, folds []string) string {
+// foldChanged is how a fold changed the line's content, outside the
+// per-layer steps' paths (folds), which their output may change; "" for not
+// at all, and never "" for a difference it cannot account for.
+//
+// A fold in place (onto is the line's own base) keeps the tree.
+//
+// A fold that moves the line onto another commit is held to what git merges
+// the old line onto that commit with: every file that merges cleanly comes
+// out as merged, so a hunk lost in a file the target also changed is caught.
+// A file that does not merge cleanly and that a stop resolved, by a strategy
+// or a person, is theirs in its conflicting region only; the rest of the
+// merge must still be in it. The steps' own paths are the steps'. A moving
+// fold is never accepted on the old tree alone.
+func foldChanged(main, base, onto, oldTip, newTip string, folds, stopped []string) string {
 	was, err1 := git.Run(main, "rev-parse", oldTip+"^{tree}")
 	is, err2 := git.Run(main, "rev-parse", newTip+"^{tree}")
-	if err1 == nil && err2 == nil && was == is {
+	if onto == base && err1 == nil && err2 == nil && was == is {
 		return ""
 	}
 	tree := fmt.Sprintf("tree %s before, %s after", git.ShortID(was, 7), git.ShortID(is, 7))
-	if err1 != nil || err2 != nil || len(folds) == 0 {
+	if err1 != nil || err2 != nil {
 		return tree
 	}
-	paths, err := wtsync.ChangedPaths(main, oldTip, newTip)
+	if onto == base {
+		paths, err := wtsync.ChangedPaths(main, was, newTip)
+		if err != nil {
+			return tree + ": " + err.Error()
+		}
+		for _, p := range paths {
+			if !matchesAnyGlob(folds, p) {
+				return tree + ", " + p + " among them"
+			}
+		}
+		return ""
+	}
+	ref, conflicted, err := wtsync.MergedTree(main, base, onto, oldTip)
+	if err != nil {
+		return tree + ": the old line merged onto the target could not be read: " + err.Error()
+	}
+	paths, err := wtsync.ChangedPaths(main, ref, newTip)
 	if err != nil {
 		return tree + ": " + err.Error()
 	}
 	for _, p := range paths {
-		if !matchesAnyGlob(folds, p) {
-			return tree + ", " + p + " among them"
+		switch {
+		case matchesAnyGlob(folds, p):
+		case slices.Contains(conflicted, p) && slices.Contains(stopped, p):
+			// A stop resolved this file: its conflicting region is the
+			// stop's, the rest of the merge must still be there.
+			if why := lostMergedLines(main, ref, newTip, p); why != "" {
+				return tree + ", " + p + ": " + why
+			}
+		default:
+			return tree + ", " + p + " differs from the old line merged onto the target"
 		}
+	}
+	return ""
+}
+
+// lostMergedLines is why newTip's p lost something of ref's p outside the
+// conflicting regions ref carries markers for: a line of the merge that is
+// not in the new file in order. "" when every such line is there.
+func lostMergedLines(main, ref, newTip, p string) string {
+	merged, err1 := git.Run(main, "show", ref+":"+p)
+	now, err2 := git.Run(main, "show", newTip+":"+p)
+	if err1 != nil || err2 != nil {
+		return "the merged file or the new one could not be read, so it is not checked"
+	}
+	have := strings.Split(now, "\n")
+	at, inConflict := 0, false
+	for _, line := range strings.Split(merged, "\n") {
+		switch {
+		case strings.HasPrefix(line, "<<<<<<< "):
+			inConflict = true
+			continue
+		case strings.HasPrefix(line, ">>>>>>> "):
+			inConflict = false
+			continue
+		case inConflict:
+			continue
+		}
+		for at < len(have) && have[at] != line {
+			at++
+		}
+		if at == len(have) {
+			return fmt.Sprintf("the line %q of the merge is not in the resolution", line)
+		}
+		at++
 	}
 	return ""
 }

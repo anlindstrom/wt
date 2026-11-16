@@ -4,6 +4,17 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-16 17:55 — one run folds a stack's fixups and lands it on trunk
+
+`wt sync rebase <top> --stack --autosquash --onto <ref>` folds the line's
+fixups and moves it onto `<ref>` in one replay, so trunk's scripts are in every
+replayed tree and each `each_commit` check runs once. `--autosquash` alone
+still folds in place. There, a check whose script the replayed tree predates
+(`bin/check.sh`) is no longer run to exit 127: it is reported as not checked
+and owed, like an unmet `needs:`; the debt survives a conflict handover and
+resume. The fold onto a target refuses a fixup of a commit the target already
+carries, and a feature hunk lost in a file the target also changed.
+
 ## 2026-11-16 17:24 — a resume that meets a new conflict stops like any stop
 
 A fixup that conflicts after `wt sync resume` no longer ends with "no record of

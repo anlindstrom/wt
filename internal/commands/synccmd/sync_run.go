@@ -90,7 +90,8 @@ type StackOptions struct {
 	// Layers names the layer branches; empty takes every local branch
 	// whose tip is on the line, but backups.
 	Layers []string
-	// Autosquash folds the line's fixups onto its own base, in place.
+	// Autosquash folds the line's fixups: onto its own base, in place, or,
+	// with Onto, as the line moves there.
 	Autosquash bool
 	// AfterMove is a test's hook into the layer moves: an error stops them
 	// there, as an interrupt would. Nil in a real run.
@@ -240,9 +241,6 @@ func (r *RunPlan) run(works []string) error {
 	}
 	if opts.Onto != "" && opts.Steps != nil {
 		return errors.New("wt sync steps runs the steps in place and takes no --onto")
-	}
-	if opts.Onto != "" && opts.Stack != nil && opts.Stack.Autosquash {
-		return errors.New("--autosquash folds in place, onto the line's own base; rebase onto <ref> with a second run, --stack --onto <ref>")
 	}
 	if err := r.declare(works); err != nil {
 		return err
@@ -1273,7 +1271,7 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) {
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: res.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: r.own, Listed: listed, ListErr: lerr, Force: rec.Force, Now: r.opts.Clock(), AfterMove: st.AfterMove, Between: st.Between,
-		Folds: syncrun.FoldPaths(r.cfg)})
+		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops)})
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s })
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, p.work)
@@ -1327,7 +1325,8 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 	}
 	if st := r.opts.Stack; st != nil {
 		req.Stack = &wtsync.StackRequest{Line: r.line, Autosquash: st.Autosquash}
-		if st.Autosquash || r.opts.Steps != nil {
+		// A fold is in place unless --onto names where the line goes.
+		if (st.Autosquash && r.target == nil) || r.opts.Steps != nil {
 			req.Onto, ontoLabel = r.line.Base, "its own base "+git.ShortID(r.line.Base, 7)
 		}
 	}
