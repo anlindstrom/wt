@@ -146,3 +146,35 @@ func printEdit(w io.Writer, e *StackEdit) {
 		fmt.Fprintf(w, "      emptied and dropped: %s %q\n", git.ShortID(c.SHA, 7), c.Subject)
 	}
 }
+
+// putBackLine puts the line of an edit run back at the tip the run found,
+// once its rebase finished and its layers were refused: what the line came
+// to is kept under EditKeptRef first, and the reset is git's --keep, which
+// refuses to touch a change of the worktree's own. It returns why, with
+// what it did or why it could not.
+func putBackLine(main string, rec *wtsync.StackRecord, why string) string {
+	old, path, branch := rec.Line.Head, rec.Path, rec.Branch
+	if ref, err := git.Run(path, "symbolic-ref", "--quiet", "HEAD"); err != nil || ref != "refs/heads/"+branch {
+		return fmt.Sprintf("%s; the line is not put back: its worktree is not on %s; wt sync undo %s puts it back", why, branch, rec.Work)
+	}
+	head, err := git.Run(path, "rev-parse", "HEAD")
+	if err != nil {
+		return fmt.Sprintf("%s; the line is not put back (%v); wt sync undo %s puts it back", why, err, rec.Work)
+	}
+	if head == old {
+		return why
+	}
+	kept := wtsync.EditKeptRef(branch, rec.Epoch)
+	if _, err := git.Run(main, "update-ref", "-m", "wt sync: the refused edit", kept, head, ""); err != nil {
+		return fmt.Sprintf("%s; the line is not put back, since what it came to could not be kept under %s (%v); wt sync undo %s puts it back", why, kept, err, rec.Work)
+	}
+	keptLine := fmt.Sprintf("what it came to, %s kept under %s, holds the amend and every resolution", git.ShortID(head, 7), kept)
+	if _, err := git.Run(path, "reset", "--quiet", "--keep", old); err != nil {
+		return fmt.Sprintf("%s; the line is not put back (%v); %s; wt sync undo %s puts it back", why, err, keptLine, rec.Work)
+	}
+	if now, err := git.Run(main, "rev-parse", "refs/heads/"+branch); err != nil || now != old {
+		return fmt.Sprintf("%s; after the reset %s is at %s, not %s; %s", why, branch, git.ShortID(now, 7), git.ShortID(old, 7), keptLine)
+	}
+	why = strings.TrimSuffix(why, "; no layer moved, the line itself is rebased")
+	return fmt.Sprintf("%s; the line is put back, %s at %s as before; %s", why, branch, git.ShortID(old, 7), keptLine)
+}

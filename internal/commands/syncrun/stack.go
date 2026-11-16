@@ -202,6 +202,11 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	}
 	s = StackOf(rec.Line, rec.Autosquash, holders)
 	refuse := func(why string) (*Stack, string, error) {
+		if rec.Edit != nil {
+			// An edit run is never left rebased under layers that did not
+			// follow: the line goes back where the run found it.
+			why = putBackLine(main, rec, why)
+		}
 		fmt.Fprintf(w, "  ✗ no layer moved: %s\n", why)
 		s.Refusal = jsonout.Strp(why)
 		if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
@@ -218,6 +223,17 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		printEdit(w, e)
 		if eerr != nil {
 			fmt.Fprintf(w, "      note: what the amend changed could not all be read: %v\n", eerr)
+		}
+	}
+	if e := rec.Edit; e != nil {
+		// Held inside the rebase already, before the line's branch moved;
+		// held again here for a rebase a person finished by hand, which
+		// never reached that check, before any layer moves.
+		if e.Amended == "" {
+			return refuse(fmt.Sprintf("the rebase went on from the edit stop by hand, so what %s was amended to is not known and the line cannot be checked", git.ShortID(e.Commit, 7)))
+		}
+		if why := EditContent(main, in.OldTip, in.Folds, nil)(in.NewTip, *e, in.Stopped); why != "" {
+			return refuse(why)
 		}
 	}
 	if (rec.Autosquash || rec.InPlace) && rec.Edit == nil {
