@@ -41,10 +41,21 @@ type editCase struct {
 	commits []string // the line's commits from its base, oldest first
 }
 
+// logStep is the each_commit step the cases declare by default: it logs
+// the subject of every commit it checks to %LOG%.
+const logStep = "each_commit:\n  - run: git log -1 --format=%s >> '%LOG%'\n"
+
 func newEditCase(t *testing.T, emptied bool) *editCase {
 	t.Helper()
+	return newEditCaseWith(t, emptied, logStep)
+}
+
+// newEditCaseWith declares steps on trunk after conflicts: [], with %LOG%
+// the path of the check log; "" declares no step at all.
+func newEditCaseWith(t *testing.T, emptied bool, steps string) *editCase {
+	t.Helper()
 	logPath := filepath.Join(t.TempDir(), "checks.log")
-	yaml := "conflicts: []\neach_commit:\n  - run: git log -1 --format=%s >> '" + logPath + "'\n"
+	yaml := "conflicts: []\n" + strings.ReplaceAll(steps, "%LOG%", logPath)
 	main := testkit.CommittedRepo(t, testkit.MinimalConf)
 	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
 	wtDir, err := filepath.EvalSymlinks(t.TempDir())
@@ -200,7 +211,15 @@ func TestSyncRebaseStackEditMovesAFixDownToAnEarlierCommit(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	c := newEditCase(t, false)
+	for name, steps := range map[string]string{"checked": logStep, "no steps": ""} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			editMovesAFixDown(t, newEditCaseWith(t, false, steps), steps != "")
+		})
+	}
+}
+
+func editMovesAFixDown(t *testing.T, c *editCase, checked bool) {
 	subjectsBefore, patchesBefore := lineOf(t, c.main, c.s.Base, gittest.EditTmp)
 	layerSubjects := map[string]string{}
 	for _, l := range c.s.Layers {
@@ -211,8 +230,13 @@ func TestSyncRebaseStackEditMovesAFixDownToAnEarlierCommit(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "needs you") {
 		t.Fatalf("run: %v\n%s", err, human)
 	}
-	if p := synccmdtest.Participant(t, res, gittest.EditTmp); p.Result != syncrun.ResultHandedOver {
-		t.Fatalf("line %+v\n%s", p, human)
+	stop := synccmdtest.Participant(t, res, gittest.EditTmp)
+	if stop.Result != syncrun.ResultHandedOver {
+		t.Fatalf("line %+v\n%s", stop, human)
+	}
+	if stop.Stack == nil || stop.Stack.Edit == nil || stop.Stack.Edit.Commit != c.s.A || stop.Stack.Edit.Amended != "" ||
+		stop.Stack.Edit.Subject != "feat(e2): add the lib" {
+		t.Errorf("at the stop, stack.edit is %+v, want A with nothing amended yet", stop.Stack)
 	}
 	if head := testkit.GitOut(t, c.tmp, "rev-parse", "HEAD"); head != c.s.A {
 		t.Fatalf("the run stopped at %s, want A %s\n%s", head, c.s.A, human)
@@ -285,9 +309,11 @@ func TestSyncRebaseStackEditMovesAFixDownToAnEarlierCommit(t *testing.T) {
 	if testkit.GitOut(t, c.main, "rev-parse", "e1") != c.tips["e1"] {
 		t.Error("e1, below the edit, moved")
 	}
-	checked := strings.Split(strings.TrimSpace(readFile(t, c.logPath)), "\n")
-	if want := subjectsBefore[posA:]; !slices.Equal(checked, want) {
-		t.Errorf("checked %q, want every commit from A on once: %q", checked, want)
+	if checked {
+		got := strings.Split(strings.TrimSpace(readFile(t, c.logPath)), "\n")
+		if want := subjectsBefore[posA:]; !slices.Equal(got, want) {
+			t.Errorf("checked %q, want every commit from A on once: %q", got, want)
+		}
 	}
 	p := synccmdtest.Participant(t, done, gittest.EditTmp)
 	if p.Stack == nil || p.Stack.Edit == nil {
@@ -398,7 +424,15 @@ func TestSyncRebaseStackEditRefusesAStrayChangeBeforeAnythingMoves(t *testing.T)
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	c := newEditCase(t, false)
+	for name, steps := range map[string]string{"checked": logStep, "no steps": ""} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			editRefusesAStrayChange(t, newEditCaseWith(t, false, steps))
+		})
+	}
+}
+
+func editRefusesAStrayChange(t *testing.T, c *editCase) {
 	if _, human, err := c.run(t, c.s.A); err == nil {
 		t.Fatalf("the run did not stop:\n%s", human)
 	}
@@ -550,4 +584,152 @@ func TestSyncResumeInterruptedPastTheEditStillKnowsTheAmend(t *testing.T) {
 	if got := testkit.GitOut(t, c.main, "rev-parse", "e4"); got == c.tips["e4"] {
 		t.Error("e4 did not move")
 	}
+}
+
+// A file the old line and the amend both changed does not merge as one
+// three-way merge, though the replay merges it commit by commit; a hunk lost
+// there while a person resolves another file is refused, not let through as
+// if that file had been a stop of theirs.
+func TestSyncRebaseStackEditRefusesAHunkLostInAFileTheReplayMergedCleanly(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCase(t, true)
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	c.amendA(t, map[string]string{"four.txt": "mine\n"})
+	if _, human, err := c.resume(t); err == nil || !slices.Contains(c.state(t).Left, "four.txt") {
+		t.Fatalf("resume did not stop at four.txt: %v\n%s", err, human)
+	}
+	testkit.WriteFile(t, c.tmp, "four.txt", "four\n")
+	testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\n")
+	testkit.GitIn(t, c.tmp, "add", "four.txt", "lib.txt")
+	_, human, err := c.resume(t)
+	if err == nil || !strings.Contains(human, "lib.txt") {
+		t.Fatalf("resume: %v, want a refusal naming lib.txt\n%s", err, human)
+	}
+	c.back(t)
+	keptRef(t, human)
+}
+
+// Commits added at the edit stop, with nothing emptied, go into the edited
+// commit's layer: it and every layer above gain them, and the run finishes.
+func TestSyncRebaseStackEditTakesCommitsAddedAtTheStop(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCase(t, false)
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	c.amendA(t, nil)
+	testkit.WriteFile(t, c.tmp, "note.txt", "note\n")
+	testkit.GitIn(t, c.tmp, "add", "note.txt")
+	testkit.GitIn(t, c.tmp, "commit", "-q", "--no-verify", "-m", "feat(e2): note")
+	if _, human, err := c.resume(t); err == nil {
+		t.Fatalf("resume did not stop at B:\n%s", human)
+	}
+	testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\nname = new\n")
+	testkit.GitIn(t, c.tmp, "add", "lib.txt")
+	_, human, err := c.resume(t)
+	if err != nil {
+		t.Fatalf("resume at B: %v\n%s", err, human)
+	}
+	for l, n := range map[string]string{"e1": "1", "e2": "4", "e3": "5", "e4": "7"} {
+		if got := testkit.GitOut(t, c.main, "rev-list", "--count", c.s.Base+".."+l); got != n {
+			t.Errorf("%s has %s commits, want %s", l, got, n)
+		}
+	}
+	if got := testkit.GitOut(t, c.main, "log", "-1", "--format=%s", "e2"); got != "feat(e2): two" {
+		t.Errorf("e2's tip is %q", got)
+	}
+}
+
+// A check that fails at the edited commit is fixed by amending it again: the
+// content is then held to that amend, not to the first.
+func TestSyncRebaseStackEditFollowsTheAmendThatFixesItsCheck(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCaseWith(t, false, "each_commit:\n  - run: test ! -f lib.txt || test -f lib.ok\n")
+	// lib.ok on every commit from A up, so the old line passes the check.
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	c.amendA(t, nil)
+	if _, human, err := c.resume(t); err == nil || !c.handedOverAtCheck(t) {
+		t.Fatalf("resume did not stop at A's check: %v\n%s", err, human)
+	}
+	testkit.WriteFile(t, c.tmp, "lib.ok", "ok\n")
+	testkit.GitIn(t, c.tmp, "add", "lib.ok")
+	testkit.GitIn(t, c.tmp, "commit", "-q", "--amend", "--no-edit", "--no-verify")
+	again := testkit.GitOut(t, c.tmp, "rev-parse", "HEAD")
+	for n := 0; ; n++ {
+		res, human, err := c.resume(t)
+		if err == nil {
+			if e := synccmdtest.Participant(t, res, gittest.EditTmp).Stack.Edit; e == nil || e.Amended != again {
+				t.Errorf("edit %+v, want amended %s", e, again)
+			}
+			break
+		}
+		st, ok, _ := wtsync.ReadState(c.gitDir)
+		if n > 3 || !ok || !slices.Contains(st.Left, "lib.txt") {
+			t.Fatalf("resume: %v\n%s", err, human)
+		}
+		testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\nname = new\n")
+		testkit.GitIn(t, c.tmp, "add", "lib.txt")
+	}
+	if got := testkit.GitOut(t, c.main, "show", "e4:lib.ok"); got != "ok" {
+		t.Errorf("e4 has lib.ok %q", got)
+	}
+}
+
+// A layer check that refuses after a rebase finished by hand puts the line
+// back where the run found it, and keeps what it came to.
+func TestSyncResumeOfAnEditPutsTheLineBackWhenItsLayersAreRefused(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCase(t, false)
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	c.amendA(t, nil)
+	if _, human, err := c.resume(t); err == nil {
+		t.Fatalf("resume did not stop at B:\n%s", human)
+	}
+	epoch := c.state(t).Epoch
+	testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\nname = new\n")
+	testkit.GitIn(t, c.tmp, "add", "lib.txt")
+	testkit.GitIn(t, c.tmp, "-c", "core.editor=true", "rebase", "--continue")
+	// A marker that is not what the plan expects: the layer check refuses.
+	testkit.GitIn(t, c.main, "update-ref", wtsync.StackMapRef(epoch, 2), c.tips["e1"])
+	rebased := testkit.GitOut(t, c.tmp, "rev-parse", "HEAD")
+	_, human, err := c.resume(t)
+	if err == nil || !strings.Contains(err.Error(), "no layer moved") {
+		t.Fatalf("resume: %v, want no layer moved\n%s", err, human)
+	}
+	for _, b := range c.branches {
+		if got := testkit.GitOut(t, c.main, "rev-parse", b); got != c.tips[b] {
+			t.Errorf("%s is at %s, want %s", b, got, c.tips[b])
+		}
+	}
+	if got := testkit.GitOut(t, c.tmp, "status", "--porcelain", "--untracked-files=all"); got != c.status {
+		t.Errorf("status %q, want %q", got, c.status)
+	}
+	ref, _ := keptRef(t, human)
+	if got := testkit.GitOut(t, c.main, "rev-parse", ref); got != rebased {
+		t.Errorf("%s holds %s, want the rebased line %s", ref, got, rebased)
+	}
+}
+
+func (c *editCase) handedOverAtCheck(t *testing.T) bool {
+	t.Helper()
+	st, ok, err := wtsync.ReadState(c.gitDir)
+	return err == nil && ok && st.Check != nil
 }
