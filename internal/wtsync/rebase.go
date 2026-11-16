@@ -722,6 +722,9 @@ func (d *driver) markTodo() error {
 	}
 	plan := todoPlan{liftPlan: lift, checks: d.checks}
 	plan.stops, plan.tail = d.layerStops()
+	if plan.open, plan.due, err = d.stoppedGroup(); err != nil {
+		return err
+	}
 	if !plan.edits() {
 		return nil
 	}

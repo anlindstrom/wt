@@ -192,6 +192,63 @@ func (d *driver) checkAt() (sha string, edited bool, err error) {
 	return "", false, nil
 }
 
+// stoppedGroup says whether the sequencer sits inside a group, the last
+// command it ran being a pick, edit, or a fixup or squash folded into one,
+// and whether that group is to be checked. A stop the run handed over is
+// such a place: the break that would have followed the group was taken out
+// with the rest of the run's own stops, and the list that is left has the
+// pick behind it. A list that already goes on with a break needs nothing.
+func (d *driver) stoppedGroup() (open, due bool, err error) {
+	if len(d.checks) == 0 {
+		return false, false, nil
+	}
+	dir, err := rebaseDir(d.req.Path)
+	if err != nil {
+		return false, false, err
+	}
+	done, err := os.ReadFile(filepath.Join(dir, "done"))
+	if err != nil {
+		return false, false, err
+	}
+	if next, err := os.ReadFile(filepath.Join(dir, "git-rebase-todo")); err == nil {
+		for _, line := range strings.Split(string(next), "\n") {
+			if f := strings.Fields(line); len(f) > 0 && !strings.HasPrefix(f[0], "#") {
+				if f[0] == "break" {
+					return false, false, nil
+				}
+				break
+			}
+		}
+	}
+	var cmds [][]string
+	for _, line := range strings.Split(string(done), "\n") {
+		if f := strings.Fields(line); len(f) > 0 && !strings.HasPrefix(f[0], "#") {
+			cmds = append(cmds, f)
+		}
+	}
+	i := len(cmds) - 1
+	var ids []string
+	for ; i >= 0 && (cmds[i][0] == "fixup" || cmds[i][0] == "squash"); i-- {
+		id := cmds[i][1]
+		if len(cmds[i]) >= 3 && strings.HasPrefix(id, "-") {
+			id = cmds[i][2]
+		}
+		ids = append(ids, id)
+	}
+	if i < 0 || (cmds[i][0] != "pick" && cmds[i][0] != "edit") || len(cmds[i]) < 2 {
+		return false, false, nil
+	}
+	ids = append(ids, cmds[i][1])
+	for _, id := range ids {
+		for _, c := range d.checks {
+			if strings.HasPrefix(c, id) {
+				return true, true, nil
+			}
+		}
+	}
+	return true, false, nil
+}
+
 // pickCommitted reports whether the pick of sha left a commit at HEAD:
 // git's own record of what it rewrote names sha and HEAD, or, at a pick
 // the run stopped around (edited), HEAD moved past where the pick was
