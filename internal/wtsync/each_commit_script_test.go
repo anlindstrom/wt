@@ -114,3 +114,31 @@ func TestEachCommitScriptInNeitherTreeNorTrunkIsADeclarationError(t *testing.T) 
 		t.Errorf("the declaration error is said %d times, want once:\n%s", n, log.String())
 	}
 }
+
+// A tool the worktree has but git does not track (a provisioned
+// .venv/bin/pytest, node_modules/.bin/tsc) is there: the step runs, in an
+// ordinary rebase as in a fold in place.
+func TestEachCommitRunsAnUntrackedExecutableTheWorktreeHas(t *testing.T) {
+	t.Parallel()
+	dir, wt, cfg, logPath, base := scriptRepo(t, false)
+	script := "#!/bin/sh\ngit log -1 --format=%s >> '" + logPath + "'\n"
+	if err := os.MkdirAll(filepath.Join(wt, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, "bin", "check.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	req := trunkReq(wt, 64)
+	req.Onto = base
+	var log bytes.Buffer
+	res, err := Rebase(dir, cfg, req, &log)
+	if err != nil || res.Left != nil || res.Restored {
+		t.Fatalf("err %v res %+v\n%s", err, res, log.String())
+	}
+	if res.Checked != 1 || len(res.Unchecked) != 0 {
+		t.Errorf("checked %d, unchecked %+v, want 1 and none (the first pick fast-forwards)\n%s", res.Checked, res.Unchecked, log.String())
+	}
+	if got := checkedSubjects(t, logPath); len(got) != 1 {
+		t.Errorf("the tool ran at %v", got)
+	}
+}
