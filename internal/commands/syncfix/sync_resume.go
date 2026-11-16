@@ -341,9 +341,15 @@ func (r *resume) rebase() (wtsync.Result, error) {
 	req := wtsync.Request{
 		Path: r.target.Path, Branch: st.Branch, Trunk: st.Trunk,
 		Onto: st.Onto, Upstream: st.Upstream, Epoch: st.Epoch, Work: name, Total: st.Total,
-		Unavailable: r.unavailable,
+		Unavailable: r.unavailable, HandedAt: st.Stop, HandedHead: st.Head,
 	}
 	req.UncheckedBefore = st.Unchecked
+	if st.Edit != nil {
+		// A --stack --edit run goes on in place, its content held at the
+		// end of the list to the old line with the edit merged in.
+		req.Edit = st.Edit
+		req.Content = syncrun.EditContent(r.ctx.Repo.MainRoot, st.OldTip, syncrun.FoldPaths(r.cfg), st.Stopped)
+	}
 	// A run with per-layer steps goes on as it was: the same layers, the
 	// same steps, and what its stops did before the handover.
 	if l := st.Layers; l != nil {
@@ -368,6 +374,16 @@ func (r *resume) rebase() (wtsync.Result, error) {
 	r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) {
 		p.Checked, p.CheckFailed, p.Rechecked = res.Checked, syncrun.CheckFailedOf(res.CheckFailed), res.Rechecked
 	})
+	if rerr != nil && res.Restored {
+		// An edit run whose content was refused: the rebase is put back,
+		// with what it came to kept under a ref the error names.
+		fmt.Fprintf(r.w, "  ✗ refused: %v\n", rerr)
+		r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) {
+			p.Result, p.Reason, p.SafetyRef = syncrun.ResultRestored, jsonout.Strp(rerr.Error()), jsonout.Strp(st.Safety)
+			p.After, p.PlanFile = jsonout.Strp(st.OldTip), nil
+		})
+		return res, fmt.Errorf("not completed: %s (refused, nothing moved)", name)
+	}
 	if rerr != nil {
 		recordResumeFailed(r.j, st, r.target.Path, rerr)
 		return res, fmt.Errorf("%s: %w", name, rerr)
@@ -404,6 +420,9 @@ func (r *resume) handOverAgain(res wtsync.Result) error {
 		p.Result, p.Reason = syncrun.ResultHandedOver, jsonout.Strp("stopped again at a conflict that is yours")
 		if c := res.Left.Check; c != nil {
 			p.Reason = jsonout.Strp("stopped again at a commit whose check failed: " + c.Line())
+		}
+		if res.Left.Edit {
+			p.Reason = jsonout.Strp(syncrun.EditReason(res.Left))
 		}
 		p.Recovery = jsonout.Strp(wtsync.WayOut(wtsync.Way{Work: name, Plan: true, Rebasing: true, OwesAdd: true}))
 		p.UndoCommand = syncrun.UndoCommand(name)
@@ -505,10 +524,14 @@ func (r *resume) finishStack(res wtsync.Result) string {
 		// handover.
 		rec.Plans = res.Layers
 	}
+	if res.Edit != nil {
+		// The edit as the resume went on from it: what it was amended to.
+		rec.Edit = res.Edit
+	}
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: r.st.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch), Listed: listed, ListErr: lerr,
-		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg), Stopped: append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...)})
+		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg), Stopped: append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...)})
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s })
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, r.name)
@@ -586,6 +609,17 @@ func verifyHandover(wtPath string, st wtsync.State, w io.Writer) error {
 	dirty, err := git.Run(wtPath, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
 	if err != nil {
 		return err
+	}
+	if st.AtEdit {
+		// The edit stop: what HEAD is when the resume goes on is what the
+		// rest of the line is replayed onto, so the change must be
+		// committed; git would amend staged changes into the commit on its
+		// own and leave unstaged ones in the way.
+		if strings.TrimSpace(dirty) != "" {
+			return fmt.Errorf("the edit of %s goes on from what is committed, and the worktree has changes that are not: amend them into the commit (git commit --amend) or commit them, then wt sync resume %s",
+				git.ShortID(st.Edit.Commit, 7), st.Work)
+		}
+		return nil
 	}
 	if st.Check != nil {
 		// A failed check: HEAD is the commit, and resume runs the check

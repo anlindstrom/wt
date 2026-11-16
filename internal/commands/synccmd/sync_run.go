@@ -207,6 +207,8 @@ type RunPlan struct {
 	notReady []string
 	// line is the stack held on the named worktree's line, for --stack.
 	line wtsync.Line
+	// edit is the commit of the line --edit names, resolved; nil without.
+	edit *wtsync.EditStop
 	// stackBroken is why the layers of a finished --stack rebase are not
 	// moved: their plan could not be recorded.
 	stackBroken string
@@ -794,7 +796,7 @@ func (r *RunPlan) triage() (proceed bool, err error) {
 		}
 		if st := r.opts.Stack; st != nil {
 			switch {
-			case st.Autosquash && p.verdict == wtsync.SkipRun:
+			case (st.Autosquash || st.Edit != "") && p.verdict == wtsync.SkipRun:
 				// A fold is onto the line's own base: trunk being there
 				// already is no reason to skip it.
 				p.verdict, p.reason = wtsync.Proceed, ""
@@ -1155,6 +1157,13 @@ func (r *RunPlan) readStack() error {
 	if len(line.Layers) == 0 {
 		return fmt.Errorf("no layer branch is on the line of %s: nothing for --stack to move; wt sync rebase %s rebases it alone", r.parts[b].work, r.parts[b].work)
 	}
+	if rev := r.opts.Stack.Edit; rev != "" {
+		e, err := editOnLine(r.ctx.Repo.MainRoot, rev, line, r.parts[b].work)
+		if err != nil {
+			return err
+		}
+		r.edit = e
+	}
 	r.line = line
 	listed, err := r.listAgents()
 	if err != nil {
@@ -1233,7 +1242,7 @@ func (r *RunPlan) stackRecord(b string, p *participant, req wtsync.Request) (*wt
 		return nil, nil
 	}
 	rec := &wtsync.StackRecord{Epoch: r.epoch, Work: p.work, Branch: b, Path: p.wt.Path, Onto: req.Onto, OntoRef: r.ontoRef(), Upstream: req.Upstream,
-		Autosquash: st.Autosquash, InPlace: r.opts.Steps != nil, Force: r.opts.Force, Line: r.line}
+		Autosquash: st.Autosquash, InPlace: r.opts.Steps != nil, Force: r.opts.Force, Line: r.line, Edit: r.edit}
 	return rec, wtsync.WriteStackRecord(r.ctx.Repo.MainRoot, rec)
 }
 
@@ -1264,6 +1273,9 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) {
 		fmt.Fprintf(r.w, "  ✗ no layer moved: %s\n", why)
 		r.failures = append(r.failures, p.work+" (no layer moved)")
 		return
+	}
+	if res.Edit != nil {
+		rec.Edit = res.Edit
 	}
 	if st.BeforeCheck != nil {
 		st.BeforeCheck(rec)
@@ -1328,9 +1340,14 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 	}
 	if st := r.opts.Stack; st != nil {
 		req.Stack = &wtsync.StackRequest{Line: r.line, Autosquash: st.Autosquash}
-		// A fold is in place unless --onto names where the line goes.
-		if (st.Autosquash && r.target == nil) || r.opts.Steps != nil {
+		// A fold is in place unless --onto names where the line goes; an
+		// edit always is.
+		if (st.Autosquash && r.target == nil) || r.opts.Steps != nil || r.edit != nil {
 			req.Onto, ontoLabel = r.line.Base, "its own base "+git.ShortID(r.line.Base, 7)
+		}
+		if r.edit != nil {
+			req.Edit = r.edit
+			req.Content = syncrun.EditContent(r.ctx.Repo.MainRoot, r.line.Head, syncrun.FoldPaths(r.cfg), nil)
 		}
 	}
 	if r.opts.Steps != nil {
@@ -1433,6 +1450,12 @@ func (r *RunPlan) handOver(b string, p *participant, req wtsync.Request, res wts
 		jp.Reason = jsonout.Strp("stopped at a conflict that is yours")
 		if res.Left.Check != nil {
 			jp.Reason = jsonout.Strp("stopped at a commit whose check failed: " + res.Left.Check.Line())
+		}
+		if res.Left.Edit {
+			jp.Reason = jsonout.Strp(syncrun.EditReason(res.Left))
+			if jp.Stack != nil && r.edit != nil {
+				jp.Stack.Edit = syncrun.EditAtStop(r.edit)
+			}
 		}
 		jp.Recovery = jsonout.Strp(wtsync.WayOut(wtsync.Way{Work: p.work, Plan: true, Rebasing: true, OwesAdd: true}))
 		jp.SafetyRef, jp.UndoCommand, jp.PlanFile = jsonout.Strp(res.Safety.Ref), syncrun.UndoCommand(p.work), syncrun.PlanFileOf(p.wt.Path)

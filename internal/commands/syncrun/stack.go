@@ -72,7 +72,7 @@ type Stack struct {
 	Refusal *string `json:"refusal"`
 	// Edit is what a run with --edit did to the commit it stopped at; null
 	// in the look and for any other run.
-	Edit *StackEdit `json:"-"`
+	Edit *StackEdit `json:"edit"`
 }
 
 // StackEdit is the commit a --edit run stopped at, what it was amended to,
@@ -209,13 +209,30 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		}
 		return s, "no layer moved", nil
 	}
-	if rec.Autosquash || rec.InPlace {
+	if rec.Edit != nil {
+		// What the edit did, whatever comes of the layers; its content was
+		// held to the old line with the amend merged in inside the rebase,
+		// before the line's branch moved.
+		e, eerr := stackEdit(main, rec, in.OldTip, in.NewTip)
+		s.Edit = e
+		printEdit(w, e)
+		if eerr != nil {
+			fmt.Fprintf(w, "      note: what the amend changed could not all be read: %v\n", eerr)
+		}
+	}
+	if (rec.Autosquash || rec.InPlace) && rec.Edit == nil {
 		if why := foldChanged(main, rec.Line.Base, in.Onto, in.OldTip, in.NewTip, in.Folds, in.Stopped); why != "" {
 			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", why, rec.Work))
 		}
 	}
 	plans := rec.Plans
-	if rec.Upstream != "" {
+	if rec.Edit != nil {
+		// The commits the amend emptied were dropped: the plan follows.
+		var rerr error
+		if plans, rerr = wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit); rerr != nil {
+			return refuse(rerr.Error())
+		}
+	} else if rec.Upstream != "" {
 		// Above an upstream git empties the picks the target already has:
 		// the plan follows what the finished rebase dropped.
 		var rerr error
@@ -254,6 +271,12 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		case perr != nil:
 			patch, why = "unknown", perr.Error()
 		case same:
+		case rec.Edit != nil && t.Mapped == wtsync.MappedEmptied:
+			patch, why = "changed", "the edit emptied every commit of it"
+		case rec.Edit != nil && t.LeftOut > 0:
+			patch, why = "changed", fmt.Sprintf("the edit emptied %s of it", kit.Count(t.LeftOut, "commit"))
+		case rec.Edit != nil:
+			patch, why = "changed", "the edit of "+git.ShortID(rec.Edit.Commit, 7)+" changed it, or a stop after it was resolved"
 		case t.Mapped == wtsync.MappedEmptied:
 			patch, why = "changed", carrier+" already carries all of its commits"
 		case t.LeftOut > 0:
@@ -269,6 +292,10 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		}
 		mapped := map[string]string{wtsync.MappedTip: "", wtsync.MappedTipDropped: ", tip dropped: " + carrier + " carries it",
 			wtsync.MappedEmptied: ", emptied: " + carrier + " carries every commit of it"}[t.Mapped]
+		if rec.Edit != nil {
+			mapped = map[string]string{wtsync.MappedTip: "", wtsync.MappedTipDropped: ", tip dropped: the edit emptied it",
+				wtsync.MappedEmptied: ", emptied: the edit emptied every commit of it"}[t.Mapped]
+		}
 		switch m.Result {
 		case wtsync.MoveMoved:
 			how := "branch moved"

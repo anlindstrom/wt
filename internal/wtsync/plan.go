@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/anlindstrom/wt/internal/git"
 	"github.com/anlindstrom/wt/internal/repo"
 )
 
@@ -96,6 +97,11 @@ type State struct {
 	// Unchecked is the each_commit checks the run did not run before the
 	// handover, owed for the whole branch: resume carries them on.
 	Unchecked []Unchecked `json:"unchecked,omitempty"`
+	// Edit is the commit a --stack --edit run stops at, and once the run
+	// went on from it what it was amended to; AtEdit says this handover is
+	// that stop: HEAD the commit, for a person to amend.
+	Edit   *EditStop `json:"edit,omitempty"`
+	AtEdit bool      `json:"at_edit,omitempty"`
 }
 
 // CheckStop is a failed check as the handover records it.
@@ -250,6 +256,31 @@ func PlanHolders(worktrees []repo.Worktree) ([]repo.Worktree, error) {
 	return out, nil
 }
 
+// renderEditPlan is the brief left at the stop --edit asked for.
+func renderEditPlan(in PlanInput) string {
+	h := in.Handover
+	var b strings.Builder
+	fmt.Fprintf(&b, "# edit %s on the line of %s\n", git.ShortID(h.Commit, 7), in.Work)
+	fmt.Fprintf(&b, "stopped after %d/%d at %s %q, as --edit asked\n", h.Index, h.Total, git.ShortID(h.Commit, 7), oneLinePlan(h.Subject))
+	b.WriteString("\n## yours\n")
+	b.WriteString("HEAD is the commit, and nothing is unmerged. Change the tree as the commit should have it and\n")
+	b.WriteString("amend it (git commit --amend), or add commits of your own, so the worktree is clean again.\n")
+	b.WriteString("Every commit above it is then replayed onto what you made of it: a commit that already\n")
+	b.WriteString("carried the change shrinks to what is still its own, one that carried nothing else is\n")
+	b.WriteString("dropped, and a conflict with the change is a stop like any other.\n")
+	fmt.Fprintf(&b, "wt sync resume %s goes on; before any branch moves, the line's content must be what it\n", in.Work)
+	b.WriteString("was with your change merged in, or nothing moves and the rebase is put back.\n")
+	fmt.Fprintf(&b, "wt sync undo %s puts back the line and every layer, and keeps what you amended under a\n", in.Work)
+	b.WriteString("safety ref it names.\n")
+	return b.String()
+}
+
+// EditStopLine is what a person is told at the stop --edit asked for.
+func EditStopLine(work, commit, subject string) string {
+	return fmt.Sprintf("%s needs you. stopped at %s %q to edit · amend it (git commit --amend), then wt sync resume %s (or wt sync undo %s)",
+		work, git.ShortID(commit, 7), oneLinePlan(subject), work, work)
+}
+
 // NeedsYouLine is the after-the-fact line for a stop a person owns: what is
 // left, and what to do about it. Generated here and printed verbatim; never
 // composed by hand. It carries no wt: prefix: the run's closing line does,
@@ -328,6 +359,9 @@ type PlanInput struct {
 func RenderPlan(in PlanInput) (string, error) {
 	if in.Handover.Check != nil {
 		return renderCheckPlan(in), nil
+	}
+	if in.Handover.Edit {
+		return renderEditPlan(in), nil
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "# rebase %s onto %s\n", in.Work, in.TrunkRef)

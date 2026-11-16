@@ -2,10 +2,13 @@ package synccmd
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 
 	"github.com/anlindstrom/wt/internal/agents"
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
+	"github.com/anlindstrom/wt/internal/git"
 	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
@@ -38,4 +41,22 @@ func stackLookAt(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, lo
 		return nil, err
 	}
 	return syncrun.StackOf(line, false, holders), nil
+}
+
+// editOnLine resolves rev, what --edit names, to the one commit of line it
+// must be: a commit, and one of the line's own, not of its base.
+func editOnLine(main, rev string, line wtsync.Line, work string) (*wtsync.EditStop, error) {
+	sha, err := git.Run(main, "rev-parse", "--verify", "--quiet", "--end-of-options", rev+"^{commit}")
+	if err != nil || sha == "" {
+		return nil, fmt.Errorf("--edit %s is not a commit here, or names more than one; nothing is rebased", rev)
+	}
+	if !slices.Contains(line.Commits, sha) {
+		return nil, fmt.Errorf("--edit %s (%s) is not on the line of %s, from its base %s to its tip: name one of the line's own commits; nothing is rebased",
+			rev, git.ShortID(sha, 7), work, git.ShortID(line.Base, 7))
+	}
+	subject, err := git.Run(main, "log", "-1", "--format=%s", sha)
+	if err != nil {
+		return nil, err
+	}
+	return &wtsync.EditStop{Commit: sha, Subject: subject}, nil
 }

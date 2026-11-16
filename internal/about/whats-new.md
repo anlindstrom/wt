@@ -4,6 +4,15 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-16 19:24 — an edit stop moves a fix down a stack
+
+`wt sync rebase <top> --stack --edit <rev>` replays the line in place and
+stops at `<rev>` for you to amend: a fix a later commit already carries moves
+down to where it belongs, and every layer follows. The later commit shrinks
+to its own part or is dropped, and a conflict is a stop like any other.
+Before anything moves the line must equal the old one with your change merged
+in; the end names the commit and the paths you changed. Undo keeps the amend.
+
 ## 2026-11-16 17:55 — one run folds a stack's fixups and lands it on trunk
 
 `wt sync rebase <top> --stack --autosquash --onto <ref>` folds the line's

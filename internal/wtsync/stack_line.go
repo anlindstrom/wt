@@ -475,6 +475,78 @@ func SamePatch(dir, oldBase, old, newBase, tip string) (bool, error) {
 // they were, for CheckLayers to refuse. With nothing dropped they are
 // returned as they are.
 func ReconcileDropped(dir, onto string, plans []LayerPlan) ([]LayerPlan, error) {
+	return reconcileDropped(dir, onto, plans, nil)
+}
+
+// ReconcileEdit is ReconcileDropped for an in-place rebase with an edit:
+// the commits the amend emptied are the ones dropped. The edited commit is
+// known on the rebased line as what it was amended to, and a layer whose
+// marker follows it takes that commit's subject.
+func ReconcileEdit(dir, onto string, plans []LayerPlan, edit EditStop) ([]LayerPlan, error) {
+	if edit.Amended == "" {
+		return plans, nil
+	}
+	got, err := reconcileDropped(dir, onto, plans, &edit)
+	if err != nil {
+		return nil, err
+	}
+	subject, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%s", edit.Amended)
+	if err != nil {
+		return nil, err
+	}
+	for i := range got {
+		if got[i].After == edit.Commit {
+			got[i].Subject = subject
+		}
+	}
+	return got, nil
+}
+
+// Emptied is the commits of the old line above the edited commit, up to
+// oldTip, that the rebased line from base to newTip no longer has: the ones
+// the amend emptied, which the rebase dropped. A commit is known on the
+// rebased line by its author, author date and subject, as ReconcileDropped
+// knows it.
+func Emptied(dir, edited, oldTip, base, newTip string) ([]Commit, error) {
+	keys := func(rng string) ([]string, []Commit, error) {
+		out, err := gitEnv(dir, nil, nil, "log", "--reverse", "--format=%H %ae %at %s", rng, "--")
+		if err != nil {
+			return nil, nil, err
+		}
+		var ks []string
+		var cs []Commit
+		for _, l := range strings.Split(out, "\n") {
+			f := strings.SplitN(l, " ", 4)
+			if len(f) < 3 {
+				continue
+			}
+			subject := ""
+			if len(f) == 4 {
+				subject = f[3]
+			}
+			ks = append(ks, strings.Join(f[1:], " "))
+			cs = append(cs, Commit{SHA: f[0], Subject: subject})
+		}
+		return ks, cs, nil
+	}
+	oldKeys, old, err := keys(edited + ".." + oldTip)
+	if err != nil {
+		return nil, err
+	}
+	newKeys, _, err := keys(base + ".." + newTip)
+	if err != nil {
+		return nil, err
+	}
+	var out []Commit
+	for i, k := range oldKeys {
+		if !slices.Contains(newKeys, k) {
+			out = append(out, old[i])
+		}
+	}
+	return out, nil
+}
+
+func reconcileDropped(dir, onto string, plans []LayerPlan, edit *EditStop) ([]LayerPlan, error) {
 	var picks []string
 	for _, p := range plans {
 		picks = append(picks, p.Picks...)
@@ -496,13 +568,23 @@ func ReconcileDropped(dir, onto string, plans []LayerPlan) ([]LayerPlan, error) 
 			keyOf[sha] = key
 		}
 	}
+	if edit != nil {
+		// The edited pick is on the rebased line as what it was amended to.
+		key, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%ae %at %s", edit.Amended)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := keyOf[edit.Commit]; ok {
+			keyOf[edit.Commit] = key
+		}
+	}
 	for i, p := range plans {
 		for _, c := range p.Picks {
 			owner[keyOf[c]] = i + 1
 		}
 	}
 	got := slices.Clone(plans)
-	from, droppedBelow := onto, 0
+	from, droppedBelow, addedBelow := onto, 0, 0
 	for i, p := range plans {
 		tip, ok, err := refTip(dir, p.Ref)
 		if err != nil || !ok {
@@ -532,7 +614,12 @@ func ReconcileDropped(dir, onto string, plans []LayerPlan) ([]LayerPlan, error) 
 		}
 		dropped := len(p.Picks) - kept
 		droppedBelow += dropped
-		if droppedBelow > 0 {
+		if edit != nil {
+			// Commits added at the edit stop belong to the edited layer: it
+			// and every layer above count them.
+			addedBelow += added
+		}
+		if droppedBelow > 0 || addedBelow > 0 {
 			got[i].Expect = p.Expect - droppedBelow
 			if n, err := gitEnv(dir, nil, nil, "rev-list", "--count", onto+".."+tip); err == nil {
 				got[i].Expect, _ = strconv.Atoi(n)
