@@ -3,9 +3,11 @@ package synccmd_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
 	"github.com/anlindstrom/wt/internal/commands/synccmd/synccmdtest"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
@@ -118,5 +120,125 @@ func TestOntoAutosquashFoldsAndMovesTheLineInOneRun(t *testing.T) {
 	}
 	if refs := testkit.GitOut(t, main, "for-each-ref", wtsync.StackMapPrefix); refs != "" {
 		t.Errorf("markers left behind: %s", refs)
+	}
+}
+
+// scriptedLine is a stack on an old trunk commit whose trunk later adds
+// bin/check.sh and an each_commit step running it at every commit; the
+// script appends the subject it ran at to the returned log. Two fixups sit
+// at the tip.
+func scriptedLine(t *testing.T) (ctx *kit.Context, s *gittest.StackLine, logPath string) {
+	t.Helper()
+	logPath = filepath.Join(t.TempDir(), "checked.log")
+	yaml := synccmdtest.StackYAML + "each_commit:\n  - run: bin/check.sh\n"
+	ctx, s = synccmdtest.StackLine(t, yaml)
+	main := ctx.Repo.MainRoot
+	script := "#!/bin/sh\ngit log -1 --format=%s >> '" + logPath + "'\n"
+	if err := os.MkdirAll(filepath.Join(main, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(main, "bin", "check.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testkit.GitIn(t, main, "add", "-A")
+	testkit.GitIn(t, main, "commit", "-q", "--no-verify", "-m", "chore: add the check script")
+	testkit.GitIn(t, main, "fetch", "-q", "origin")
+	tmp := s.Paths[gittest.StackTmp]
+	fixup(t, tmp, "b1.txt", "feat(s2): b1.txt")
+	fixup(t, tmp, "e1.txt", "feat(s5): e1.txt")
+	return ctx, s, logPath
+}
+
+// The case of the issue: a stack on an old trunk commit, trunk since added a
+// script and a step running it, fixups at the tip. One run folds and moves
+// it: trunk's script is in every replayed tree, so nothing exits 127, each
+// commit is checked once, and the layers come out right.
+func TestOntoAutosquashChecksEachCommitOnceWithTrunksScript(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx, s, logPath := scriptedLine(t)
+	main := ctx.Repo.MainRoot
+	res, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, foldOnto("main"))
+	if err == nil || !strings.Contains(err.Error(), "2 layers held") {
+		t.Fatalf("err %v, want only the two held layers\n%s", err, human)
+	}
+	if strings.Contains(human, "127") || strings.Contains(human, "owed") {
+		t.Errorf("the run stopped or owes a check:\n%s", human)
+	}
+	p := synccmdtest.Participant(t, res, gittest.StackTmp)
+	if p.Result != syncrun.ResultRebased || p.Checked == 0 {
+		t.Fatalf("line %+v\n%s", p, human)
+	}
+	final := testkit.GitOut(t, main, "rev-list", "--count", "main.."+gittest.StackTmp)
+	raw, rerr := os.ReadFile(logPath)
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	checked := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	seen := map[string]bool{}
+	for _, subject := range checked {
+		if seen[subject] {
+			t.Errorf("%q was checked twice", subject)
+		}
+		seen[subject] = true
+		if strings.HasPrefix(subject, "fixup!") {
+			t.Errorf("a fixup was checked: %q", subject)
+		}
+	}
+	if got := len(checked); strconv.Itoa(got) != final {
+		t.Errorf("checked %d commits, the folded line has %s", got, final)
+	}
+	layers := layersOf(p.Stack)
+	for b, file := range map[string]string{"s2": "b1.txt", "s5": "e1.txt"} {
+		if got := testkit.GitOut(t, main, "show", str(layers[b].NewTip)+":"+file); got != "fixed" {
+			t.Errorf("%s's new tip has %s %q", b, file, got)
+		}
+	}
+	for _, b := range []string{"s1", "s2", "s4"} {
+		if got := testkit.GitOut(t, main, "rev-parse", b); got != str(layers[b].NewTip) {
+			t.Errorf("%s at %s, want %s", b, got, str(layers[b].NewTip))
+		}
+	}
+	_ = s
+}
+
+// The same stack folded in place, onto its own base, replays trees that
+// predate the script: the step is not run and not failed, it is reported as
+// not checked and owed, and the fold finishes with every layer re-pointed.
+func TestAutosquashInPlaceOwesAStepWhoseScriptTheTreePredates(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx, s, logPath := scriptedLine(t)
+	main := ctx.Repo.MainRoot
+	opts := synccmdtest.NoAgents()
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	res, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, opts)
+	if err == nil || !strings.Contains(err.Error(), "bin/check.sh") {
+		t.Fatalf("err %v, want the owed step named\n%s", err, human)
+	}
+	if strings.Contains(human, "exit 127") || strings.Contains(human, "needs you") {
+		t.Errorf("the run stopped:\n%s", human)
+	}
+	for _, want := range []string{"not checked", "bin/check.sh is not in the tree", "owed"} {
+		if !strings.Contains(human, want) {
+			t.Errorf("the output lacks %q:\n%s", want, human)
+		}
+	}
+	if _, serr := os.Stat(logPath); serr == nil {
+		t.Error("the script ran in a tree that predates it")
+	}
+	p := synccmdtest.Participant(t, res, gittest.StackTmp)
+	if p.Stack == nil || !p.Stack.Autosquash {
+		t.Fatalf("stack %+v\n%s", p.Stack, human)
+	}
+	if n := testkit.GitOut(t, main, "rev-list", "--count", s.Base+".."+gittest.StackTmp); n != "12" {
+		t.Errorf("the line has %s commits from its base, want 12", n)
+	}
+	layers := layersOf(p.Stack)
+	if got := testkit.GitOut(t, main, "show", str(layers["s2"].NewTip)+":b1.txt"); got != "fixed" {
+		t.Errorf("s2's new tip has b1.txt %q", got)
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", "s2"); got != str(layers["s2"].NewTip) {
+		t.Errorf("s2 not re-pointed: %s", got)
 	}
 }
