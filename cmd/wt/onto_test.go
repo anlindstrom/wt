@@ -26,8 +26,6 @@ func TestOntoUsageMistakes(t *testing.T) {
 		{[]string{"sync", "a", "--resume", "--onto", "integ"}, "--onto needs --rebase, or no verb"},
 		{[]string{"up", "--upstream", "x"}, "--upstream needs --onto"},
 		{[]string{"up", "--onto", "integ", "--expect", "1:00"}, "wt sync <work> --onto <ref> --json"},
-		{[]string{"sync", "rebase", "a", "--stack", "--autosquash", "--onto", "integ"}, "--autosquash folds in place"},
-		{[]string{"sync", "a", "--rebase", "--stack", "--autosquash", "--onto", "integ"}, "--autosquash folds in place"},
 		{[]string{"sync", "keep", "once", "--onto", "integ"}, "unknown flag: --onto"},
 		{[]string{"sync", "steps", "a", "--onto", "integ"}, "unknown flag: --onto"},
 	} {

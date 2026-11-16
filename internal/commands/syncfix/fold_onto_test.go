@@ -3,6 +3,7 @@ package syncfix
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -190,4 +191,66 @@ func TestFoldOntoTrunkHandsOverAtAConflictAndUndoOrResumeFinishesIt(t *testing.T
 		}
 		sameState(t, "after the undo from the end", was, snapshotOf(t, ctx, s))
 	})
+}
+
+// With per-layer steps that fold into an owner, one run folding and moving
+// the line leaves what the two runs did (fold in place, then rebase onto
+// trunk): every layer tip, and the line, has the same tree and subjects.
+func TestFoldOntoTrunkInOneRunEqualsTheTwoRunWay(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	synccmdtest.FakeDocker(t)
+	tips := func(t *testing.T, twoRuns bool) map[string]string {
+		ctx, _ := synccmdtest.FoldLine(t, gittest.FoldYAML("max-plus-patch"))
+		main := ctx.Repo.MainRoot
+		var res syncrun.RunResult
+		var human string
+		var err error
+		if twoRuns {
+			var first syncrun.RunResult
+			first, human, err = synccmdtest.StackRun(t, ctx, gittest.FoldTmp, runAt(200, &synccmd.StackOptions{Autosquash: true}))
+			if err == nil || !strings.Contains(err.Error(), "1 layer held") {
+				t.Fatalf("fold: %v\n%s", err, human)
+			}
+			f3 := stackLayers(synccmdtest.Participant(t, first, gittest.FoldTmp).Stack)["f3"]
+			if f3.MoveCommand == nil {
+				t.Fatalf("f3 %+v", f3)
+			}
+			if out, err := exec.Command("sh", "-c", *f3.MoveCommand).CombinedOutput(); err != nil {
+				t.Fatalf("%s: %v\n%s", *f3.MoveCommand, err, out)
+			}
+			res, human, err = synccmdtest.StackRun(t, ctx, gittest.FoldTmp, runAt(300, &synccmd.StackOptions{}))
+		} else {
+			opts := runAt(300, &synccmd.StackOptions{Autosquash: true})
+			opts.Onto = "main"
+			res, human, err = synccmdtest.StackRun(t, ctx, gittest.FoldTmp, opts)
+		}
+		if err == nil || !strings.Contains(err.Error(), "1 layer held") {
+			t.Fatalf("two runs %v: err %v, want f3 held\n%s", twoRuns, err, human)
+		}
+		p := synccmdtest.Participant(t, res, gittest.FoldTmp)
+		if p.Stack == nil || p.Stack.Refusal != nil {
+			t.Fatalf("two runs %v: stack %+v\n%s", twoRuns, p.Stack, human)
+		}
+		out := map[string]string{}
+		for b, l := range stackLayers(p.Stack) {
+			tip := deref(l.NewTip)
+			out[b] = testkit.GitOut(t, main, "rev-parse", tip+"^{tree}") + " " +
+				strings.Join(subjectsOf(t, main, "origin/main.."+tip), "|")
+		}
+		line := testkit.GitOut(t, main, "rev-parse", gittest.FoldTmp)
+		out[gittest.FoldTmp] = testkit.GitOut(t, main, "rev-parse", line+"^{tree}") + " " +
+			strings.Join(subjectsOf(t, main, "origin/main.."+line), "|")
+		return out
+	}
+	two, one := tips(t, true), tips(t, false)
+	if len(one) != 6 {
+		t.Fatalf("one run reported %d tips: %v", len(one), one)
+	}
+	for b, want := range two {
+		if one[b] != want {
+			t.Errorf("%s differs\n one run:  %s\n two runs: %s", b, one[b], want)
+		}
+	}
 }

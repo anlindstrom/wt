@@ -327,7 +327,6 @@ func TestOntoUsageMistakes(t *testing.T) {
 	}{
 		{nil, synccmdtest.Onto("integ", ""), "--onto rebases the worktrees you name onto it; name them"},
 		{[]string{"bump"}, synccmdtest.Onto("", "integ"), "--upstream needs --onto"},
-		{[]string{"bump"}, autosquashOnto("integ"), "--autosquash folds in place"},
 		{[]string{"bump", "child"}, synccmdtest.Onto("integ", ""), "child is stacked on bump"},
 	} {
 		var out bytes.Buffer
@@ -373,13 +372,6 @@ func TestUpOntoWorksWithoutADeclaration(t *testing.T) {
 	if got := testkit.GitOut(t, bump, "rev-parse", "HEAD~1"); got != integ {
 		t.Fatalf("bump sits on %s, want integ\n%s", got, out.String())
 	}
-}
-
-// autosquashOnto is a --stack --autosquash run onto ref.
-func autosquashOnto(ref string) synccmd.RunOptions {
-	opts := synccmdtest.Onto(ref, "")
-	opts.Stack = &synccmd.StackOptions{Autosquash: true}
-	return opts
 }
 
 // A remote-tracking target is fetched from the branch the remote's own
