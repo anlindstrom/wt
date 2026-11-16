@@ -515,3 +515,39 @@ func TestSyncResumeOfAnEditFinishedByHandHoldsItsContentBeforeTheLayersMove(t *t
 		t.Errorf("stack %+v, want a refusal", s)
 	}
 }
+
+// A resume interrupted just after it went on from the edit stop, before the
+// next handover recorded the amend, left its note in the sequencer: the next
+// resume still knows what the commit was amended to and finishes.
+func TestSyncResumeInterruptedPastTheEditStillKnowsTheAmend(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCase(t, false)
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	amended := c.amendA(t, nil)
+	// What the interrupted resume did: the note, then the continue, which
+	// stops at B's conflict with the handover still the edit stop's.
+	dir := filepath.Join(c.gitDir, "rebase-merge")
+	if err := os.WriteFile(filepath.Join(dir, "wt-sync-amended"), []byte(amended+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gittest.Try(t, c.tmp, "-c", "core.editor=true", "rebase", "--continue"); err == nil {
+		t.Fatal("the continue did not stop at B")
+	}
+	testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\nname = new\n")
+	testkit.GitIn(t, c.tmp, "add", "lib.txt")
+	done, human, err := c.resume(t)
+	if err != nil {
+		t.Fatalf("resume: %v\n%s", err, human)
+	}
+	if e := synccmdtest.Participant(t, done, gittest.EditTmp).Stack.Edit; e == nil || e.Amended != amended {
+		t.Errorf("edit %+v, want amended %s", e, amended)
+	}
+	if got := testkit.GitOut(t, c.main, "rev-parse", "e4"); got == c.tips["e4"] {
+		t.Error("e4 did not move")
+	}
+}
