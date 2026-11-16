@@ -242,3 +242,43 @@ func TestAutosquashInPlaceOwesAStepWhoseScriptTheTreePredates(t *testing.T) {
 		t.Errorf("s2 not re-pointed: %s", got)
 	}
 }
+
+// A fixup whose target the destination already carries has nowhere to fold:
+// git drops the target, and the fixup would be left alone or amend the
+// commit before it, in another layer. The run is refused before anything
+// moves, naming the fixup and its target.
+func TestOntoAutosquashRefusesAFixupWhoseTargetTheTargetCarries(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	for _, c := range []struct{ name, file, target string }{
+		{"the tip of a layer", "b3.txt", "feat(s2): b3.txt"},
+		{"the first commit of a later layer", "d1.txt", "feat(s4): d1.txt"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, s := synccmdtest.StackLine(t, "")
+			tmp := s.Paths[gittest.StackTmp]
+			fixup(t, tmp, c.file, c.target)
+			head := testkit.GitOut(t, tmp, "rev-parse", "HEAD")
+			main := ctx.Repo.MainRoot
+			_, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, foldOnto("main"))
+			if err == nil || !strings.Contains(human+err.Error(), "already carries") || !strings.Contains(human+err.Error(), c.target) {
+				t.Fatalf("err %v, want a refusal naming %q\n%s", err, c.target, human)
+			}
+			if got := testkit.GitOut(t, tmp, "rev-parse", "HEAD"); got != head {
+				t.Errorf("the line moved to %s", got)
+			}
+			for _, b := range s.Layers {
+				if got := testkit.GitOut(t, main, "rev-parse", b); got != s.Tips[b] {
+					t.Errorf("%s moved to %s", b, got)
+				}
+			}
+			if refs := testkit.GitOut(t, main, "for-each-ref", "refs/wt-sync/", wtsync.StackMapPrefix); refs != "" {
+				t.Errorf("refs left behind: %s", refs)
+			}
+			if busy, _ := wtsync.RebaseInProgress(tmp); busy {
+				t.Error("a rebase is in progress")
+			}
+		})
+	}
+}
