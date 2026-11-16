@@ -151,9 +151,9 @@ func (d *driver) atFinal() (refused bool, res Result, err error) {
 // line's branch back where it never moved from, and removes the handover
 // and the stack's record: nothing of the run is left but its safety refs.
 func (d *driver) refuseEdit(head, why string) (Result, error) {
-	ref := EditKeptRef(d.req.Branch, d.req.Epoch)
-	if _, err := gitEnv(d.mainRoot, nil, nil, "update-ref", "-m", "wt sync: the refused edit", ref, head); err != nil {
-		return d.fail(fmt.Errorf("%s; and what it came to could not be kept under %s (%w), so the rebase is left as it is", why, ref, err))
+	ref, err := KeepEditSnapshot(d.mainRoot, d.req.Branch, d.req.Epoch, head)
+	if err != nil {
+		return d.fail(fmt.Errorf("%s; and what it came to could not be kept (%w), so the rebase is left as it is", why, err))
 	}
 	kept := fmt.Sprintf("the line as rebased, %s kept under %s, holds the amend and every resolution", git.ShortID(head, 7), ref)
 	if _, err := d.git("rebase", "--abort"); err != nil {
@@ -276,9 +276,32 @@ func (d *driver) refreshAmend() error {
 	return nil
 }
 
-// KeepEditSnapshot keeps sha under the edit run's kept ref and returns it.
+// KeepEditSnapshot keeps sha under a kept ref of the edit run and returns
+// it: EditKeptRef, or the first of its -2, -3, ... that is free. A ref is
+// only ever created, never moved: one that already pins sha is reused, and
+// one that pins anything else is left alone, so no snapshot a refusal
+// promised is ever overwritten.
 func KeepEditSnapshot(mainRoot, branch string, epoch int64, sha string) (string, error) {
-	ref := EditKeptRef(branch, epoch)
-	_, err := gitEnv(mainRoot, nil, nil, "update-ref", ref, sha)
-	return ref, err
+	base := EditKeptRef(branch, epoch)
+	for n := 1; n <= 100; n++ {
+		ref := base
+		if n > 1 {
+			ref = fmt.Sprintf("%s-%d", base, n)
+		}
+		tip, ok, err := refTip(mainRoot, ref)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			if tip == sha {
+				return ref, nil
+			}
+			continue
+		}
+		if _, err := gitEnv(mainRoot, nil, nil, "update-ref", "-m", "wt sync: the refused edit", ref, sha, ""); err != nil {
+			return "", fmt.Errorf("keeping %s under %s: %w", git.ShortID(sha, 7), ref, err)
+		}
+		return ref, nil
+	}
+	return "", fmt.Errorf("every kept ref of %s up to %s-100 pins another commit", base, base)
 }

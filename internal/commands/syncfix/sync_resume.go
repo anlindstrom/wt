@@ -470,6 +470,11 @@ func (r *resume) complete(res wtsync.Result) error {
 		case len(owed) > 0:
 			p.Result, p.FailedSteps = syncrun.ResultRebasedStepFailed, append(p.FailedSteps, owed...)
 		}
+		if p.Stack != nil && p.Stack.Restored {
+			// An edit run whose layers were refused: the line is back at
+			// the tip the run found.
+			p.Result, p.After, p.Reason = syncrun.ResultRestored, jsonout.Strp(p.Stack.Head), p.Stack.Refusal
+		}
 	})
 	if cerr != nil {
 		return cerr

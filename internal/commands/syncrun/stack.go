@@ -73,6 +73,9 @@ type Stack struct {
 	// Edit is what a run with --edit did to the commit it stopped at; null
 	// in the look and for any other run.
 	Edit *StackEdit `json:"edit"`
+	// Restored says an edit run's line was put back at the tip the run
+	// found, its layers refused: the participant is restored, not rebased.
+	Restored bool `json:"-"`
 }
 
 // StackEdit is the commit a --edit run stopped at, what it was amended to,
@@ -205,7 +208,7 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		if rec.Edit != nil {
 			// An edit run is never left rebased under layers that did not
 			// follow: the line goes back where the run found it.
-			why = putBackLine(main, rec, why)
+			why, s.Restored = putBackLine(main, rec, why)
 		}
 		fmt.Fprintf(w, "  ✗ no layer moved: %s\n", why)
 		s.Refusal = jsonout.Strp(why)
