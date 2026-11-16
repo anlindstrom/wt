@@ -19,6 +19,12 @@ type todoPlan struct {
 	// the end of the list for the commits above the top layer (or, for a
 	// rebase of one branch, the whole of it).
 	stops, tail bool
+	// open says the list starts inside a group whose pick was already run,
+	// as a resume's does: the stopped command is the pick or a fixup or
+	// squash folded into it, and any fixup or squash the list goes on with
+	// belongs to it. due says the group is to be checked, so the break that
+	// ends it is written even where no line of the list asks for one.
+	open, due bool
 }
 
 // stackMarks is where a run rebasing a stack held on one line puts each
@@ -79,7 +85,7 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "copy=%s\n", shellQuote(p.stack.copy))
 	fmt.Fprintf(w, "stops=%s\n", map[bool]string{true: "1"}[p.stops])
 	fmt.Fprintf(w, "tail=%s\n", map[bool]string{true: "1"}[p.stops && p.tail])
-	fmt.Fprintln(w, `pend=; open=; marked=0; brk=`)
+	fmt.Fprintf(w, "pend=%s; open=%s; marked=0; brk=\n", map[bool]string{true: "1"}[p.open && p.due], map[bool]string{true: "1"}[p.open])
 	fmt.Fprintf(w, "%s\n", `close_group() { if [ -n "$pend" ]; then printf 'break\n'; pend=; brk=1; fi; }`)
 	fmt.Fprintf(w, "%s\n", `stop() { [ -z "$stops" ] || [ -n "$brk" ] || printf 'break\n'; brk=; }`)
 	fmt.Fprintf(w, "%s\n", `flush() { while [ "$marked" -lt "$1" ]; do marked=$((marked+1)); stop; printf 'update-ref %s%s\n' "$mapref" "$marked"; done; }`)

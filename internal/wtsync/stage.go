@@ -40,7 +40,9 @@ type Progress struct {
 	// unmoved), and there is nothing unmerged. git marks the first with
 	// amend; from 2.56 it does not mark the second, so an edit stop without
 	// MERGE_MSG, which git writes at a conflict and keeps until the commit,
-	// is applied too.
+	// is applied too. A fixup or squash that conflicts leaves amend as well,
+	// since its result is to be folded into HEAD, but it also leaves
+	// MERGE_MSG: that is a conflict, not an applied pick.
 	Applied bool
 }
 
@@ -134,12 +136,37 @@ func RebaseProgress(wtPath string) (Progress, error) {
 	if b, err := os.ReadFile(filepath.Join(dir, "message")); err == nil {
 		p.Subject, _, _ = strings.Cut(strings.TrimSpace(string(b)), "\n")
 	}
+	// A fixup or squash's message is the combined one, headed by a comment
+	// line; the commit it is applying is the last line of done.
+	if strings.HasPrefix(p.Subject, "#") {
+		p.Subject = lastDoneSubject(string(done))
+	}
+	_, mergeErr := os.Stat(mergeMsg)
+	conflicted := mergeErr == nil
 	if _, err := os.Stat(filepath.Join(dir, "amend")); err == nil {
-		p.Applied = true
-	} else if _, err := os.Stat(mergeMsg); p.Command == "edit" && os.IsNotExist(err) {
+		p.Applied = !conflicted
+	} else if p.Command == "edit" && os.IsNotExist(mergeErr) {
 		p.Applied = true
 	}
 	return p, nil
+}
+
+// lastDoneSubject is the subject git's list gives the last command run. A
+// line is "command id # subject" or, in newer git, "command id subject",
+// with a "-C id" or "-c id" for a fixup that takes the message.
+func lastDoneSubject(done string) string {
+	lines := strings.Split(strings.TrimSpace(done), "\n")
+	rest := strings.TrimSpace(lines[len(lines)-1])
+	// The command, its -C or -c option if any, and the id, one word each.
+	words := 2
+	if f := strings.Fields(rest); len(f) > 2 && strings.HasPrefix(f[1], "-") {
+		words = 3
+	}
+	for i := 0; i < words; i++ {
+		_, rest, _ = strings.Cut(rest, " ")
+		rest = strings.TrimLeft(rest, " ")
+	}
+	return strings.TrimSpace(strings.TrimPrefix(rest, "# "))
 }
 
 // countPicks counts the commands in a sequencer list that apply a commit,
