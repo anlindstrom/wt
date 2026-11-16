@@ -142,3 +142,24 @@ func TestEachCommitRunsAnUntrackedExecutableTheWorktreeHas(t *testing.T) {
 		t.Errorf("the tool ran at %v", got)
 	}
 }
+
+// A step is judged when its turn comes: an earlier step that generates an
+// executable (untracked, as checks may) makes a later step that runs it
+// runnable, not skipped.
+func TestEachCommitJudgesAScriptWhenItsStepRuns(t *testing.T) {
+	t.Parallel()
+	dir, wt, cfg, logPath := retryRepo(t, "each_commit:\n"+
+		"  - run: mkdir -p out && echo '#!/bin/sh' > out/check && echo 'echo ran >> LOG' >> out/check && chmod +x out/check\n"+
+		"  - run: out/check\n")
+	var log bytes.Buffer
+	res, err := Rebase(dir, cfg, trunkReq(wt, 65), &log)
+	if err != nil || res.Left != nil || res.Restored {
+		t.Fatalf("err %v res %+v\n%s", err, res, log.String())
+	}
+	if len(res.Unchecked) != 0 {
+		t.Errorf("unchecked %+v\n%s", res.Unchecked, log.String())
+	}
+	if got := logLines(t, logPath); len(got) != 3 {
+		t.Errorf("the generated tool ran %d times, want 3\n%s", len(got), log.String())
+	}
+}
