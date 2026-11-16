@@ -871,9 +871,10 @@ func newSyncRebaseCmd() *cobra.Command {
 			"folds and rebases onto <ref> (trunk: main) in one run, so the checks run with\n" +
 			"its scripts at each commit once; the content check then holds every file that\n" +
 			"merges cleanly to what merging the old line onto <ref> gives; a file a stop\n" +
-			"resolved is held to the rest of that merge. A fixup that does not name\n" +
-			"exactly one commit to be replayed (<ref> carries it, it is ambiguous or\n" +
-			"missing) is refused before anything moves.\n\n" +
+			"resolved is held to the rest of that merge. In place or onto <ref>, a\n" +
+			"fixup that does not name exactly one commit to be replayed (the target\n" +
+			"carries it, it is ambiguous or names nothing) is refused before anything\n" +
+			"moves.\n\n" +
 			"--stack --edit <rev> moves a change down the line to an earlier commit:\n" +
 			"the fix a review asks of a low commit that a later one already carries.\n" +
 			"The line is replayed in place, onto its own base, and stops at <rev>,\n" +

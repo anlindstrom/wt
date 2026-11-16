@@ -207,12 +207,14 @@ commit with trunk's scripts, fold and move in one run:
 content must then come out as git merges the old line onto trunk in every
 file that merges cleanly, outside the paths the per-layer steps own; a file a
 stop resolved, by a strategy or a person, is theirs in its conflicting region,
-and the rest of the merge must still be in it. A fixup is refused before
-anything moves unless it names exactly one commit that will be replayed, found
-as git finds it (a commit id, tag or revision on the line, else the subject,
-whitespace after `fixup!` ignored); one whose target trunk already carries or
-reaches, or that is ambiguous or names nothing, is refused with both commits
-named. Every new layer tip must descend from the destination.
+and the rest of the merge must still be in it. In place or onto a target, a
+fixup is refused before anything moves unless it names exactly one commit that
+will be replayed, found as git finds it (a commit id, tag or revision on the
+line, else the subject, whitespace after `fixup!` ignored). One whose target
+the base it is replayed onto already carries or reaches (trunk with `--onto
+<trunk>`, the line's own base in place) is refused with both commits named;
+one that is ambiguous or names nothing is refused with the fixup and the name
+it gave. Every new layer tip must descend from the destination.
 
 `wt sync` says how many commits a run would check, and `wt sync <work>` which,
 without running anything. After the last commit, `defer` is still the place

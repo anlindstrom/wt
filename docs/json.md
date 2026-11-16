@@ -1454,7 +1454,10 @@ anything moves: `refused`, with the step, the need and the probe's answer in
 `reason`; the members above it are `notRun`. With `--allow-owed` the run goes on:
 a deferred step that needs it is `owed` in `deferred`, an `each_commit` step is
 not run at any commit, and either is named in `failedSteps`, so the worktree is
-`rebasedStepFailed` and not pushed.
+`rebasedStepFailed` and not pushed. An `each_commit` step whose script the
+replayed commit's tree predates (an in-place `--autosquash`, where the line
+sits on an older trunk) is owed the same way at those commits, without
+`--allow-owed`: named in `failedSteps`, `rebasedStepFailed`, not pushed.
 
 `wt sync --json` reports the same probe, in its top-level `needs`, before
 anyone starts.

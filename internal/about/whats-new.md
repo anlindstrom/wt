@@ -21,8 +21,10 @@ replayed tree and each `each_commit` check runs once. `--autosquash` alone
 still folds in place. There, a check whose script the replayed tree predates
 (`bin/check.sh`) is no longer run to exit 127: it is reported as not checked
 and owed, like an unmet `needs:`; the debt survives a conflict handover and
-resume. The fold onto a target refuses a fixup of a commit the target already
-carries, and a feature hunk lost in a file the target also changed.
+resume. A fold, in place or onto a target, refuses a fixup that names no
+commit to replay, or more than one, or one the target already carries; the
+fold onto a target also refuses a feature hunk lost in a file the target
+changed.
 
 ## 2026-11-16 17:24 — a resume that meets a new conflict stops like any stop
 
