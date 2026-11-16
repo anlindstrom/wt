@@ -710,9 +710,12 @@ func TestSyncResumeOfAnEditPutsTheLineBackWhenItsLayersAreRefused(t *testing.T) 
 	// A marker that is not what the plan expects: the layer check refuses.
 	testkit.GitIn(t, c.main, "update-ref", wtsync.StackMapRef(epoch, 2), c.tips["e1"])
 	rebased := testkit.GitOut(t, c.tmp, "rev-parse", "HEAD")
-	_, human, err := c.resume(t)
+	res, human, err := c.resume(t)
 	if err == nil || !strings.Contains(err.Error(), "no layer moved") {
 		t.Fatalf("resume: %v, want no layer moved\n%s", err, human)
+	}
+	if p := synccmdtest.Participant(t, res, gittest.EditTmp); p.Result != syncrun.ResultRestored || deref(p.After) != c.tips[gittest.EditTmp] {
+		t.Errorf("result %s after %s, want restored at the old tip", p.Result, deref(p.After))
 	}
 	for _, b := range c.branches {
 		if got := testkit.GitOut(t, c.main, "rev-parse", b); got != c.tips[b] {
@@ -732,4 +735,174 @@ func (c *editCase) handedOverAtCheck(t *testing.T) bool {
 	t.Helper()
 	st, ok, err := wtsync.ReadState(c.gitDir)
 	return err == nil && ok && st.Check != nil
+}
+
+// editStopAtB runs the case to B's conflict and resolves it, so the next
+// step is a person's own continue.
+func (c *editCase) toResolvedB(t *testing.T) {
+	t.Helper()
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	c.amendA(t, nil)
+	if _, human, err := c.resume(t); err == nil {
+		t.Fatalf("resume did not stop at B:\n%s", human)
+	}
+	testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\nname = new\n")
+	testkit.GitIn(t, c.tmp, "add", "lib.txt")
+}
+
+// The line is not put back over tracked changes: a staged version and a
+// different working one, left by a deferred step that failed, stay exactly
+// as they are, the line stays rebased with what it came to pinned, and undo
+// is named.
+func TestSyncResumeOfAnEditDoesNotPutTheLineBackOverTrackedChanges(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCaseWith(t, false, "defer:\n  - run: printf staged > readme.txt && git add readme.txt && printf work > readme.txt && exit 1\n")
+	c.toResolvedB(t)
+	epoch := c.state(t).Epoch
+	testkit.GitIn(t, c.tmp, "-c", "core.editor=true", "rebase", "--continue")
+	testkit.GitIn(t, c.main, "update-ref", wtsync.StackMapRef(epoch, 2), c.tips["e1"])
+	rebased := testkit.GitOut(t, c.tmp, "rev-parse", "HEAD")
+	_, human, err := c.resume(t)
+	if err == nil || !strings.Contains(err.Error(), "no layer moved") {
+		t.Fatalf("resume: %v, want no layer moved\n%s", err, human)
+	}
+	if got := testkit.GitOut(t, c.tmp, "rev-parse", "HEAD"); got != rebased {
+		t.Errorf("the line is at %s, want it left rebased at %s", got, rebased)
+	}
+	if got := testkit.GitOut(t, c.tmp, "show", ":readme.txt"); got != "staged" {
+		t.Errorf("the staged readme.txt is %q, want staged", got)
+	}
+	if b, _ := os.ReadFile(filepath.Join(c.tmp, "readme.txt")); string(b) != "work" {
+		t.Errorf("the working readme.txt is %q, want work", b)
+	}
+	ref, _ := keptRef(t, human)
+	if got := testkit.GitOut(t, c.main, "rev-parse", ref); got != rebased {
+		t.Errorf("%s holds %s, want %s", ref, got, rebased)
+	}
+	if !strings.Contains(human, "wt sync undo "+gittest.EditTmp) {
+		t.Errorf("undo is not named:\n%s", human)
+	}
+}
+
+// Codex's case through a stop no handover recorded: the person goes on by
+// hand from the handover at two.txt to four.txt, resolves it and also
+// truncates lib.txt. Only the files that pick really conflicted on are the
+// person's; lib.txt is held to the replay and refused.
+func TestSyncRebaseStackEditHoldsFilesStagedAtAStopReachedByHand(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCase(t, true)
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	c.amendA(t, map[string]string{"two.txt": "mine\n", "four.txt": "mine\n"})
+	if _, human, err := c.resume(t); err == nil || !slices.Contains(c.state(t).Left, "two.txt") {
+		t.Fatalf("resume did not stop at two.txt: %v\n%s", err, human)
+	}
+	testkit.WriteFile(t, c.tmp, "two.txt", "two\n")
+	testkit.GitIn(t, c.tmp, "add", "two.txt")
+	if _, err := gittest.Try(t, c.tmp, "-c", "core.editor=true", "rebase", "--continue"); err == nil {
+		t.Fatal("the continue did not stop at four.txt")
+	}
+	testkit.WriteFile(t, c.tmp, "four.txt", "four\n")
+	testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\n")
+	testkit.GitIn(t, c.tmp, "add", "four.txt", "lib.txt")
+	_, human, err := c.resume(t)
+	if err == nil || !strings.Contains(human, "lib.txt") {
+		t.Fatalf("resume: %v, want a refusal naming lib.txt\n%s", err, human)
+	}
+	c.back(t)
+}
+
+// A resume cut short after it took the amend that fixed the edited
+// commit's check, before any handover recorded it: the next resume reads
+// that amend from the sequencer, not the first one the handover names.
+func TestSyncResumeCutShortAfterTheCheckFixStillKnowsTheLatestAmend(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newEditCaseWith(t, false, "each_commit:\n  - run: test ! -f lib.txt || test -f lib.ok\n")
+	if _, human, err := c.run(t, c.s.A); err == nil {
+		t.Fatalf("the run did not stop:\n%s", human)
+	}
+	c.amendA(t, nil)
+	if _, human, err := c.resume(t); err == nil || !c.handedOverAtCheck(t) {
+		t.Fatalf("resume did not stop at A's check: %v\n%s", err, human)
+	}
+	testkit.WriteFile(t, c.tmp, "lib.ok", "ok\n")
+	testkit.GitIn(t, c.tmp, "add", "lib.ok")
+	testkit.GitIn(t, c.tmp, "commit", "-q", "--amend", "--no-edit", "--no-verify")
+	again := testkit.GitOut(t, c.tmp, "rev-parse", "HEAD")
+	// What the cut-short resume did: the note, then on past the check to B.
+	if err := os.WriteFile(filepath.Join(c.gitDir, "rebase-merge", "wt-sync-amended"), []byte(again+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gittest.Try(t, c.tmp, "-c", "core.editor=true", "rebase", "--continue"); err == nil {
+		t.Fatal("the continue did not stop at B")
+	}
+	testkit.WriteFile(t, c.tmp, "lib.txt", "value = 2\nname = new\n")
+	testkit.GitIn(t, c.tmp, "add", "lib.txt")
+	done, human, err := c.resume(t)
+	if err != nil {
+		t.Fatalf("resume: %v\n%s", err, human)
+	}
+	if e := synccmdtest.Participant(t, done, gittest.EditTmp).Stack.Edit; e == nil || e.Amended != again {
+		t.Errorf("edit %+v, want amended %s", e, again)
+	}
+}
+
+// A file the one reference merge cannot merge is held to the replay entry
+// for entry: an executable bit, or a symlink with the same bytes, is not
+// the file the replay gives.
+func TestSyncRebaseStackEditHoldsTheModeAndTypeOfAReplayedFile(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	for name, change := range map[string]func(t *testing.T, dir string){
+		"executable": func(t *testing.T, dir string) {
+			testkit.GitIn(t, dir, "update-index", "--chmod=+x", "lib.txt")
+			if err := os.Chmod(filepath.Join(dir, "lib.txt"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"symlink": func(t *testing.T, dir string) {
+			path := filepath.Join(dir, "lib.txt")
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("value = 2\nname = new\n", path); err != nil {
+				t.Fatal(err)
+			}
+			testkit.GitIn(t, dir, "add", "lib.txt")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := newEditCase(t, true)
+			if _, human, err := c.run(t, c.s.A); err == nil {
+				t.Fatalf("the run did not stop:\n%s", human)
+			}
+			c.amendA(t, map[string]string{"four.txt": "mine\n"})
+			if _, human, err := c.resume(t); err == nil || !slices.Contains(c.state(t).Left, "four.txt") {
+				t.Fatalf("resume did not stop at four.txt: %v\n%s", err, human)
+			}
+			testkit.WriteFile(t, c.tmp, "four.txt", "four\n")
+			testkit.GitIn(t, c.tmp, "add", "four.txt")
+			change(t, c.tmp)
+			_, human, err := c.resume(t)
+			if err == nil || !strings.Contains(human, "lib.txt") {
+				t.Fatalf("resume: %v, want a refusal naming lib.txt\n%s", err, human)
+			}
+			c.back(t)
+		})
+	}
 }

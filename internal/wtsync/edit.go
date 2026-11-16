@@ -275,3 +275,10 @@ func (d *driver) refreshAmend() error {
 	d.req.Edit, d.res.Edit = &again, &again
 	return nil
 }
+
+// KeepEditSnapshot keeps sha under the edit run's kept ref and returns it.
+func KeepEditSnapshot(mainRoot, branch string, epoch int64, sha string) (string, error) {
+	ref := EditKeptRef(branch, epoch)
+	_, err := gitEnv(mainRoot, nil, nil, "update-ref", ref, sha)
+	return ref, err
+}
