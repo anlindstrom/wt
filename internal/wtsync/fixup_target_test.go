@@ -99,3 +99,22 @@ func TestFixupOfCarriedSeesACommitTheTargetReaches(t *testing.T) {
 		t.Errorf("refusal %q", why)
 	}
 }
+
+// A layer's marker must sit on the destination: a rebase that ended below
+// it (a fixup amended the destination itself, say) moves no layer.
+func TestCheckLayersRequiresTheDestinationBelowEveryTip(t *testing.T) {
+	t.Parallel()
+	dir, _, commits := fixupRepo(t)
+	head := commits[len(commits)-1]
+	gitIn(t, dir, "update-ref", "refs/wt-stack-map/1/1", head)
+	n := gitIn(t, dir, "rev-list", "--count", "main.."+head)
+	count := 0
+	for _, c := range n {
+		count = count*10 + int(c-'0')
+	}
+	// main carries feat: one by cherry-pick, so main is not an ancestor of head.
+	_, err := CheckLayers(dir, head, "main", []LayerPlan{{Branch: "s1", Ref: "refs/wt-stack-map/1/1", Expect: count}})
+	if err == nil || !strings.Contains(err.Error(), "descend") {
+		t.Fatalf("err %v, want a refusal: the destination is not below the tip", err)
+	}
+}
