@@ -1271,7 +1271,7 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) {
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: res.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: r.own, Listed: listed, ListErr: lerr, Force: rec.Force, Now: r.opts.Clock(), AfterMove: st.AfterMove, Between: st.Between,
-		Folds: syncrun.FoldPaths(r.cfg)})
+		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops)})
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s })
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, p.work)

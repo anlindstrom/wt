@@ -51,11 +51,11 @@ func TestFoldChangedRefusesAFeatureHunkLostInAFileTheTargetChanged(t *testing.T)
 	dir, base, onto, oldTip := foldRepo(t)
 	lines := func(first, last string) string { return first + "\n" + strings.Repeat("mid\n", 10) + last + "\n" }
 	good := newLine(t, dir, onto, lines("trunk", "feature"))
-	if why := foldChanged(dir, base, onto, oldTip, good, nil); why != "" {
+	if why := foldChanged(dir, base, onto, oldTip, good, nil, nil, nil); why != "" {
 		t.Fatalf("a correct fold is refused: %s", why)
 	}
 	lost := newLine(t, dir, onto, lines("trunk", "last"))
-	if why := foldChanged(dir, base, onto, oldTip, lost, nil); !strings.Contains(why, "t.txt") {
+	if why := foldChanged(dir, base, onto, oldTip, lost, nil, nil, nil); !strings.Contains(why, "t.txt") {
 		t.Fatalf("a lost feature hunk passed: %q", why)
 	}
 }

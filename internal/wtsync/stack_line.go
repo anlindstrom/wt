@@ -703,3 +703,18 @@ func cutFoldPrefix(s string) (string, bool) {
 	}
 	return s, false
 }
+
+// MergedTree is the tree git merges the old line onto onto with, from
+// their common base: what a fold that moves the line onto onto must keep, in
+// every file that merges cleanly. conflicted is the files that do not, whose
+// tree entries carry conflict markers.
+func MergedTree(mainRoot, base, onto, oldTip string) (tree string, conflicted []string, err error) {
+	tree, clean, conflicts, _, err := mergeTree(mainRoot, base, onto, oldTip)
+	if err != nil || clean {
+		return tree, nil, err
+	}
+	for _, c := range conflicts {
+		conflicted = append(conflicted, c.Path)
+	}
+	return tree, conflicted, nil
+}

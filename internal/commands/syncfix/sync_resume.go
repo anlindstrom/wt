@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -507,7 +508,7 @@ func (r *resume) finishStack(res wtsync.Result) string {
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: r.st.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch), Listed: listed, ListErr: lerr,
-		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg)})
+		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg), Stopped: append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...)})
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s })
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, r.name)
