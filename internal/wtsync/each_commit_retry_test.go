@@ -243,7 +243,9 @@ func TestEachCommitRetryUntrackedFilesStayAsForRun(t *testing.T) {
 // run leaves, through the driver. Not parallel: it shortens the limit.
 func TestEachCommitRetryTimingOutStopsLikeAFailingRun(t *testing.T) {
 	old := EachCommitTimeout
-	EachCommitTimeout = 500 * time.Millisecond
+	// Long enough for `exit 1` to start and finish on a loaded machine; only
+	// `sleep 30` can reach it.
+	EachCommitTimeout = 3 * time.Second
 	t.Cleanup(func() { EachCommitTimeout = old })
 	dir, wt, cfg, _ := retryRepo(t, "each_commit:\n  - run: exit 1\n    retry: sleep 30\n    paths: [\"src/**\"]\n")
 	oldTip := gitIn(t, wt, "rev-parse", "HEAD")
@@ -266,7 +268,7 @@ func TestRunEachCommitBoundsTheRetryByTheSameTimeout(t *testing.T) {
 	dir := t.TempDir()
 	gitIn(t, dir, "init", "-q")
 	start := time.Now()
-	why, _, retried := runEachCommit(dir, EachCommit{Run: "exit 1", Retry: "sleep 30"}, 300*time.Millisecond)
+	why, _, retried := runEachCommit(dir, EachCommit{Run: "exit 1", Retry: "sleep 30"}, 3*time.Second)
 	if !retried || !strings.Contains(why, "timed out") || !strings.Contains(why, "exit 1") {
 		t.Errorf("why %q retried %v", why, retried)
 	}
