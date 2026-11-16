@@ -5,7 +5,7 @@ bats_require_minimum_version 1.5.0
 load helpers
 
 setup() {
-    export WT_INSTALL_REAL_GO="$(command -v go)"
+    export WT_INSTALL_REAL_GO="${WT_TEST_GO:-$(command -v go)}"
     export WT_INSTALL_REAL_MV="$(command -v mv)"
     ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
     PREFIX="$BATS_TEST_TMPDIR/prefix with spaces"

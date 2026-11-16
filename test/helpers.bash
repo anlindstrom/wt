@@ -22,9 +22,15 @@ if [ -n "$WT_TEST_TMPDIR" ]; then
     unset WT_ROOTS CODEX_HOME
     # Go's caches are not settings: a test that builds keeps using the ones
     # it had, rather than downloading every module into the new HOME.
-    if command -v go >/dev/null; then
-        { read -r GOPATH; read -r GOMODCACHE; read -r GOCACHE; } < <(go env GOPATH GOMODCACHE GOCACHE)
+    # Once: a second load runs under the HOME this one sets, which no tool
+    # config of the person's answers to.
+    if [ -z "${WT_TEST_GO:-}" ] && command -v go >/dev/null; then
+        { read -r GOPATH; read -r GOMODCACHE; read -r GOCACHE; read -r WT_TEST_GOROOT; } < <(go env GOPATH GOMODCACHE GOCACHE GOROOT)
         export GOPATH GOMODCACHE GOCACHE
+        # The go binary itself, not the version manager's shim for it: a shim
+        # reads the person's tool config, which this run's HOME no longer holds.
+        WT_TEST_GO="$WT_TEST_GOROOT/bin/go"
+        export WT_TEST_GO
     fi
     export HOME="$WT_TEST_TMPDIR/home"
     export XDG_CONFIG_HOME="$WT_TEST_TMPDIR/wt-user-config"

@@ -173,7 +173,7 @@ function world(on: On, statusJson: () => string, answers: Record<string, string>
 }
 
 type Mounted = { find(query: { type: 'Text' | 'Box'; text?: RegExp }): Promise<unknown> }
-type Drawn = { type?: string; props?: { key?: string; color?: string; dimColor?: boolean; flexGrow?: number }; children?: unknown[] }
+type Drawn = { type?: string; part?: { plugin?: string }; props?: { key?: string; color?: string; dimColor?: boolean; flexGrow?: number }; children?: unknown[] }
 
 // The line above the prompt as "colour:text" for each part, in the order
 // drawn: the line is one Text holding a Text for each part. 'none' is the
@@ -186,9 +186,12 @@ const partsOf = async (band: Mounted): Promise<string[]> => {
     .map(part => `${part.props?.color ?? (part.props?.dimColor === true ? 'dim' : 'none')}:${String(part.children?.[0])}`)
 }
 
-// What the row above the prompt holds, left to right.
+// What the row above the prompt holds, left to right. The runtime wraps what
+// plugins draw there in a column Box with one child for each plugin; the row
+// is the one wt drew, and a runtime that does not wrap hands it over as is.
 const rowOf = async (band: Mounted): Promise<string[]> => {
-  const row = (await band.find({ type: 'Box' })) as Drawn | undefined
+  const found = (await band.find({ type: 'Box' })) as Drawn | undefined
+  const row = found?.part?.plugin === 'wt' ? found : ((found?.children as Drawn[] | undefined)?.find(child => child?.part?.plugin === 'wt') ?? found)
 
   return (row?.children ?? [])
     .filter((child): child is Drawn => typeof child === 'object' && child !== null)

@@ -179,7 +179,9 @@ func TestTimeMachineQueryFailureStopsFurtherCalls(t *testing.T) {
 			tm := testkit.FakeTmutil(t, ctx, false)
 			t.Setenv("WT_TEST_TMUTIL_QUERY", mode)
 			old := timemachine.Deadline
-			timemachine.Deadline = 200 * time.Millisecond
+			// Longer than macOS takes to run a script it has just seen written
+			// (200-350 ms): a shorter limit kills the fake before it logs its call.
+			timemachine.Deadline = 2 * time.Second
 			t.Cleanup(func() { timemachine.Deadline = old })
 			var out bytes.Buffer
 			start := time.Now()
@@ -189,7 +191,7 @@ func TestTimeMachineQueryFailureStopsFurtherCalls(t *testing.T) {
 				t.Errorf("tmutil query took %s", elapsed)
 			}
 			if !slices.Equal(tm.Calls(t), []string{"isexcluded " + container}) {
-				t.Error("failed isexcluded was followed by more tmutil calls")
+				t.Errorf("failed isexcluded was followed by more tmutil calls: %q", tm.Calls(t))
 			}
 			if strings.Count(warned.String(), "\n") != 1 || !strings.Contains(warned.String(), "not excluded from Time Machine") || out.Len() != 0 {
 				t.Errorf("stdout %q, warning %q; want one warning", out.String(), warned.String())
