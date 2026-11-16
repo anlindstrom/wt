@@ -55,7 +55,7 @@ func NewStackLine(t testing.TB, dir, wtDir, yaml string) *StackLine {
 		return Git(t, dir, "rev-parse", "HEAD")
 	}
 	write("v.txt", "1.0.0\n")
-	write("t.txt", "t\n")
+	write("t.txt", tLines("t"))
 	s.Base = commit("base")
 	Git(t, dir, "checkout", "-q", "-b", StackTmp)
 	layer := func(name string, files ...string) {
@@ -86,7 +86,7 @@ func NewStackLine(t testing.TB, dir, wtDir, yaml string) *StackLine {
 		write(".wt-sync.yaml", yaml)
 		commit("chore: declare")
 	}
-	write("t.txt", "t2\n")
+	write("t.txt", tLines("t2"))
 	commit("feat: trunk's own")
 	write("v.txt", "1.0.5\n")
 	commit("chore: bump to 1.0.5")
@@ -125,4 +125,10 @@ func startIn(t testing.TB, dir string) int {
 		_ = cmd.Wait()
 	})
 	return cmd.Process.Pid
+}
+
+// tLines is t.txt: first, then filler lines to make room for a second hunk
+// far from the first.
+func tLines(first string) string {
+	return first + "\n" + strings.Repeat("filler\n", 10) + "last\n"
 }
