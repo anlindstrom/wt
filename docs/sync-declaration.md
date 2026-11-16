@@ -154,11 +154,33 @@ and reverted on its own.
 | `run` | required: a shell command, run with `sh -c` in the worktree |
 | `paths` | the step runs at a commit that changes a path these match; empty or left out, at every commit |
 | `needs` | what the step cannot run without (below) |
+| `retry` | optional: a shell command, run with `sh -c` in the worktree, only when `run` fails (below) |
 
 A check runs once the commit is final: after any stop at it is resolved and any
 lift amended in. A commit git drops as empty is not checked. Steps run in the
 order declared, each under its own 30 minutes; the first that fails stops the
 rest. A check must not change tracked files: one that does has failed.
+
+### `retry` — a second go at the same commit
+
+A build tool's output from the commit before can make `run` fail at a commit
+that is fine: Gradle's incremental compile is the usual case. `retry` is the
+command that runs at the same commit, in the same worktree, only when `run`
+fails, for example the same build with `--rerun-tasks`.
+
+- If `retry` passes, the check passes and the rebase goes on. The progress
+  output says `passed on retry`.
+- If `retry` fails too, the rebase stops as it does for a failing `run`, at the
+  same commit. The stop names `run`'s failure and the retry's, and the plan file
+  and the stop show the end of the **retry's** output.
+- `retry` is run only for a commit the step runs at: `paths` and `needs` gate
+  the step, and so its retry. It has its own 30 minutes, as `run` has.
+- `retry` must not change tracked files, as `run` must not: one that does has
+  failed. When `run` itself left tracked files changed, `retry` is not run on
+  that tree and the stop is `run`'s. Untracked files either writes are left
+  where they are, as for `run`.
+- A step without `retry` behaves as before. `retry` is not run when `run`
+  passes, and a failed check that you fix and resume runs `run` first again.
 
 A check that fails stops the rebase at that commit and hands it over: HEAD is
 the commit, nothing is unmerged, and the plan file names the step, its exit
@@ -180,6 +202,9 @@ for work that runs once.
 each_commit:
   - run: make build
     paths: ["src/**", Makefile]
+  - run: ./gradlew compileJava -q
+    retry: ./gradlew compileJava -q --rerun-tasks
+    paths: ["**/*.java"]
 ```
 
 ## `defer` — work after the rebase

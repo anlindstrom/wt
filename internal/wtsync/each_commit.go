@@ -32,6 +32,9 @@ type CheckFailure struct {
 	Index, Total int
 	Err          string
 	Output       string
+	// Retried is whether the step's retry ran and failed too: Err then
+	// names both exits, and Output is the retry's.
+	Retried bool
 }
 
 // Line is the failure in one line: the step, the commit and why.
@@ -274,11 +277,14 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 		fmt.Fprintf(d.log, "  ▸ check %d/%d %s %s\n", at, max(len(d.checks), at), git.ShortID(head, 7), subject)
 	}
 	for _, s := range run {
-		why, output, _ := runEachCommit(d.req.Path, s, EachCommitTimeout)
+		why, output, retried := runEachCommit(d.req.Path, s, EachCommitTimeout)
 		if why == "" {
+			if retried && d.log != nil {
+				fmt.Fprintf(d.log, "  ✓ %s passed on retry\n", s.Run)
+			}
 			continue
 		}
-		f := &CheckFailure{Step: s.Run, Commit: head, Subject: subject, Index: p.Index, Total: p.Total, Err: why, Output: output}
+		f := &CheckFailure{Step: s.Run, Commit: head, Subject: subject, Index: p.Index, Total: p.Total, Err: why, Output: output, Retried: retried}
 		if d.log != nil {
 			fmt.Fprintf(d.log, "  ✗ %s: %s\n", s.Run, why)
 			for _, line := range strings.Split(output, "\n") {
@@ -308,7 +314,7 @@ func (d *driver) uncheck(step, why string) {
 	d.res.Unchecked = append(d.res.Unchecked, Unchecked{Step: step, Why: why})
 }
 
-// runCheck runs one check in the worktree, bounded by timeout. why is ""
+// runCheck runs one command of a check in the worktree, bounded by timeout. why is ""
 // for a pass; otherwise what failed. A check that leaves tracked files
 // changed has failed: it must not change the commit it checks.
 func runCheck(wtPath, run string, timeout time.Duration) (why, output string) {
@@ -329,26 +335,51 @@ func runCheck(wtPath, run string, timeout time.Duration) (why, output string) {
 	case err != nil:
 		return err.Error(), output
 	}
-	status, serr := gitEnv(wtPath, nil, nil, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	files, serr := trackedChanges(wtPath)
 	switch {
 	case serr != nil:
 		return "status could not be read: " + serr.Error(), output
-	case status != "":
-		var files []string
-		for _, l := range strings.Split(status, "\n") {
-			if len(l) > 3 {
-				files = append(files, strings.TrimSpace(l[3:]))
-			}
-		}
+	case len(files) > 0:
 		return "changed tracked files: " + strings.Join(files, ", "), output
 	}
 	return "", output
 }
 
-// runEachCommit runs one each_commit step. Scaffold: no retry yet.
+// trackedChanges lists the tracked files that differ from HEAD in the
+// worktree.
+func trackedChanges(wtPath string) ([]string, error) {
+	status, err := gitEnv(wtPath, nil, nil, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	if err != nil || status == "" {
+		return nil, err
+	}
+	var files []string
+	for _, l := range strings.Split(status, "\n") {
+		if len(l) > 3 {
+			files = append(files, strings.TrimSpace(l[3:]))
+		}
+	}
+	return files, nil
+}
+
+// runEachCommit runs one each_commit step: its run and, only when that
+// fails, its retry, at the same commit and in the same way, each under
+// timeout. why is "" for a pass; retried is whether the retry ran. When the
+// retry fails too, why names both failures and output is the retry's. A run
+// that left tracked files changed is not retried: the retry would start on
+// a tree the step has already broken.
 func runEachCommit(wtPath string, s EachCommit, timeout time.Duration) (why, output string, retried bool) {
 	why, output = runCheck(wtPath, s.Run, timeout)
-	return why, output, false
+	if why == "" || s.Retry == "" {
+		return why, output, false
+	}
+	if files, err := trackedChanges(wtPath); err != nil || len(files) > 0 {
+		return why, output, false
+	}
+	rwhy, routput := runCheck(wtPath, s.Retry, timeout)
+	if rwhy == "" {
+		return "", routput, true
+	}
+	return fmt.Sprintf("%s; its retry %q failed too: %s", why, s.Retry, rwhy), routput, true
 }
 
 // tailLines keeps the last n lines of s.
@@ -393,7 +424,11 @@ func renderCheckPlan(in PlanInput) string {
 		c.Index, c.Total, git.ShortID(c.Commit, 7), oneLinePlan(c.Subject))
 	fmt.Fprintf(&b, "\n## the check\n%s\n%s\n", c.Step, c.Err)
 	if c.Output != "" {
-		fmt.Fprintf(&b, "\n## the end of its output\n```\n%s\n```\n", c.Output)
+		what := "its output"
+		if c.Retried {
+			what = "its retry's output"
+		}
+		fmt.Fprintf(&b, "\n## the end of %s\n```\n%s\n```\n", what, c.Output)
 	}
 	b.WriteString("\n## yours\n")
 	b.WriteString("HEAD is the commit that failed, and nothing is unmerged. Fix it and amend the fix into the\n")
