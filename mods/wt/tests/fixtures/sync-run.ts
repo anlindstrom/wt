@@ -1,6 +1,6 @@
 export default {
   "schema": 1,
-  "schemaVersion": "1.10.0",
+  "schemaVersion": "1.11.0",
   "command": "sync undo",
   "repo": "/repos/app",
   "trunk": "main",
@@ -32,6 +32,7 @@ export default {
       "planFile": null,
       "ownRemoteSync": null,
       "checked": 0,
+      "eachCommit": "all",
       "checkFailed": null,
       "rechecked": 0,
       "stack": null,

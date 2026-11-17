@@ -21,6 +21,45 @@ import (
 // is bounded on its own.
 var EachCommitTimeout = 30 * time.Minute
 
+// Where a run's each_commit checks run, as --each-commit says it.
+const (
+	// EachAll checks at every replayed commit that touches a step's paths:
+	// what a run does without the flag.
+	EachAll = "all"
+	// EachTips checks only at the tip of each layer, or of the branch.
+	EachTips = "tips"
+	// EachOff runs no each_commit check.
+	EachOff = "off"
+)
+
+// EachCommitMode is mode as a run's own: "" is all. An unknown mode is an
+// error naming the ones there are.
+func EachCommitMode(mode string) (string, error) {
+	switch mode {
+	case "", EachAll:
+		return EachAll, nil
+	case EachTips, EachOff:
+		return mode, nil
+	}
+	return "", fmt.Errorf("--each-commit takes all, tips or off, not %q", mode)
+}
+
+// EachCommitNote is the plan's and the summary's one line for a mode other
+// than all, "" for all. stacked says the run has layers.
+func EachCommitNote(mode string, stacked bool) string {
+	switch mode {
+	case EachTips:
+		where := "the tip of the branch only"
+		if stacked {
+			where = "the tip of each layer only"
+		}
+		return "each_commit checks run at " + where + " (--each-commit=tips): the commits between are not checked, and are not owed"
+	case EachOff:
+		return "each_commit checks off (--each-commit=off): none ran, and none is owed"
+	}
+	return ""
+}
+
 // checkTail is how many lines of a failing check's output are kept.
 const checkTail = 20
 
@@ -112,18 +151,63 @@ func (c *Config) checksFor(paths []string) []EachCommit {
 	return steps
 }
 
-// planChecks fills in the driver's list of commits to check.
+// planChecks fills in the driver's list of commits to check, and under
+// --each-commit=tips the steps due at each of them.
 func (d *driver) planChecks() error {
+	d.checks, d.callSteps = nil, nil
+	switch d.req.EachCommit {
+	case EachOff:
+		return nil
+	case EachTips:
+		return d.planTipChecks()
+	}
 	commits, _, err := checksDue(d.req.Path, d.cfg, d.req.target(), d.req.Branch)
 	if err != nil {
 		return err
 	}
-	d.checks = nil
 	for _, c := range commits {
 		d.checks = append(d.checks, c.SHA)
 	}
 	d.checks, err = d.editChecks(d.checks)
 	return err
+}
+
+// planTipChecks is planChecks for --each-commit=tips: the commits that call
+// for a check, as under all, each with the steps it calls for. The break that
+// runs them is the end of the layer they land in, which the list git writes
+// decides, not this plan: a fixup folded into an earlier commit, or a pick
+// git drops as empty, moves where a layer ends.
+func (d *driver) planTipChecks() error {
+	cfg := d.cfg
+	if cfg == nil || len(cfg.EachCommit) == 0 {
+		return nil
+	}
+	if d.req.Edit != nil {
+		return errors.New("--each-commit=tips cannot be combined with --edit: the checks of an edit run sit at the commits above the edit")
+	}
+	commits, err := d.req.target().commits(d.req.Path, d.req.Branch, "--right-only", "--no-merges")
+	if err != nil {
+		return err
+	}
+	lift := cfg.liftPatterns()
+	d.callSteps = map[string][]int{}
+	for i := len(commits) - 1; i >= 0; i-- {
+		c := commits[i]
+		if c.OnTrunk && !touchesAny(lift, c.Paths) {
+			continue
+		}
+		var called []int
+		for j, s := range cfg.EachCommit {
+			if len(s.Paths) == 0 || touchesAny(s.Paths, c.Paths) {
+				called = append(called, j)
+			}
+		}
+		if len(called) > 0 {
+			d.checks = append(d.checks, c.SHA)
+			d.callSteps[c.SHA] = called
+		}
+	}
+	return nil
 }
 
 // checkAt reports whether the break the sequencer stopped at is a check
@@ -134,6 +218,9 @@ func (d *driver) planChecks() error {
 func (d *driver) checkAt() (sha string, edited bool, err error) {
 	if len(d.checks) == 0 {
 		return "", false, nil
+	}
+	if d.req.EachCommit == EachTips {
+		return d.tipAt()
 	}
 	dir, err := rebaseDir(d.req.Path)
 	if err != nil {
@@ -242,6 +329,10 @@ func (d *driver) stoppedGroup() (open, due bool, err error) {
 		return false, false, nil
 	}
 	ids = append(ids, cmds[i][1])
+	if d.req.EachCommit == EachTips {
+		// No break closes a group under tips: a layer's end does.
+		return true, false, nil
+	}
 	for _, id := range ids {
 		for _, c := range d.checks {
 			if strings.HasPrefix(c, id) {
@@ -250,6 +341,175 @@ func (d *driver) stoppedGroup() (open, due bool, err error) {
 		}
 	}
 	return true, false, nil
+}
+
+// doneCommands is the sequencer's done list as fields, comments left out.
+func (d *driver) doneCommands() ([][]string, string, error) {
+	dir, err := rebaseDir(d.req.Path)
+	if err != nil {
+		return nil, "", err
+	}
+	done, err := os.ReadFile(filepath.Join(dir, "done"))
+	if err != nil {
+		return nil, "", err
+	}
+	var cmds [][]string
+	for _, line := range strings.Split(string(done), "\n") {
+		if f := strings.Fields(line); len(f) > 0 && !strings.HasPrefix(f[0], "#") {
+			cmds = append(cmds, f)
+		}
+	}
+	return cmds, dir, nil
+}
+
+// layerEndsNext says the next command of the list is a layer's marker, or
+// there is none: the place a layer's end break sits before.
+func layerEndsNext(dir string) bool {
+	next, err := os.ReadFile(filepath.Join(dir, "git-rebase-todo"))
+	if err != nil {
+		return true
+	}
+	for _, line := range strings.Split(string(next), "\n") {
+		if f := strings.Fields(line); len(f) > 0 && !strings.HasPrefix(f[0], "#") {
+			return f[0] == "update-ref"
+		}
+	}
+	return true
+}
+
+// layerSegment is the commands of done, backwards from the end, that make
+// up the layer now ending: every pick, edit, fixup and squash since the last
+// marker, with their ids as the list names them, and the last pick's id.
+func layerSegment(cmds [][]string) (ids []string, pick string, edit bool) {
+	for i := len(cmds) - 1; i >= 0; i-- {
+		c := cmds[i]
+		switch c[0] {
+		case "update-ref":
+			return ids, pick, edit
+		case "pick", "edit":
+			if len(c) < 2 {
+				continue
+			}
+			ids = append(ids, c[1])
+			if pick == "" {
+				pick = c[1]
+			}
+			edit = edit || c[0] == "edit"
+		case "fixup", "squash":
+			if len(c) < 2 {
+				continue
+			}
+			id := c[1]
+			if len(c) >= 3 && strings.HasPrefix(id, "-") {
+				id = c[2]
+			}
+			ids = append(ids, id)
+		}
+	}
+	return ids, pick, edit
+}
+
+// calledFor is the indexes of the each_commit steps some commit among ids
+// called for, in the order declared.
+func (d *driver) calledFor(ids []string) []int {
+	var out []int
+	for j := range d.cfg.EachCommit {
+		for sha, called := range d.callSteps {
+			if slices.Contains(called, j) && slices.ContainsFunc(ids, func(id string) bool { return strings.HasPrefix(sha, id) }) {
+				out = append(out, j)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// tipAt is checkAt for --each-commit=tips: whether the break the sequencer
+// stopped at ends a layer (it sits before a layer's marker, or at the end of
+// the list) whose commits called for a check, and the full id of the last
+// pick of it. d.layerIDs is then the layer's commands, for atCheck.
+func (d *driver) tipAt() (sha string, edited bool, err error) {
+	cmds, dir, err := d.doneCommands()
+	if err != nil {
+		return "", false, err
+	}
+	if len(cmds) < 2 || cmds[len(cmds)-1][0] != "break" || !layerEndsNext(dir) {
+		return "", false, nil
+	}
+	ids, pick, edit := layerSegment(cmds)
+	d.layerIDs, d.layerEdit = ids, edit
+	if pick == "" || len(d.calledFor(ids)) == 0 {
+		return "", false, nil
+	}
+	sha, err = d.git("rev-parse", "--verify", pick+"^{commit}")
+	return sha, edit, err
+}
+
+// tipCarry says the layer the rest of the list starts in already holds a
+// commit that called for a check, replayed before the stop a resume goes on
+// from. A stop at a layer's end break is not such a place: that break runs
+// the layer's check itself.
+func (d *driver) tipCarry() (bool, error) {
+	if d.req.EachCommit != EachTips || len(d.checks) == 0 {
+		return false, nil
+	}
+	cmds, dir, err := d.doneCommands()
+	if err != nil {
+		return false, err
+	}
+	if n := len(cmds); n > 0 && cmds[n-1][0] == "break" && layerEndsNext(dir) {
+		return false, nil
+	}
+	ids, _, _ := layerSegment(cmds)
+	return len(d.calledFor(ids)) > 0, nil
+}
+
+// layerSurvived says some commit of the layer now ending is still in the
+// result: git recorded a rewrite of one, or kept one as it was and not the target's (a fold in
+// place leaves its leading picks alone, and records nothing for them), or one
+// was an edit, whose lift may have committed in its place. A layer whose
+// every pick git dropped as empty has no commit of its own to check: HEAD is
+// the layer below's tip.
+func (d *driver) layerSurvived() (bool, error) {
+	if d.layerEdit {
+		return true, nil
+	}
+	for _, id := range d.layerIDs {
+		// Kept as it was: HEAD carries it (nothing of id is missing from HEAD),
+		// and the target does not, which would make it the target's own.
+		missing, err := d.git("rev-list", "--max-count=1", id, "--not", "HEAD")
+		if err != nil {
+			return false, err
+		}
+		if missing != "" {
+			continue
+		}
+		fresh, err := d.git("rev-list", "--max-count=1", id, "--not", d.req.Onto)
+		if err != nil {
+			return false, err
+		}
+		if fresh != "" {
+			return true, nil
+		}
+	}
+	dir, err := rebaseDir(d.req.Path)
+	if err != nil {
+		return false, err
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "rewritten-list"))
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && slices.ContainsFunc(d.layerIDs, func(id string) bool { return strings.HasPrefix(f[0], id) }) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // pickCommitted reports whether the pick of sha left a commit at HEAD:
@@ -288,7 +548,12 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 		return nil, err
 	}
 	if !forced {
-		ok, err := d.pickCommitted(sha, head, edited)
+		var ok bool
+		if d.req.EachCommit == EachTips {
+			ok, err = d.layerSurvived()
+		} else {
+			ok, err = d.pickCommitted(sha, head, edited)
+		}
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -313,6 +578,18 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 		}
 	}
 	steps := d.cfg.checksFor(changed)
+	if d.req.EachCommit == EachTips {
+		// At a layer's end the steps due are those any commit of it called for.
+		// HEAD's own paths count too, as under all: a fix a person amended in
+		// may touch what another check lists.
+		called := d.calledFor(d.layerIDs)
+		steps = nil
+		for j, s := range d.cfg.EachCommit {
+			if slices.Contains(called, j) || len(s.Paths) == 0 || touchesAny(s.Paths, changed) {
+				steps = append(steps, s)
+			}
+		}
+	}
 	subject, err := d.git("log", "-1", "--format=%s", "HEAD")
 	if err != nil {
 		return nil, err
@@ -553,6 +830,9 @@ func renderCheckPlan(in PlanInput) string {
 	fmt.Fprintf(&b, "# rebase %s onto %s\n", in.Work, in.TrunkRef)
 	fmt.Fprintf(&b, "stopped after %d/%d, %s %q: an each_commit check failed there\n",
 		c.Index, c.Total, git.ShortID(c.Commit, 7), oneLinePlan(c.Subject))
+	if note := EachCommitNote(in.EachCommit, in.Stacked); note != "" {
+		fmt.Fprintf(&b, "%s\n", note)
+	}
 	fmt.Fprintf(&b, "\n## the check\n%s\n%s\n", c.Step, c.Err)
 	if c.Output != "" {
 		what := "its output"

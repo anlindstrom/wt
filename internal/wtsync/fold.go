@@ -628,8 +628,12 @@ func recommit(dir, c, tree, parent string) (string, error) {
 // among them. HEAD is the folded tip before and after.
 func (d *driver) recheckFold(rewritten, files []string) (*CheckFailure, error) {
 	steps := d.cfg.checksFor(files)
-	if len(steps) == 0 {
+	if len(steps) == 0 || d.req.EachCommit == EachOff {
 		return nil, nil
+	}
+	if d.req.EachCommit == EachTips {
+		// Only the layer's tip is a place a run under tips checks.
+		rewritten = rewritten[len(rewritten)-1:]
 	}
 	tip := rewritten[len(rewritten)-1]
 	defer func() { _, _ = d.git("reset", "-q", "--hard", tip) }()

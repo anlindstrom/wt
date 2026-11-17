@@ -11,6 +11,15 @@ a second `include` beside the list line. Trunk's lines stay as they are, and
 each module the branch added goes at the end of the trunk line it belongs to;
 a line of the branch's own stays its own line. A removal is still refused.
 
+## 2026-11-17 08:05 — check only each layer's tip, or not at all
+
+`wt sync rebase --each-commit=tips` runs the `each_commit` checks only at the
+tip of each layer of a `--stack` line (at the branch's tip without it), for a
+line whose commits do not compile one by one. `--each-commit=off` runs none.
+The commits left out are not owed, so you give up bisecting the line for that
+run; the plan, the end of the run and `--json` (`eachCommit`) say which mode
+ran. A resume goes on with its run's mode. `sync-run` is 1.11.0.
+
 ## 2026-11-17 06:59 — a rebase names the commits it left nothing of
 
 `wt sync rebase` and `wt sync resume` now say, one line per commit, which

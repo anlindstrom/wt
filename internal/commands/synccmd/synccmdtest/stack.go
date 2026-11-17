@@ -111,8 +111,14 @@ func CheckedLine(t *testing.T) (ctx *kit.Context, s *gittest.StackLine, logPath 
 // CheckedLineWith is CheckedLine with its own each_commit declaration.
 func CheckedLineWith(t *testing.T, eachCommit string) (ctx *kit.Context, s *gittest.StackLine, logPath string) {
 	t.Helper()
+	return CheckedLineYAML(t, StackYAML+eachCommit)
+}
+
+// CheckedLineYAML is CheckedLine with the whole declaration its own.
+func CheckedLineYAML(t *testing.T, yaml string) (ctx *kit.Context, s *gittest.StackLine, logPath string) {
+	t.Helper()
 	logPath = filepath.Join(t.TempDir(), "checked.log")
-	ctx, s = StackLine(t, StackYAML+eachCommit)
+	ctx, s = StackLine(t, yaml)
 	main := ctx.Repo.MainRoot
 	script := "#!/bin/sh\ngit log -1 --format=%s >> '" + logPath + "'\n" +
 		"if [ -f b1.txt ] && [ ! -f fix.txt ] && [ ! -f '" + logPath + ".pass' ]; then echo 'b1.txt needs fix.txt'; exit 1; fi\n"

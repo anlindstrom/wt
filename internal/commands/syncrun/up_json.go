@@ -103,7 +103,7 @@ type SyncParticipant struct {
 	// Checked is how many replayed commits the each_commit checks ran at.
 	Checked int `json:"checked"`
 	// EachCommit is where the run's each_commit checks ran: all, tips, off.
-	EachCommit string `json:"eachCommit,omitempty"`
+	EachCommit string `json:"eachCommit"`
 	// CheckFailed is the check that stopped the rebase; nil when none did.
 	CheckFailed *CheckFailed `json:"checkFailed"`
 	// Rechecked is how many commits the each_commit checks ran at again
@@ -186,6 +186,8 @@ type RunJournal struct {
 	// which reports more of each participant.
 	up   bool
 	byBr map[string]*SyncParticipant
+	// eachCommit is the mode every joining participant starts with.
+	eachCommit string
 	// changed tells a signal which participants still recorded as not run
 	// it caught changed, for a verb that moves several with nothing in
 	// flight to name: undo.
@@ -206,7 +208,7 @@ func NewSyncRunJournal(out io.Writer, command string) *RunJournal {
 }
 
 func newJournal(out io.Writer, schemaName, command string) *RunJournal {
-	j := &RunJournal{byBr: map[string]*SyncParticipant{}}
+	j := &RunJournal{byBr: map[string]*SyncParticipant{}, eachCommit: wtsync.EachAll}
 	j.Journal = jsonout.NewJournal(out, RunResult{Schema: 1, SchemaVersion: schema.VersionOf(schemaName), Command: command,
 		Worktrees: []*SyncParticipant{}},
 		jsonout.JournalRules[RunResult]{Error: func(r *RunResult, err error) { r.Error = jsonout.Strp(err.Error()) },
@@ -289,6 +291,18 @@ func (j *RunJournal) TrunkSync(ts *TrunkSync) {
 	j.Res.TrunkSync = ts
 }
 
+// SetEachCommit is the --each-commit mode the participants that join after
+// it start with: the run's, whether or not it reaches them. A nil journal
+// records nothing.
+func (j *RunJournal) SetEachCommit(mode string) {
+	if j == nil {
+		return
+	}
+	j.Lock()
+	defer j.Unlock()
+	j.eachCommit = mode
+}
+
 // Join records the participants, parents first, before any is touched: each
 // starts as not run, which is what a run that stops before reaching it
 // leaves it as.
@@ -299,7 +313,7 @@ func (j *RunJournal) Join(work, branch, path, before string, own *OwnRemoteSync)
 	j.Lock()
 	defer j.Unlock()
 	p := &SyncParticipant{UpParticipant: UpParticipant{Work: work, Branch: branch, Path: path, Result: ResultNotRun,
-		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}, Emptied: []DroppedJSON{}, TestsOnly: []DroppedJSON{}}
+		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}, EachCommit: j.eachCommit, Emptied: []DroppedJSON{}, TestsOnly: []DroppedJSON{}}
 	j.Res.Worktrees = append(j.Res.Worktrees, p)
 	j.byBr[branch] = p
 }

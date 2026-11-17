@@ -25,6 +25,11 @@ type todoPlan struct {
 	// belongs to it. due says the group is to be checked, so the break that
 	// ends it is written even where no line of the list asks for one.
 	open, due bool
+	// tips puts a break at the end of every layer (the end of the list, for
+	// a branch with none) whose commits include one of checks, in place of a
+	// break after each of those commits. carry says the first layer of the
+	// list already holds such a commit: a resume's list starts inside it.
+	tips, carry bool
 	// edit is the full id of the commit a --stack --edit run stops at for a
 	// person; final ends the list in a break, where the run checks the
 	// line's content before git finishes. Empty and false for any other.
@@ -92,10 +97,13 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "tail=%s\n", map[bool]string{true: "1"}[p.stops && p.tail])
 	fmt.Fprintf(w, "edit=%s\n", shellQuote(p.edit))
 	fmt.Fprintf(w, "final=%s\n", map[bool]string{true: "1"}[p.final])
+	fmt.Fprintf(w, "tips=%s\n", map[bool]string{true: "1"}[p.tips])
+	fmt.Fprintf(w, "due=%s\n", map[bool]string{true: "1"}[p.tips && p.carry])
 	fmt.Fprintf(w, "pend=%s; open=%s; marked=0; brk=\n", map[bool]string{true: "1"}[p.open && p.due], map[bool]string{true: "1"}[p.open])
 	fmt.Fprintf(w, "%s\n", `close_group() { if [ -n "$pend" ]; then printf 'break\n'; pend=; brk=1; fi; }`)
+	fmt.Fprintf(w, "%s\n", `tipbreak() { if [ -n "$tips" ] && [ -n "$due" ]; then printf 'break\n'; due=; brk=1; fi; }`)
 	fmt.Fprintf(w, "%s\n", `stop() { [ -z "$stops" ] || [ -n "$brk" ] || printf 'break\n'; brk=; }`)
-	fmt.Fprintf(w, "%s\n", `flush() { while [ "$marked" -lt "$1" ]; do marked=$((marked+1)); stop; printf 'update-ref %s%s\n' "$mapref" "$marked"; done; }`)
+	fmt.Fprintf(w, "%s\n", `flush() { while [ "$marked" -lt "$1" ]; do marked=$((marked+1)); tipbreak; stop; printf 'update-ref %s%s\n' "$mapref" "$marked"; done; }`)
 	fmt.Fprintln(w, `{`)
 	fmt.Fprintln(w, `while IFS= read -r line || [ -n "$line" ]; do`)
 	fmt.Fprintln(w, `  case "$line" in`)
@@ -110,19 +118,20 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintln(w, `        for l in $layers; do case "${l%%=*}" in "$id"*) layer=${l#*=}; break ;; esac; done`)
 	fmt.Fprintln(w, `        close_group; flush $((layer-1))`)
 	fmt.Fprintf(w, "%s\n", `        [ -z "$pre" ] || printf 'break\n'`)
+	fmt.Fprintln(w, `        [ -z "$tips" ] || { [ -z "$check" ] || due=1; check=; }`)
 	fmt.Fprintf(w, "%s\n", `        printf '%s\n' "$out"; pend=$check; open=1; brk=`)
 	fmt.Fprintln(w, `      fi ;;`)
 	fmt.Fprintln(w, `    "fixup "*|"squash "*)`)
 	fmt.Fprintln(w, `      id=${line#* }; case "$id" in -[Cc]\ *) id=${id#* } ;; esac; id=${id%% *}`)
-	fmt.Fprintln(w, `      for m in $checks; do case "$m" in "$id"*) [ -z "$open" ] || pend=1; break ;; esac; done`)
+	fmt.Fprintln(w, `      for m in $checks; do case "$m" in "$id"*) if [ -n "$open" ]; then if [ -n "$tips" ]; then due=1; else pend=1; fi; fi; break ;; esac; done`)
 	fmt.Fprintf(w, "%s\n", `      printf '%s\n' "$line"; brk= ;;`)
-	fmt.Fprintf(w, "%s\n", `    "update-ref "*) close_group; stop; printf '%s\n' "$line" ;;`)
+	fmt.Fprintf(w, "%s\n", `    "update-ref "*) close_group; tipbreak; stop; printf '%s\n' "$line" ;;`)
 	fmt.Fprintf(w, "%s\n", `    "break"|"break "*) close_group; printf '%s\n' "$line"; brk=1 ;;`)
 	fmt.Fprintf(w, "%s\n", `    ""|"#"*) printf '%s\n' "$line" ;;`)
 	fmt.Fprintf(w, "%s\n", `    *) printf '%s\n' "$line"; brk= ;;`)
 	fmt.Fprintln(w, `  esac`)
 	fmt.Fprintln(w, `done < "$1"`)
-	fmt.Fprintln(w, `close_group; flush "$top"`)
+	fmt.Fprintln(w, `close_group; flush "$top"; tipbreak`)
 	fmt.Fprintln(w, `if { [ -n "$tail" ] || [ -n "$final" ]; } && [ -z "$brk" ]; then printf 'break\n'; fi`)
 	fmt.Fprintln(w, `} > "$1.wt" && mv "$1.wt" "$1" && { [ -z "$copy" ] || cp "$1" "$copy"; } &&`)
 	fmt.Fprintf(w, "%s\n", `{ [ -z "$edit" ] || printf '%s\n' "$edit" > "$(dirname "$1")/wt-sync-edit"; }`)

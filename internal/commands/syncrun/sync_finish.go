@@ -121,6 +121,7 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 	plan, err := wtsync.RenderPlan(wtsync.PlanInput{
 		MainRoot: ctx.Repo.MainRoot, Work: in.Work, Branch: in.Branch, TrunkRef: title, OntoRef: in.OntoRef,
 		Trunk: landOn, Base: base, Landing: landing, Handover: *in.Res.Left, Config: in.Cfg,
+		EachCommit: in.Res.EachCommit, Stacked: in.Res.Layered,
 	})
 	if err != nil {
 		return err
@@ -142,12 +143,13 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 		Stop: in.Res.Left.Index, Total: in.Res.Left.Total,
 		Resolved: in.Res.Left.Staged, Strategy: map[string]string{}, Lifted: map[string]string{},
 		Deleted: in.Res.Left.Deleted, Left: in.Res.Left.Left,
-		Stopped:   PathsOnce(in.Earlier, wtsync.StopPaths(in.Res.Stops), in.Res.ByHand),
-		Check:     wtsync.CheckStopOf(in.Res.Left.Check),
-		Layers:    in.Res.LayerState,
-		Unchecked: in.Res.Unchecked,
-		Edit:      in.Res.Edit,
-		AtEdit:    in.Res.Left.Edit,
+		Stopped:    PathsOnce(in.Earlier, wtsync.StopPaths(in.Res.Stops), in.Res.ByHand),
+		Check:      wtsync.CheckStopOf(in.Res.Left.Check),
+		Layers:     in.Res.LayerState,
+		Unchecked:  in.Res.Unchecked,
+		Edit:       in.Res.Edit,
+		AtEdit:     in.Res.Left.Edit,
+		EachCommit: in.Res.EachCommit,
 	}
 	if in.Found != "" && in.Found != in.Res.OldTip {
 		st.Found = in.Found
