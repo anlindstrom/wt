@@ -4,6 +4,13 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-17 08:30 — list-union merges next to a blank line and inside one line
+
+`list-union` no longer refuses a conflict because trunk added a blank line or
+a second `include` beside the list line. Trunk's lines stay as they are, and
+each module the branch added goes at the end of the trunk line it belongs to;
+a line of the branch's own stays its own line. A removal is still refused.
+
 ## 2026-11-17 06:59 — a rebase names the commits it left nothing of
 
 `wt sync rebase` and `wt sync resume` now say, one line per commit, which
