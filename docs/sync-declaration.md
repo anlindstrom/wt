@@ -51,6 +51,9 @@ defer:
 dependency_graph:
   - gradle/libs.versions.toml
   - "*/build.gradle"
+
+test_paths:
+  - "**/src/test/**"
 ```
 
 ## Paths
@@ -365,3 +368,39 @@ dependency_graph:
   - gradle/libs.versions.toml
   - build.gradle
 ```
+
+## `test_paths` — the test files
+
+Globs, as `paths` are, of the files that are tests. It is optional, and it
+changes nothing a run does: it only lets the end of a rebase say more.
+
+Every finished rebase (`wt sync rebase`, in place, with `--onto` or `--stack`,
+and the `wt sync resume` that finishes one) names the commits it set out to
+replay that left no commit in the result, as `dropped as empty` lines and in
+`--json` as `emptied`: trunk already had the change, or a conflict was
+resolved to trunk's side. Fixups and squashes that `--autosquash` folds, and
+the commit an `--edit` amend empties on purpose, are not named. With
+`test_paths` the end also names, as `kept only its tests` and `testsOnly`,
+each commit whose replay changed only paths matching them while the original
+changed other paths too: trunk made the fix, and what is left of the commit is
+its tests.
+
+```yaml
+test_paths:
+  - "**/src/test/**"
+  - "**/*Test.java"
+```
+
+A commit is matched to its replay by author name, email and author date plus
+subject, which a rebase keeps; where wt drove the rebase, its own plan says
+which fixups it folded and which subject an `amend!` gave a commit. A rebase
+finished by hand, or one wt has no plan of, has no such record: a commit whose
+key is missing, but whose author and date or author and subject a commit of the
+result has, or that a fixup or `amend!` in the range could have changed, is named
+as `not found after the rebase`, `unmatched` in `--json`, not as dropped. So are
+commits that share all of author, date and subject when fewer of them came out
+than went in, any commit left without a partner while more commits came out
+under some key than went in, and a fixup the plan lists as folded when a person
+went on by hand and its change is not in the result, or it changes no file (a
+message-only `amend!`): it may have been skipped. A commit that shares its key with another and comes out is never
+named as `testsOnly`.

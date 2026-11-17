@@ -297,7 +297,7 @@ func (j *RunJournal) Join(work, branch, path, before string, own *OwnRemoteSync)
 	j.Lock()
 	defer j.Unlock()
 	p := &SyncParticipant{UpParticipant: UpParticipant{Work: work, Branch: branch, Path: path, Result: ResultNotRun,
-		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}}
+		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}, Emptied: []DroppedJSON{}, TestsOnly: []DroppedJSON{}}
 	j.Res.Worktrees = append(j.Res.Worktrees, p)
 	j.byBr[branch] = p
 }

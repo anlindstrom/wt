@@ -500,6 +500,6 @@ func StackAfterRebase(ctx *kit.Context, rec *wtsync.StackRecord, res wtsync.Resu
 	if rec == nil {
 		return nil
 	}
-	rec.Plans = res.Layers
+	rec.Plans, rec.Replay = res.Layers, res.Replay
 	return wtsync.WriteStackRecord(ctx.Repo.MainRoot, rec)
 }

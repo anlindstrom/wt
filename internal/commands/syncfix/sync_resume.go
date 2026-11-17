@@ -110,6 +110,9 @@ type resume struct {
 	st     wtsync.State
 	// name is the work as the run recorded it.
 	name string
+	// restored is set once the layers are settled when an edit run's line
+	// was put back at the tip the run found.
+	restored bool
 	// pinned is the tip the safety ref pins.
 	pinned   string
 	sessions agents.Sessions
@@ -350,15 +353,26 @@ func (r *resume) rebase() (wtsync.Result, error) {
 		req.Edit = st.Edit
 		req.Content = syncrun.EditContent(r.ctx.Repo.MainRoot, st.OldTip, syncrun.FoldPaths(r.cfg), st.Stopped)
 	}
+	// What the report of the commits the rebase emptied needs of the run:
+	// its stack and its plan, which every stack run records, per-layer steps
+	// or not. No record is no stack, so no fold; a record without a plan
+	// (an older one) is a plan nobody knows when it folded.
+	rec, hasRec, err := wtsync.ReadStackRecord(r.ctx.Repo.MainRoot, st.Epoch)
+	if err != nil {
+		return wtsync.Result{}, fmt.Errorf("%s: the stack's record: %w", name, err)
+	}
+	req.ReportPlan = &wtsync.ReplayPlan{Folds: []string{}}
+	if hasRec {
+		req.ReportLine, req.ReportPlan = &rec.Line, rec.Replay
+		if rec.Replay == nil && !rec.Autosquash {
+			req.ReportPlan = &wtsync.ReplayPlan{Folds: []string{}}
+		}
+	}
 	// A run with per-layer steps goes on as it was: the same layers, the
 	// same steps, and what its stops did before the handover.
 	if l := st.Layers; l != nil {
 		req.Resumed, req.Steps, req.ForceSteps = l, l.StepSelection(), l.ForceSteps
-		rec, ok, err := wtsync.ReadStackRecord(r.ctx.Repo.MainRoot, st.Epoch)
-		if err != nil {
-			return wtsync.Result{}, fmt.Errorf("%s: the stack's record: %w", name, err)
-		}
-		if ok {
+		if hasRec {
 			req.Stack = &wtsync.StackRequest{Line: rec.Line, Autosquash: rec.Autosquash}
 		}
 	}
@@ -458,12 +472,21 @@ func (r *resume) complete(res wtsync.Result) error {
 		fmt.Fprintf(r.w, "  note: what is owed could not be recorded for wt sync steps: %v\n", err)
 	}
 	stackFailure := r.finishStack(res)
+	// What the rebase did to its commits is told once the layers are
+	// settled, and not at all when the line was put back: the result it
+	// describes is gone.
+	if !r.restored {
+		syncrun.PrintReplayReport(r.w, res)
+	}
 	syncrun.PrintUnchecked(r.w, res.Unchecked)
 	owed := append(syncrun.OwedChecks(res.Unchecked), syncrun.OwedLayerSteps(res.LayerSteps)...)
 	owed = append(owed, syncrun.OwedSteps(ran)...)
 	r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) {
 		p.Result, p.PlanFile, p.UndoCommand, p.Deferred = syncrun.ResultRebased, nil, syncrun.UndoCommand(name), syncrun.DeferredSteps(ran)
 		p.LayerSteps = syncrun.LayerStepsOf(res.LayerSteps)
+		if !r.restored {
+			syncrun.SetReplayReport(p, res)
+		}
 		switch {
 		case cerr != nil:
 			p.Result, p.FailedSteps = syncrun.ResultRebasedStepFailed, append(p.FailedSteps, "finish: "+cerr.Error())
@@ -538,6 +561,7 @@ func (r *resume) finishStack(res wtsync.Result) string {
 		Onto: rec.Onto, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch), Listed: listed, ListErr: lerr,
 		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg), Stopped: append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...)})
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s })
+	r.restored = s != nil && s.Restored
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, r.name)
 		return "layer moves stopped"
