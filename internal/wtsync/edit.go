@@ -282,7 +282,13 @@ func (d *driver) refreshAmend() error {
 // one that pins anything else is left alone, so no snapshot a refusal
 // promised is ever overwritten.
 func KeepEditSnapshot(mainRoot, branch string, epoch int64, sha string) (string, error) {
-	base := EditKeptRef(branch, epoch)
+	return keepSnapshot(mainRoot, EditKeptRef(branch, epoch), sha, "wt sync: the refused edit")
+}
+
+// keepSnapshot keeps sha under base, or the first of its -2, -3, ... that
+// is free, with msg in the ref's log, and returns the ref. A ref is only
+// ever created, never moved.
+func keepSnapshot(mainRoot, base, sha, msg string) (string, error) {
 	for n := 1; n <= 100; n++ {
 		ref := base
 		if n > 1 {
@@ -298,7 +304,7 @@ func KeepEditSnapshot(mainRoot, branch string, epoch int64, sha string) (string,
 			}
 			continue
 		}
-		if _, err := gitEnv(mainRoot, nil, nil, "update-ref", "-m", "wt sync: the refused edit", ref, sha, ""); err != nil {
+		if _, err := gitEnv(mainRoot, nil, nil, "update-ref", "-m", msg, ref, sha, ""); err != nil {
 			return "", fmt.Errorf("keeping %s under %s: %w", git.ShortID(sha, 7), ref, err)
 		}
 		return ref, nil

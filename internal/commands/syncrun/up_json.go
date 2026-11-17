@@ -122,6 +122,36 @@ type SyncParticipant struct {
 	// TestsOnly is each commit whose replay kept only the declared
 	// test_paths; empty when none or when none are declared.
 	TestsOnly []DroppedJSON `json:"testsOnly"`
+	// Adopted is the rebase finished by hand that wt sync resume --adopt
+	// took over; null for anything else.
+	Adopted *AdoptedJSON `json:"adopted"`
+}
+
+// AdoptedJSON is what wt sync resume --adopt took over: the ref that keeps
+// the tip it found, where the rebase itself finished, and the commits made
+// after it, which stay on the line.
+type AdoptedJSON struct {
+	KeptRef   string          `json:"keptRef"`
+	RebaseTip string          `json:"rebaseTip"`
+	Commits   []AdoptedCommit `json:"commits"`
+}
+
+// AdoptedCommit is one commit made after the rebase.
+type AdoptedCommit struct {
+	Commit  string `json:"commit"`
+	Subject string `json:"subject"`
+}
+
+// AdoptedOf is a as --json reports it; nil for nil.
+func AdoptedOf(a *wtsync.Adoption) *AdoptedJSON {
+	if a == nil {
+		return nil
+	}
+	j := &AdoptedJSON{KeptRef: a.Kept, RebaseTip: a.Finish, Commits: []AdoptedCommit{}}
+	for _, c := range a.Commits {
+		j.Commits = append(j.Commits, AdoptedCommit{Commit: c.SHA, Subject: c.Subject})
+	}
+	return j
 }
 
 // DroppedJSON is one commit of Emptied or TestsOnly.

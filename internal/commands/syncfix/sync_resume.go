@@ -27,6 +27,9 @@ type ResumeOptions struct {
 	// Journal records what the resume does, for --json; nil records
 	// nothing.
 	Journal *syncrun.RunJournal
+	// Adopt takes over a rebase finished by hand with commits added on top,
+	// when the branch's reflog proves that shape: --adopt.
+	Adopt bool
 	syncrun.VerbOptions
 	syncrun.PushOptions
 	syncrun.StepOptions
@@ -128,6 +131,13 @@ type resume struct {
 	// unavailable is the needs that did not answer, in a resume told to go
 	// on with --allow-owed: the steps that need one are owed.
 	unavailable map[string]string
+	// adopt is the rebase finished by hand that --adopt takes over, and
+	// adoptTips the layers' new tips, read from the run's markers and
+	// checked before anything moves; nil without --adopt.
+	adopt     *wtsync.Adoption
+	adoptTips []wtsync.LayerTip
+	// probed is every need probed before anything moved.
+	probed map[string]bool
 }
 
 // joinJournal records the run's repository and trunk, and the branch as
@@ -273,6 +283,18 @@ func (r *resume) verify() error {
 	if r.busy, err = wtsync.RebaseInProgress(r.target.Path); err != nil {
 		return err
 	}
+	if r.busy && r.opts.Adopt {
+		return fmt.Errorf("%s: --adopt takes over a rebase finished by hand, and this one is still in progress; nothing is resumed: wt sync resume %s goes on with it", name, name)
+	}
+	if r.opts.Adopt {
+		// Proved first: which checks the adopt runs, and so which needs are
+		// probed, follows from the layers' tips and the adopted commits.
+		a, tips, err := r.proveAdopt()
+		if err != nil {
+			return fmt.Errorf("%s: %w; nothing is resumed", name, err)
+		}
+		r.adopt, r.adoptTips = &a, tips
+	}
 	if err := r.probeNeeds(); err != nil {
 		return err
 	}
@@ -282,7 +304,19 @@ func (r *resume) verify() error {
 		}
 		return verifyHandover(r.target.Path, st, r.w)
 	}
+	if a := r.adopt; a != nil {
+		fmt.Fprintf(r.w, "%s  the rebase was finished by hand at %s, with %s made after it; adopting it\n", name, git.ShortID(a.Finish, 7), kit.Count(len(a.Commits), "commit"))
+		if len(st.Resolved)+len(st.Deleted) > 0 {
+			noteNotRechecked(r.w, fmt.Sprintf("it was finished by hand from the %d/%d the plan describes", st.Stop, st.Total), st)
+		}
+		return nil
+	}
 	if err := wtsync.VerifyFinished(r.target.Path, st.Branch, name, st.Onto, st.OldTip, st.Total); err != nil {
+		if _, _, perr := r.proveAdopt(); perr == nil {
+			// The one shape --adopt can prove: said, and still refused
+			// here, since a plain resume cannot tell whose the commits are.
+			return fmt.Errorf("%s: %w; nothing is resumed. It was finished by hand with commits made on top, which wt sync resume --adopt %s takes over", name, err, name)
+		}
 		return fmt.Errorf("%s: %w; nothing is resumed", name, err)
 	}
 	fmt.Fprintf(r.w, "%s  the rebase is already finished; running what is left\n", name)
@@ -299,13 +333,27 @@ func (r *resume) probeNeeds() error {
 	st := r.st
 	base := cmp.Or(st.Upstream, st.Onto)
 	due, err := wtsync.StepsDue(r.target.Path, r.cfg, base, st.OldTip, st.Onto, st.Upstream)
+	if a := r.adopt; a != nil && err == nil {
+		// What the adopt runs: the checks at the tips, which the adopted
+		// commits may call for, and the deferred steps over the line as it
+		// is now.
+		var tips []wtsync.Tip
+		if st.EachCommit != wtsync.EachOff {
+			tips = r.tipsOf(a.Head)
+		}
+		due, err = wtsync.AdoptDue(r.target.Path, r.cfg, tips, r.pinned, a.Head)
+	}
 	if err != nil {
 		return fmt.Errorf("%s: could not tell which steps the rest of the rebase runs: %w; nothing is resumed", r.name, err)
 	}
-	if !r.busy || st.EachCommit == wtsync.EachOff {
+	if (!r.busy && r.adopt == nil) || st.EachCommit == wtsync.EachOff {
 		// Finished by hand, or a run whose checks are off: only the deferred
-		// steps are left.
+		// steps are left. An adopt checks the tips.
 		due.Checks, due.CheckCommits = nil, nil
+	}
+	r.probed = map[string]bool{}
+	for _, n := range due.Needs() {
+		r.probed[n] = true
 	}
 	unavailable, refusal := syncrun.NeedsFor(r.opts.Prober(), due, r.opts.AllowOwed)
 	if refusal != "" {
@@ -389,6 +437,9 @@ func (r *resume) rebase() (wtsync.Result, error) {
 	// Resuming, not rebasing: an interrupt must point back at resume, since
 	// the abort that is right for a run would discard a person's resolution.
 	res, rerr := syncrun.TrackedRebase(r.tracker, &syncrun.RebaseInFlight{Work: name, Path: r.target.Path, Safety: st.Safety, Resuming: true}, func() (wtsync.Result, error) {
+		if r.adopt != nil {
+			return wtsync.Adopt(r.ctx.Repo.MainRoot, r.cfg, req, st.OldTip, safety, *r.adopt, r.w)
+		}
 		return wtsync.Resume(r.ctx.Repo.MainRoot, r.cfg, req, st.OldTip, safety, r.w)
 	})
 	r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) {
@@ -408,6 +459,11 @@ func (r *resume) rebase() (wtsync.Result, error) {
 	if rerr != nil {
 		recordResumeFailed(r.j, st, r.target.Path, rerr)
 		return res, fmt.Errorf("%s: %w", name, rerr)
+	}
+	if res.Adopted != nil {
+		// On record from the moment the tip is kept, whatever stops the
+		// resume after.
+		r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) { p.Adopted = syncrun.AdoptedOf(res.Adopted) })
 	}
 	return res, nil
 }
@@ -463,7 +519,17 @@ func (r *resume) complete(res wtsync.Result) error {
 	if note := wtsync.EachCommitNote(res.EachCommit, res.Layered); note != "" {
 		fmt.Fprintf(r.w, "    %s\n", note)
 	}
-	_, ran, cerr := syncrun.CompleteRun(r.ctx, r.w, r.cfg, r.tracker, name, r.target.Path, func() syncrun.CompleteInput {
+	if a := res.Adopted; a != nil {
+		for _, c := range a.Commits {
+			fmt.Fprintf(r.w, "  + %s %s  adopted: made after the rebase\n", git.ShortID(c.SHA, 7), c.Subject)
+		}
+		if owed, err := wtsync.AdoptedLayerSteps(r.target.Path, r.cfg, res.LayerSteps, r.tipsOf(a.Head)); err != nil {
+			fmt.Fprintf(r.w, "  note: which per-layer steps the hand finish skipped could not be read: %v\n", err)
+		} else {
+			res.LayerSteps = append(res.LayerSteps, owed...)
+		}
+	}
+	head, ran, cerr := syncrun.CompleteRun(r.ctx, r.w, r.cfg, r.tracker, name, r.target.Path, func() syncrun.CompleteInput {
 		// As a run does: the tip the run found is what the deferred steps
 		// compare with and what the undo line names.
 		done := res
@@ -481,7 +547,14 @@ func (r *resume) complete(res wtsync.Result) error {
 	if err := syncrun.RecordOwed(r.ctx.Repo.MainRoot, st.Branch, st.Epoch, res, ran); err != nil {
 		fmt.Fprintf(r.w, "  note: what is owed could not be recorded for wt sync steps: %v\n", err)
 	}
-	stackFailure := r.finishStack(res)
+	settled := res
+	if a := res.Adopted; a != nil {
+		// The layers are where the rebase itself finished; the commits made
+		// after it stay on the line.
+		settled.NewTip = a.Finish
+	}
+	stackFailure := r.finishStack(settled)
+	tipOwed := r.checkAdoptedTips(res, head, cerr)
 	// What the rebase did to its commits is told once the layers are
 	// settled, and not at all when the line was put back: the result it
 	// describes is gone.
@@ -491,9 +564,11 @@ func (r *resume) complete(res wtsync.Result) error {
 	syncrun.PrintUnchecked(r.w, res.Unchecked)
 	owed := append(syncrun.OwedChecks(res.Unchecked), syncrun.OwedLayerSteps(res.LayerSteps)...)
 	owed = append(owed, syncrun.OwedSteps(ran)...)
+	owed = append(owed, tipOwed...)
 	r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) {
 		p.Result, p.PlanFile, p.UndoCommand, p.Deferred = syncrun.ResultRebased, nil, syncrun.UndoCommand(name), syncrun.DeferredSteps(ran)
 		p.LayerSteps = syncrun.LayerStepsOf(res.LayerSteps)
+		p.Adopted = syncrun.AdoptedOf(res.Adopted)
 		if !r.restored {
 			syncrun.SetReplayReport(p, res)
 		}
@@ -521,6 +596,138 @@ func (r *resume) complete(res wtsync.Result) error {
 		return fmt.Errorf("not completed: %s", strings.Join(failures, ", "))
 	}
 	return nil
+}
+
+// proveAdopt proves the one shape --adopt takes over, before anything
+// moves: a worktree with nothing uncommitted, the branch's reflog showing
+// the rebase's own finish with only commits added on top after it, and,
+// for a stack, every layer's marker where the run's plan says it must be on
+// the rebase's result. tips is the layers' new tips, bottom first.
+func (r *resume) proveAdopt() (wtsync.Adoption, []wtsync.LayerTip, error) {
+	st, main := r.st, r.ctx.Repo.MainRoot
+	dirty, err := git.Run(r.target.Path, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	if err != nil {
+		return wtsync.Adoption{}, nil, err
+	}
+	if strings.TrimSpace(dirty) != "" {
+		return wtsync.Adoption{}, nil, fmt.Errorf("the worktree has changes that are not committed, and the adopted tip is what is committed: commit them or put them aside, then wt sync resume --adopt %s", r.name)
+	}
+	a, err := wtsync.ProveAdoption(r.target.Path, st.Branch, st.Onto, st.OldTip, st.Total)
+	if err != nil {
+		return wtsync.Adoption{}, nil, err
+	}
+	rec, ok, err := wtsync.ReadStackRecord(main, st.Epoch)
+	if err != nil {
+		return wtsync.Adoption{}, nil, fmt.Errorf("the stack's record cannot be read (%w)", err)
+	}
+	if !ok {
+		return a, nil, nil
+	}
+	switch {
+	case rec.Edit != nil:
+		return wtsync.Adoption{}, nil, errors.New("--adopt does not take over a --stack --edit run: its content is held to the edit, which a hand finish never reached")
+	case rec.Autosquash || rec.InPlace:
+		return wtsync.Adoption{}, nil, errors.New("--adopt does not take over a fold: its content is held to the line it folded, and commits made after it are not part of that")
+	}
+	plans := rec.Plans
+	if st.Layers != nil && st.Layers.Plans != nil {
+		plans = st.Layers.Plans
+	}
+	if rec.Upstream != "" {
+		if plans, err = wtsync.ReconcileDropped(main, rec.Onto, plans); err != nil {
+			return wtsync.Adoption{}, nil, err
+		}
+	}
+	tips, err := wtsync.CheckLayers(main, a.Finish, rec.Onto, plans)
+	if err != nil {
+		return wtsync.Adoption{}, nil, err
+	}
+	return a, tips, nil
+}
+
+// tipsOf is the tips an adopt checks, bottom first: every layer's new tip,
+// then the line's own at head.
+func (r *resume) tipsOf(head string) []wtsync.Tip {
+	var tips []wtsync.Tip
+	base := r.st.Onto
+	for _, t := range r.adoptTips {
+		tips = append(tips, wtsync.Tip{Branch: t.Branch, Commit: t.New, Base: base})
+		base = t.New
+	}
+	return append(tips, wtsync.Tip{Branch: r.st.Branch, Commit: head, Base: base})
+}
+
+// checkAdoptedTips runs the each_commit checks at every tip of an adopted
+// line, the way --each-commit=tips does, under the run's own mode: under all
+// the commits between were never checked, which is said; under off nothing
+// runs. What fails or cannot run is owed. head is the line's tip after the
+// deferred steps; a finish that failed checks nothing.
+func (r *resume) checkAdoptedTips(res wtsync.Result, head string, cerr error) []string {
+	if res.Adopted == nil || cerr != nil || r.restored {
+		return nil
+	}
+	switch res.EachCommit {
+	case wtsync.EachOff:
+		return nil
+	case wtsync.EachAll:
+		fmt.Fprintf(r.w, "    each_commit checks run at each layer's tip only: the rebase was finished by hand, so the commits between are not checked\n")
+	}
+	// The line is finished, its result pinned and its layers moved: what an
+	// interrupt now leaves is checks owed, which it says, and undo's way
+	// back.
+	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) {
+		p.Adopted, p.UndoCommand, p.PlanFile = syncrun.AdoptedOf(res.Adopted), syncrun.UndoCommand(r.name), nil
+	})
+	r.tracker.Set(&syncrun.RebaseInFlight{Work: r.name, Path: r.target.Path, Rebased: true, Adopted: res.Adopted.Kept})
+	r.probeLate(head)
+	checks := wtsync.CheckTips(r.target.Path, r.cfg, r.tipsOf(head), r.unavailable, r.w)
+	r.tracker.Set(nil)
+	syncrun.PrintUnchecked(r.w, checks.Unchecked)
+	owed := syncrun.OwedChecks(checks.Unchecked)
+	for _, f := range checks.Failed {
+		owed = append(owed, f.Owed())
+	}
+	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Checked += checks.Checked })
+	return owed
+}
+
+// probeLate probes the needs of the checks that came due only once the
+// deferred steps committed their output on top of the line, which nothing
+// probed before anything moved. The layers have moved by now, so a need that
+// does not answer owes the checks that need it, with --allow-owed or not.
+func (r *resume) probeLate(head string) {
+	steps, err := wtsync.TipsDue(r.target.Path, r.cfg, r.tipsOf(head))
+	if err != nil {
+		// Which checks are due cannot be told: every need not yet probed
+		// owes the checks that need it.
+		steps = r.cfg.EachCommit
+	}
+	var prober *syncrun.Prober
+	for _, n := range (wtsync.Due{Checks: steps}).Needs() {
+		if r.probed[n] {
+			continue
+		}
+		r.probed[n] = true
+		why := ""
+		if err != nil {
+			why = "which checks the deferred steps' output calls for could not be read: " + err.Error()
+		} else {
+			if prober == nil {
+				prober = r.opts.Prober()
+			}
+			if perr := prober.Probe(n); perr != nil {
+				why = kit.OneLine(perr.Error())
+			}
+		}
+		if why == "" {
+			continue
+		}
+		if r.unavailable == nil {
+			r.unavailable = map[string]string{}
+		}
+		r.unavailable[n] = why
+		fmt.Fprintf(r.w, "  ⚠ %s did not answer: the checks that need it are owed (%s)\n", n, why)
+	}
 }
 
 // checkStack refuses, before anything moves, a handover of a --stack run

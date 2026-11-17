@@ -284,6 +284,40 @@ each_commit:
     paths: ["**/*.java"]
 ```
 
+### `wt sync resume --adopt` — a rebase finished by hand
+
+A rebase you finished yourself with `git rebase --continue` and then committed
+on top of (an adaptation to a method trunk removed, say) is refused by a plain
+`wt sync resume`: it cannot tell your commits from what a deferred step
+committed on an earlier try. `wt sync resume <work> --adopt` takes it over when
+the branch's reflog proves the one shape it accepts:
+
+- HEAD is on the branch, and nothing tracked is uncommitted;
+- the reflog has git's own `rebase (finish)` for the branch, from the tip the
+  run started at, onto what the run rebased onto;
+- every move after it is a commit (or a cherry-pick) on top of the one
+  before: no reset, amend, merge or rebase;
+- no more commits from onto to where the rebase finished than the run set out
+  to replay.
+
+Anything else is refused with the reason, as before, and a plain resume that
+refuses this shape says `--adopt` is there. With `--adopt`, before anything
+moves, the tip is kept under `refs/wt-sync-kept/<branch>/<epoch>-adopted`, a
+ref that is only ever created. The layers of a `--stack` run move to the
+markers its rebase wrote, checked the way a run checks them, never matched by
+subject; if one does not check out, nothing moves. The commits made after the
+rebase stay on the line's own branch and are named. Then the deferred steps
+run, and the checks run at every layer's tip and at the line's tip, as under
+`tips`. Under `all` that is said: the commits between were never checked. Under
+`off` no check runs. A check that fails, and a per-layer step (`each: layer`)
+the hand finish went past, is owed, and a worktree with anything owed is not
+pushed. The checks of lower tips run in a temporary worktree of their own, and
+only that worktree's registration is ever removed, an interrupt's included. An
+interrupt during the checks leaves the line adopted and the checks owed, and
+says where the tip is kept. `wt sync undo <work>` afterwards puts the line and its layers back as
+they were before the run, and says that the kept ref still holds the adopted
+tip. `--adopt` does not take over a `--stack --edit` run or a fold.
+
 ## `defer` — work after the rebase
 
 Steps that run once, after the last commit is replayed, in the order declared;
