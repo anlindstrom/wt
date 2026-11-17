@@ -142,6 +142,9 @@ type Config struct {
 	Defer           []Deferred   `yaml:"defer"`
 	EachCommit      []EachCommit `yaml:"each_commit"`
 	DependencyGraph []string     `yaml:"dependency_graph"`
+	// TestPaths are the globs of the test files: a finished rebase names
+	// each commit whose replay kept only these.
+	TestPaths []string `yaml:"test_paths"`
 }
 
 // LoadFromTrunk reads the declaration from origin/<trunk>, never from a

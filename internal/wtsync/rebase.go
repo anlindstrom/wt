@@ -183,6 +183,15 @@ type Request struct {
 	// HandedAt is the stop the handover a resume goes on from recorded,
 	// 1-based; zero for a run.
 	HandedAt int
+	// ReportLine and ReportPlan are what the run planned, as a resume
+	// finds them recorded, for the report of what the rebase emptied: the
+	// stack's line and its plan. A resume sets them whether or not it
+	// resumes a stack; a nil plan is a record of none, and the report then
+	// treats every commit it cannot match as unmatched.
+	ReportLine *Line
+	ReportPlan *ReplayPlan
+	// planReplay replaces replayPlanOf in a test.
+	planReplay func(dir string, line Line, todo string) (*ReplayPlan, error)
 	// HandedHead is HEAD as that handover recorded it: a stop a person
 	// reached past it must be on top of it.
 	HandedHead string
@@ -244,6 +253,13 @@ type Result struct {
 	Stops                  []StopResult
 	Restored               bool // an unresolved stop: aborted and verified back at the tip Safety pins
 	SignaturesDropped      int
+	// Emptied is each commit the rebase set out to replay that left no
+	// commit in the result, and TestsOnly each whose replay kept only the
+	// test paths the declaration names; set when the rebase finished.
+	Emptied, TestsOnly []Dropped
+	// Replay is the plan a rebase of a stack read from its list; nil for
+	// any other.
+	Replay *ReplayPlan
 	// Checked is how many replayed commits the each_commit checks ran at.
 	Checked int
 	// CheckFailed is the check that failed, whether the stop was handed
