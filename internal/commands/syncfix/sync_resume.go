@@ -27,6 +27,9 @@ type ResumeOptions struct {
 	// Journal records what the resume does, for --json; nil records
 	// nothing.
 	Journal *syncrun.RunJournal
+	// Adopt takes over a rebase finished by hand with commits added on top,
+	// when the branch's reflog proves that shape: --adopt.
+	Adopt bool
 	syncrun.VerbOptions
 	syncrun.PushOptions
 	syncrun.StepOptions
