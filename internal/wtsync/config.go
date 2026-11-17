@@ -227,6 +227,11 @@ func Parse(data []byte) (*Config, error) {
 			return nil, fmt.Errorf("%s: each_commit[%d]: %w", ConfigFile, i, err)
 		}
 	}
+	for i, p := range cfg.TestPaths {
+		if p == "" {
+			return nil, fmt.Errorf("%s: test_paths[%d] is empty: a glob like **/*Test.java names the test files", ConfigFile, i)
+		}
+	}
 	return &cfg, nil
 }
 

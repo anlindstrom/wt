@@ -1,6 +1,7 @@
 package wtsync
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -548,6 +549,10 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 		fmt.Fprintf(d.log, "  $ git %s\n", strings.Join(args, " "))
 	}
 	_, err = gitEnv(req.Path, env, nil, args...)
+	if req.Stack == nil {
+		// No fold is planned in a rebase that is not of a stack.
+		d.res.Replay = &ReplayPlan{Folds: []string{}}
+	}
 	if req.Stack != nil {
 		// The editor has run by now, whatever the rebase came to after it:
 		// what it wrote is the plan every layer is checked against.
@@ -559,6 +564,16 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 		if rerr == nil {
 			if d.res.Layers, rerr = planLayers(req.Path, req.Epoch, req.Stack.Line, string(todo)); rerr != nil {
 				return d.fail(rerr)
+			}
+			// Read only for the report: a failure is noted and leaves the
+			// plan unknown, and never changes what the rebase does.
+			planReplay := replayPlanOf
+			if req.planReplay != nil {
+				planReplay = req.planReplay
+			}
+			if d.res.Replay, rerr = planReplay(req.Path, req.Stack.Line, string(todo)); rerr != nil {
+				d.noteUnread(rerr)
+				d.res.Replay = nil
 			}
 		}
 	}
@@ -1394,7 +1409,50 @@ func (d *driver) finish() (Result, error) {
 	if d.res.Replayed, err = strconv.Atoi(count); err != nil {
 		return unread(err)
 	}
+	if d.res.Replay != nil && !d.keep {
+		// A rebase wt drove from its start to its end carried out its plan.
+		d.res.Replay.Confirmed = true
+	}
+	d.reportReplay()
 	return d.res, nil
+}
+
+// reportReplay names the commits the finished rebase emptied and the ones it
+// left only tests of (emptied.go). It is a report: what cannot be read is
+// said and leaves the lists empty.
+func (d *driver) reportReplay() {
+	in := ReplayInput{Cutoff: d.req.base(), Old: d.old, Onto: d.req.Onto, New: d.res.NewTip, Plan: cmp.Or(d.res.Replay, d.req.ReportPlan)}
+	if d.cfg != nil {
+		in.TestPaths = d.cfg.TestPaths
+	}
+	in.Line = d.req.ReportLine
+	if s := d.req.Stack; s != nil {
+		in.Line = &s.Line
+	}
+	if e := d.req.Edit; e != nil && e.Amended != "" {
+		// The edit reports the commit it amended and the commits the amend
+		// emptied, which the rebase dropped on purpose.
+		in.Skip = []string{e.Commit}
+		emptied, err := Emptied(d.req.Path, e.Commit, d.old, d.req.Onto, d.res.NewTip)
+		if err != nil {
+			d.noteUnread(err)
+			return
+		}
+		for _, c := range emptied {
+			in.Skip = append(in.Skip, c.SHA)
+		}
+	}
+	rep, err := ReportReplay(d.req.Path, in)
+	if err != nil {
+		d.noteUnread(err)
+	}
+	d.res.Emptied, d.res.TestsOnly = rep.Emptied, rep.TestsOnly
+}
+
+func (d *driver) noteUnread(err error) {
+	if d.log != nil {
+		fmt.Fprintf(d.log, "  note: which commits the rebase dropped as empty could not be read: %v\n", err)
+	}
 }
 
 // handover records the stop the run is leaving: what a person owns, and what
