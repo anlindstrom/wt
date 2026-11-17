@@ -102,6 +102,8 @@ type SyncParticipant struct {
 	PlanFile    *string        `json:"planFile"`
 	// Checked is how many replayed commits the each_commit checks ran at.
 	Checked int `json:"checked"`
+	// EachCommit is where the run's each_commit checks ran: all, tips, off.
+	EachCommit string `json:"eachCommit,omitempty"`
 	// CheckFailed is the check that stopped the rebase; nil when none did.
 	CheckFailed *CheckFailed `json:"checkFailed"`
 	// Rechecked is how many commits the each_commit checks ran at again

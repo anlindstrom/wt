@@ -42,6 +42,10 @@ type RunOptions struct {
 	// is lifted — dirt, a handover, another run's lock. A run with nothing
 	// named does not take it: that would roll over every session at once.
 	Force bool
+	// EachCommit is where the each_commit checks run: "all" (also "") at
+	// every replayed commit that touches their paths, "tips" at the end of
+	// each layer only, "off" nowhere.
+	EachCommit string
 	// Journal records what the run does, participant by participant, for
 	// --json; nil records nothing.
 	Journal *syncrun.RunJournal

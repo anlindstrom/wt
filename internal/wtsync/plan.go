@@ -102,6 +102,9 @@ type State struct {
 	// that stop: HEAD the commit, for a person to amend.
 	Edit   *EditStop `json:"edit,omitempty"`
 	AtEdit bool      `json:"at_edit,omitempty"`
+	// EachCommit is where the run's each_commit checks run: all, tips or
+	// off. Empty, as in a sidecar written before the flag existed, is all.
+	EachCommit string `json:"each_commit,omitempty"`
 }
 
 // CheckStop is a failed check as the handover records it.
