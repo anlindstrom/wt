@@ -210,10 +210,11 @@ func TestUpPlanTokenCoversEveryPlanField(t *testing.T) {
 		return UpPlan{Trunk: jsonout.Strp("main"), Stack: []PlanStack{{
 			PlanStackMember: PlanStackMember{Work: "w", Branch: "b", Path: "/w"},
 			OwnRemote:       syncrun.OwnRemote{Blocks: jsonout.Strp(wtsync.OwnBlockDiverged), Commit: jsonout.Strp("c0ffee")},
+			Layers:          []PlanLayer{{Branch: "l", Tip: "abc"}},
 		}}}
 	}
 	// What the run's own --expect check hashes, from the same inputs.
-	if got, want := upPlanToken(ctx, base()), syncrun.PlanToken(ctx, "main", []string{"b"}, map[string]string{"b": "c0ffee"}); got != want {
+	if got, want := upPlanToken(ctx, base()), syncrun.PlanToken(ctx, "main", []string{"b"}, map[string]string{"b": "c0ffee"}, map[string][]string{"b": {"l"}}); got != want {
 		t.Fatalf("the plan's token %s is not the run's %s", got, want)
 	}
 	reads := tokenReads(t, base, func(p UpPlan) string { return upPlanToken(ctx, p) })
@@ -240,6 +241,8 @@ func TestUpPlanTokenCoversEveryPlanField(t *testing.T) {
 		"Stack.Work":             "the branch names the member",
 		"Stack.Path":             "the branch names the member",
 		"Stack.DeferredDeclared": "trunk's declaration, read again when wt up starts",
+		"Stack.Layers.Tip":       "the branch names the layer; where it stands is read again when wt up starts",
+		"Stack.Layers.Left":      "why the layer stays is a reading of its name and tip",
 	})...)
 	gaps = append(gaps, jsonout.TokenGaps(reads, syncrun.OwnRemote{}, "Stack.OwnRemote.", ownRemoteLeftOut("Stack.OwnRemote."))...)
 	if len(gaps) > 0 {

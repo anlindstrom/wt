@@ -1,6 +1,6 @@
 export default {
   "schema": 1,
-  "schemaVersion": "1.11.0",
+  "schemaVersion": "1.12.0",
   "command": "status",
   "token": "1:0123abcd",
   "trunk": "main",
@@ -57,7 +57,8 @@ export default {
         "noPushReason": null,
         "fixCommand": null
       },
-      "deferredDeclared": []
+      "deferredDeclared": [],
+      "layers": []
     }
   ],
   "sessions": [],

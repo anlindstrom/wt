@@ -40,6 +40,11 @@ func newUpCmd() *cobra.Command {
 			"nothing in progress and no session busy in it. Otherwise it is left,\n" +
 			"and a line says why. --no-ff-trunk, or wt config set ff_trunk false,\n" +
 			"leaves it alone.\n\n" +
+			"Branches in no worktree that sit between the worktrees of a stack, on\n" +
+			"the commits a worktree replays, move with its rebase and come back with\n" +
+			"wt sync undo. One that cannot be moved (a backup name, a fixup! tip, a\n" +
+			"rebase that dropped or folded commits) is left and named; wt sync\n" +
+			"rebase --stack places layers through such a rebase.\n\n" +
 			"Before it rebases, the branch is compared with its own remote, the ref\n" +
 			"a push of it would replace (what is recorded for it, else its own name\n" +
 			"on the remote git pushes it to; never its upstream as such), fetched\n" +

@@ -232,6 +232,7 @@ repository.
 | `stack` | array | every worktree `wt up` would move, parents first, from local refs as of now; just the one when it has no stack |
 | `stack[].work`, `.branch`, `.path` | string | |
 | `stack[].ownRemote` | object | since 1.6.0: that member's branch against [its own remote](#ownremote--a-branch-against-its-own-remote) |
+| `stack[].layers` | array | since 1.12.0: the branches in no worktree whose tips are commits of that member's line, above its stack parent's tip or above `trunkRef` without a parent, bottom first: what `wt up` [moves with the member](#layers--branches-in-no-worktree) or leaves, each `branch`, `tip`, and `left`, the reason it would leave it, null when it would move it; `[]` when there are none |
 | `stack[].deferredDeclared` | array | since 1.7.0: the [deferred steps trunk declares](#deferreddeclared--the-deferred-steps-trunk-declares), as last fetched, which `wt up` may run once it has rebased that member; `[]` when there are none |
 | `sessions` | array | [agent sessions](#sessions--claude-and-codex) in the stack's worktrees |
 | `sessions[].work`, `.name` | string | the worktree it is in, and its name |
@@ -240,7 +241,8 @@ repository.
 | `sessionsError` | string \| null | the listing failed; `sessions` is then empty, not known empty |
 
 The **token** covers the trunk name, the bytes of the wt configuration file
-`wt up` would read, and the stack's branches in order. A newer trunk commit is
+`wt up` would read, the stack's branches in order, and, since 1.12.0, the names
+of the `stack[].layers` of each member. A stack with none keeps the token it had. A newer trunk commit is
 not in it. Nor is the commit of a branch's own remote, with one exception since
 1.6.0: for each stack member whose `ownRemote.state` is `diverged` it covers
 that remote commit. A plan with nothing diverged has the token an older wt
@@ -308,6 +310,7 @@ Each participant:
 | `noPushReason` | string \| null | since 1.5.0 (`sync-run` 1.4.0): for `rebased` with a null `pushCommand`, why wt made and offered no push, in the words the run printed; null otherwise |
 | `fixCommand` | array of string \| null | since 1.5.0 (`sync-run` 1.4.0): the command that settles `noPushReason`, as an argv to run in the repository, when one does; null otherwise |
 | `ownRemoteSync` | object | since 1.4.0: what the run found of the branch's own remote and did about it ([`ownRemoteSync`](#ownremotesync--what-a-run-did-about-it)) |
+| `layers` | array | since 1.7.0 (`sync-run` 1.15.0): the [branches in no worktree](#layers--branches-in-no-worktree) on the participant's line that the run moved with its rebase or left, each `branch`, `before`, `after`, `result` (`moved` \| `left`) and `reason`; `[]` when there are none |
 
 `result`, exhaustively:
 
@@ -338,6 +341,36 @@ are as they were; the fetched trunk ref and the objects a simulation writes are
 expected writes.
 
 The exit code keeps its meaning (0 when the run completed); read `outcome`.
+
+### `layers` — branches in no worktree
+
+A stack of worktrees can have branches between its members that no worktree
+holds: `feat/a` and `feat/d` in worktrees, `feat/b` and `feat/c` not. `wt up`
+and `wt sync rebase` rebase the worktrees, with `--no-update-refs`, so those
+branches would stay on the old commits. They are moved with the rebase: a
+participant's layers are the local branches in no worktree whose tips are
+commits of the line above its stack parent's tip, or above trunk (the target)
+when it has no parent. Once the participant's rebase has finished, each goes to
+the replay of its commit, and is pinned like the worktrees, with a safety and a
+result ref under the run's epoch, so `wt sync undo` puts it back with them.
+
+A layer that cannot be moved is left where it is and reported, with `reason`:
+the trunk branch itself, a name matching the backup patterns of `wt refs sweep` (or whose prefix at a slash does: `backup/*` covers `backup/2026-11/feat`), a tip that is a
+`fixup!`, `squash!` or `amend!` commit, a merge commit on the line, a rebase
+that dropped, folded or changed commits (the layers are matched to the replay
+commit by commit; `wt sync rebase --stack` places them through that), a rebase
+that stopped for a person or failed, and a branch that was checked out
+meanwhile. A run with `--stack` or `wt sync steps` reads its own layers and
+reports them under `stack`; `layers` is then empty. A branch whose commit the
+rebase did not change is in neither list.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `branch` | string | |
+| `before` | string | its tip when the run read the line |
+| `after` | string \| null | the commit it was moved to; null when left |
+| `result` | `moved` \| `left` | |
+| `reason` | string \| null | why it was left; null when moved |
 
 ### `trunkSource` — how trunk was found
 
@@ -2287,3 +2320,4 @@ change made it.
 | `sync-run` 1.13.0 | `leftAlone`: what a `wt sync rebase <work> --alone` run left as it was: the worktrees stacked on the same history as the one it rebased, or with `--stack` the layer branches of its line |
 | `sync` 1.10.0, `status` 1.11.0 | `needs` takes `env:<NAME>` as well as `docker`: a step that needs an environment variable that must be set and not empty; the probe never carries the value |
 | `sync` 1.11.0, `sync-run` 1.14.0 | `contextGaps` and `contextUnchecked` on [`stack`](#stack--a-stack-held-on-one-line): for a fold, the hunks of fixups that lack their context behind their target, each with the later commit that carries it; a `wt sync resume` refused for a resolution that drops such a hunk is `refused` with the lines in `reason` |
+| `up` 1.7.0, `sync-run` 1.15.0, `status` 1.12.0 | [`layers`](#layers--branches-in-no-worktree) on each participant of `up` and `sync-run`: the branches in no worktree on its line that the run moved with its rebase or left, and why; `layers` on each `stack` member of `status`, which its token covers |
