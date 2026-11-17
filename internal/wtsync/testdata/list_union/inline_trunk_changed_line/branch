@@ -1,0 +1,9 @@
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'server'
+include 'accessmanagement', 'pins', 'core', 'database', 'worker-clients', 'vapix-client', 'nbix-client', 'nbix-sync', 'nbix-integration-tests', 'acc-client', 'gui', 'o3c', 'remote-api', 'scim', 'listener', 'processor', 'webapp', 'common', 'tests-e2e', 'main-api-cli'
+
+include 'metrics-collector'
+include 'nbix-devtools'

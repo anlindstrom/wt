@@ -110,8 +110,20 @@ deferred step declared beside it does that once the rebase is done.
 ### `list-union`
 
 The contested line, matched by `line`, is a list both sides only add to, such
-as Gradle's `include`. The result is the union, trunk's order first, then the
-branch's additions. An item one side removed is refused: a removal is a
+as Gradle's `include`. Trunk's lines in a conflict stay as they are, in order,
+blank lines included. Each item the branch added goes at the end of the trunk
+line its own line shares the most items with (the first on a tie), so the
+result is trunk's order first, then the branch's additions. A branch line that
+shares no item with any trunk line, such as an `include` of its own, stays a
+line of its own after trunk's lines. The one exception: when it is the only
+list line on the branch's side of the conflict and the base side has a list
+line, it is that line edited, and its additions join trunk's first line. An
+item appears once in the file: one already on any list line that stays, or on
+a trunk line anywhere in the file, is not added again.
+
+Blank lines may sit in a conflict; the branch's own blank lines are dropped.
+Any other line that is not a list line is refused, as is a conflict with
+nothing on one side. An item one side removed is refused: a removal is a
 decision, not a merge.
 
 ### `take-trunk`

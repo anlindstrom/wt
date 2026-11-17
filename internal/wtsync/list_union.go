@@ -54,20 +54,130 @@ func (s ListUnion) Resolve(c Conflict) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// An item is written once in the file: start from every list item that
+	// stays as it is, outside the blocks and on trunk's lines in all of them.
+	var placed []string
+	for _, seg := range segs {
+		lines := seg.Lines
+		if seg.Block != nil {
+			lines = seg.Block.Trunk
+		}
+		its, err := s.items(c.Path, lines)
+		if err != nil {
+			return nil, err
+		}
+		placed = append(placed, its...)
+	}
 	return Render(segs, func(b Block) ([]string, error) {
-		return s.collapse(c.Path, b)
+		return s.collapseNew(c.Path, b, &placed)
 	})
 }
 
-// collapse resolves one block, which must consist of list lines only. git
-// folds a list line added right after the changed one into the same block,
-// so a side may hold more than one; they are unioned onto one line.
+// collapse resolves one block of list lines and blank lines. See collapseNew.
 func (s ListUnion) collapse(path string, b Block) ([]string, error) {
+	return s.collapseNew(path, b, nil)
+}
+
+// collapseNew keeps trunk's lines as they are, blank lines included, and adds
+// each item the branch added to the end of the trunk list line its own line
+// shares the most items with (the first on a tie). A branch list line that
+// shares no item with any trunk line stays a line of its own, after trunk's,
+// unless it is the only list line on the branch's side and the block's base
+// side holds a list line: then it is that line, edited, and joins trunk's
+// first.
+// An item is never added twice: placed holds the items already in the result
+// from elsewhere, and grows by what this block adds. Any line in the block
+// that is neither a list line nor blank is refused, as is a side with no list
+// line.
+func (s ListUnion) collapseNew(path string, b Block, placed *[]string) ([]string, error) {
 	if len(b.Branch) == 0 || len(b.Trunk) == 0 {
 		return nil, Refuse(path, "the conflict is not on the list line")
 	}
-	var prefix string
-	for _, l := range append(append([]string{}, b.Branch...), b.Trunk...) {
+	branchLines, err := s.listLines(path, b.Branch)
+	if err != nil {
+		return nil, err
+	}
+	trunkLines, err := s.listLines(path, b.Trunk)
+	if err != nil {
+		return nil, err
+	}
+	if len(branchLines) == 0 || len(trunkLines) == 0 {
+		return nil, Refuse(path, "the conflict is not on the list line")
+	}
+	baseItems, err := s.items(path, b.Base)
+	if err != nil {
+		return nil, err
+	}
+	baseLines, err := s.listLines(path, b.Base)
+	if err != nil {
+		return nil, err
+	}
+	var have []string
+	if placed != nil {
+		have = *placed
+	}
+	for _, tl := range trunkLines {
+		have = append(have, tl.items...)
+	}
+	out := append([]string{}, b.Trunk...)
+	var own []string
+	for _, bl := range branchLines {
+		var added []string
+		for _, it := range bl.items {
+			if slices.Contains(baseItems, it) || slices.Contains(have, it) {
+				continue
+			}
+			added = append(added, it)
+			have = append(have, it)
+		}
+		if len(added) == 0 {
+			continue
+		}
+		best, shared := -1, 0
+		for _, tl := range trunkLines {
+			n := 0
+			for _, it := range bl.items {
+				if slices.Contains(tl.items, it) {
+					n++
+				}
+			}
+			if n > shared {
+				best, shared = tl.index, n
+			}
+		}
+		if best < 0 && len(branchLines) == 1 && len(baseLines) > 0 {
+			// The branch's first line is the base line, edited: it and
+			// trunk's first line are the same line, changed on both sides.
+			best = trunkLines[0].index
+		}
+		if best < 0 {
+			own = append(own, bl.prefix+strings.Join(added, s.Delimiter+" "))
+			continue
+		}
+		out[best] = s.appendItems(out[best], added)
+	}
+	if placed != nil {
+		*placed = have
+	}
+	return append(out, own...), nil
+}
+
+// listLine is one list line of a block side: where it sits, how it starts and
+// what it holds.
+type listLine struct {
+	index  int
+	prefix string
+	items  []string
+}
+
+// listLines parses the list lines of one side; blank lines are skipped and any
+// other line is refused.
+func (s ListUnion) listLines(path string, lines []string) ([]listLine, error) {
+	var out []listLine
+	for i, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
 		loc := s.Line.FindStringIndex(l)
 		if loc == nil {
 			return nil, Refuse(path, "the conflict is not on the list line")
@@ -75,23 +185,13 @@ func (s ListUnion) collapse(path string, b Block) ([]string, error) {
 		if loc[0] != 0 {
 			return nil, Refuse(path, "list line regex must match at the start")
 		}
-		prefix = l[:loc[1]]
-	}
-	branchItems, err := s.items(path, b.Branch)
-	if err != nil {
-		return nil, err
-	}
-	trunkItems, err := s.items(path, b.Trunk)
-	if err != nil {
-		return nil, err
-	}
-	out := append([]string{}, trunkItems...)
-	for _, it := range branchItems {
-		if !slices.Contains(out, it) {
-			out = append(out, it)
+		items, err := s.items(path, []string{l})
+		if err != nil {
+			return nil, err
 		}
+		out = append(out, listLine{index: i, prefix: l[:loc[1]], items: items})
 	}
-	return []string{prefix + strings.Join(out, s.Delimiter+" ")}, nil
+	return out, nil
 }
 
 // hasLine reports whether any line matches s.Line, regardless of whether that
@@ -126,4 +226,23 @@ func (s ListUnion) items(path string, lines []string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// appendItems adds items to the end of a trunk list line without breaking it:
+// no delimiter before the first item of a line with none yet, and none doubled
+// after a line that already ends with one.
+func (s ListUnion) appendItems(line string, added []string) string {
+	joined := strings.Join(added, s.Delimiter+" ")
+	m := s.Line.FindString(line)
+	if strings.TrimSpace(strings.TrimPrefix(line, m)) == "" {
+		if m != "" && !strings.HasSuffix(m, " ") && !strings.HasSuffix(m, "\t") {
+			return line + " " + joined
+		}
+		return line + joined
+	}
+	line = strings.TrimRight(line, " \t")
+	if strings.HasSuffix(line, s.Delimiter) {
+		return line + " " + joined
+	}
+	return line + s.Delimiter + " " + joined
 }
