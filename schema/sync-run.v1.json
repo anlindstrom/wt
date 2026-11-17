@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.9.0",
+  "x-version": "1.10.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync [<work>...] --rebase --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -59,7 +59,7 @@
     },
     "participant": {
       "type": "object",
-      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "checked", "checkFailed", "rechecked", "stack", "layerSteps"],
+      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "checked", "checkFailed", "rechecked", "stack", "layerSteps", "emptied", "testsOnly"],
       "properties": {
         "work": { "type": "string" },
         "branch": { "type": "string" },
@@ -114,7 +114,9 @@
           ]
         },
         "stack": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stack" }], "description": "Since 1.6.0: for a --stack run, the stack held on this worktree's line: its layers and what came of each. Null for any other run." },
-        "layerSteps": { "type": "array", "items": { "$ref": "#/$defs/layerStep" }, "description": "Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish." }
+        "layerSteps": { "type": "array", "items": { "$ref": "#/$defs/layerStep" }, "description": "Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish." },
+        "emptied": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit a finished rebase set out to replay that left no commit in the result: trunk already had its change, or a conflict was resolved to trunk's side. Oldest first. Fixups and squashes folded by --autosquash and the commit --edit amends are not listed. Empty when none, and when the rebase did not finish." },
+        "testsOnly": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit whose replay changed only paths matching the declaration's test_paths while the original changed others too. Empty when none, when no test_paths is declared, and when the rebase did not finish." }
       }
     },
     "ownRemoteSync": {
@@ -196,6 +198,18 @@
         "pushCommand": { "oneOf": [{ "type": "null" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }], "description": "The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run does not push layers. Null otherwise." },
         "noPushReason": { "type": ["string", "null"], "description": "The run's: for a moved layer with no safe push command, why: no remote branch of its own yet, or the remote has commits the branch never had." },
         "note": { "type": ["string", "null"], "description": "The run's: what else happened to a moved layer, such as a checkout of it that landed during its move, at its new tip." }
+      }
+    },
+    "dropped": {
+      "type": "object",
+      "description": "Since 1.10.0: one commit of emptied or testsOnly, as the original was before the rebase.",
+      "additionalProperties": false,
+      "required": ["commit", "subject", "layer", "unmatched"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The original commit's full id." },
+        "subject": { "type": "string", "description": "Its subject." },
+        "layer": { "type": ["string", "null"], "description": "The layer branch it was in for a --stack run; for a commit above every layer, the line's own branch. Null for any other run." },
+        "unmatched": { "type": "boolean", "description": "True when wt cannot tell whether the commit left no commit: its key (author, author date, subject) is missing from the result but a commit of the result has its author and date or its author and subject, or, with no record of the rebase's plan, a fixup or amend could have changed it, or more commits came out under one key than went in (one of them may be it, changed), or it is a fixup the plan lists as folded, in a rebase wt did not carry out start to finish, whose change is not in the result (it may have been skipped). Check the result for it. Only in emptied." }
       }
     },
     "layerStep": {

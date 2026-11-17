@@ -1247,8 +1247,9 @@ func (r *RunPlan) stackRecord(b string, p *participant, req wtsync.Request) (*wt
 }
 
 // finishStack checks and moves the layers once the line's rebase has
-// finished, and records what came of them.
-func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) {
+// finished, and records what came of them. restored says an edit run's line
+// was put back at the tip the run found.
+func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) (restored bool) {
 	st := r.opts.Stack
 	if st == nil {
 		return
@@ -1288,6 +1289,7 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) {
 		Onto: rec.Onto, Own: r.own, Listed: listed, ListErr: lerr, Force: rec.Force, Now: r.opts.Clock(), AfterMove: st.AfterMove, Between: st.Between,
 		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops)})
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s })
+	restored = s != nil && s.Restored
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, p.work)
 		r.failures = append(r.failures, p.work+" (layer moves stopped)")
@@ -1296,6 +1298,7 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) {
 	if failure != "" {
 		r.failures = append(r.failures, p.work+" ("+failure+")")
 	}
+	return restored
 }
 
 // passOver settles a worktree the run does not rebase, refused or skipped,
@@ -1515,7 +1518,13 @@ func (r *RunPlan) finishRebase(b string, p *participant, res wtsync.Result, onto
 	if err := syncrun.RecordOwed(ctx.Repo.MainRoot, b, r.epoch, res, ran); err != nil {
 		fmt.Fprintf(w, "  note: what is owed could not be recorded for wt sync steps: %v\n", err)
 	}
-	r.finishStack(b, p, res)
+	restored := r.finishStack(b, p, res)
+	// What the rebase did to its commits is told once the layers are
+	// settled, and not at all when the line was put back: the result it
+	// describes is gone.
+	if !restored {
+		syncrun.PrintReplayReport(w, res)
+	}
 	syncrun.PrintUnchecked(w, res.Unchecked)
 	owed := append(syncrun.OwedChecks(res.Unchecked), syncrun.OwedLayerSteps(res.LayerSteps)...)
 	owed = append(owed, syncrun.OwedSteps(ran)...)
@@ -1527,6 +1536,9 @@ func (r *RunPlan) finishRebase(b string, p *participant, res wtsync.Result, onto
 	j.SetSync(b, func(jp *syncrun.SyncParticipant) {
 		jp.SafetyRef, jp.UndoCommand, jp.Deferred = jsonout.Strp(res.Safety.Ref), syncrun.UndoCommand(p.work), syncrun.DeferredSteps(ran)
 		jp.LayerSteps = syncrun.LayerStepsOf(res.LayerSteps)
+		if !restored {
+			syncrun.SetReplayReport(jp, res)
+		}
 	})
 	if derr != nil {
 		fmt.Fprintf(w, "  ✗ failed: %v\n", derr)

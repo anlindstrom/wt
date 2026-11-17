@@ -142,6 +142,9 @@ type Config struct {
 	Defer           []Deferred   `yaml:"defer"`
 	EachCommit      []EachCommit `yaml:"each_commit"`
 	DependencyGraph []string     `yaml:"dependency_graph"`
+	// TestPaths are the globs of the test files: a finished rebase names
+	// each commit whose replay kept only these.
+	TestPaths []string `yaml:"test_paths"`
 }
 
 // LoadFromTrunk reads the declaration from origin/<trunk>, never from a
@@ -222,6 +225,11 @@ func Parse(data []byte) (*Config, error) {
 		}
 		if err := checkNeeds(c.Needs); err != nil {
 			return nil, fmt.Errorf("%s: each_commit[%d]: %w", ConfigFile, i, err)
+		}
+	}
+	for i, p := range cfg.TestPaths {
+		if p == "" {
+			return nil, fmt.Errorf("%s: test_paths[%d] is empty: a glob like **/*Test.java names the test files", ConfigFile, i)
 		}
 	}
 	return &cfg, nil

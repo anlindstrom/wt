@@ -173,7 +173,10 @@ type StackRecord struct {
 	Force bool        `json:"force"`
 	Line  Line        `json:"line"`
 	Plans []LayerPlan `json:"plans"`
-	Moves []LayerMove `json:"moves"`
+	// Replay is what the rebase planned for the line's commits, for the
+	// report of what it emptied; nil in a record that predates it.
+	Replay *ReplayPlan `json:"replay,omitempty"`
+	Moves  []LayerMove `json:"moves"`
 }
 
 func stackRecordPath(mainRoot string, epoch int64) (string, error) {

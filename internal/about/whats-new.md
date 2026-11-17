@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-17 06:59 — a rebase names the commits it left nothing of
+
+`wt sync rebase` and `wt sync resume` now say, one line per commit, which
+commits they set out to replay that left no commit (trunk had the change, or a
+conflict was resolved to trunk's side), with the layer for a stack; `--json`
+has them as `emptied`. A `test_paths:` list in `.wt-sync.yaml` also names the
+commits whose replay kept only tests (`testsOnly`). A report, not a stop.
+
 ## 2026-11-16 19:24 — an edit stop moves a fix down a stack
 
 `wt sync rebase <top> --stack --edit <rev>` replays the line in place and

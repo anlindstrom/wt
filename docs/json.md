@@ -1619,6 +1619,27 @@ Each participant has `wt up`'s fields, and:
 | `stack` | object \| null | since 1.6.0: for `wt sync rebase <work> --stack`, and the resume of one it handed over, the [stack held on this worktree's line](#stack--a-stack-held-on-one-line) and what came of each layer; null for any other run, and from undo |
 | `rechecked` | int | since 1.7.0: how many commits the `each_commit` checks that read a per-layer step's files ran at again, once the step folded its output into them or committed it |
 | `layerSteps` | array | since 1.7.0: what each [per-layer step](#layersteps--a-step-at-every-layer-tip) came to at the end of each layer, bottom first; empty when none is declared or the rebase did not finish |
+| `emptied` | array | since `sync-run` 1.10.0: each commit a finished rebase set out to replay that left no commit in the result (trunk already has its change, or a conflict was resolved to trunk's side), oldest first, as [`dropped`](#dropped--a-commit-a-rebase-emptied); empty when none, and when the rebase did not finish |
+| `testsOnly` | array | since `sync-run` 1.10.0: each commit whose replay changed only paths matching the declaration's [`test_paths`](sync-declaration.md#test_paths--the-test-files) while the original changed others too, as `dropped`; empty when none or when none are declared |
+
+### `dropped` — a commit a rebase emptied
+
+An element of `emptied` or `testsOnly`, for `wt sync rebase` (in place, `--onto`
+or `--stack`) and the `wt sync resume` that finishes one. Fixups and squashes
+that `--autosquash` folds, and the commit an `--edit` amend empties on purpose,
+are in neither list. A commit is matched to its replay by author name, email
+and author date plus subject, which a rebase keeps, never by subject alone; where
+wt drove the rebase, the subject is the one the run's own plan says an `amend!` gave
+the commit, and the folds are the ones the plan lists, so a fixup git left out
+because trunk carries its patch is named. The commits an `--edit` amend empties
+on purpose are in neither list, and a run whose line was put back reports neither.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `commit` | string | the original commit's full id, from before the rebase |
+| `subject` | string | its subject |
+| `layer` | string \| null | for a `--stack` run, the layer branch it was in (the line's own branch for a commit above every layer); null otherwise |
+| `unmatched` | bool | true when wt cannot tell whether the commit left no commit, and lists it in `emptied` rather than call it dropped: its author, author date and subject are not in the result, but a commit of the result has its author and date, or its author and subject (its date or subject changed); or, for a rebase wt has no record of the plan of (one a person finished by hand, or an older run), a fixup or an `amend!` could have changed it; or more commits came out under one key than went in, so one of them may be it, changed; or it is a fixup the plan lists as folded, in a rebase wt did not carry out start to finish (a person went on by hand), whose change is not in the result, so it may have been skipped. Always false in `testsOnly`, which leaves such a commit out |
 
 `result` has `wt up`'s values and one more, `undone`: `wt sync undo` put the
 branch back at its safety ref, or aborted its handed-over rebase. A branch undo
@@ -2232,3 +2253,4 @@ change made it.
 | `sync-run` 1.7.0 | [`layerSteps`](#layersteps--a-step-at-every-layer-tip) and `rechecked` on each participant: what a step with `each: layer` or `fold: owner` came to at each layer; `command` `sync steps` for `wt sync steps` |
 | `sync` 1.8.0, `sync-run` 1.8.0, `up` 1.6.0 | [`target`](#target--trunk-or---onto): what `onto` is, trunk or the ref `--onto` names, with `--upstream`'s commit; `onto` is that target's commit. `wt sync <work> --onto <ref> --json` is the overview of that one worktree, and its `token` covers the target |
 | `sync` 1.9.0, `sync-run` 1.9.0 | `edit` on [`stack`](#stack--a-stack-held-on-one-line): what `wt sync rebase <work> --stack --edit <rev>` did to that commit, the paths its amend changed and the commits it emptied; null in the look and for any other run |
+| `sync-run` 1.10.0 | [`emptied` and `testsOnly`](#dropped--a-commit-a-rebase-emptied) on each participant: the commits a finished rebase left nothing of, and, with `test_paths` declared, those it left only the tests of |

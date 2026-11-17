@@ -113,6 +113,26 @@ type SyncParticipant struct {
 	// LayerSteps is what each per-layer step came to at each layer's end,
 	// bottom first; empty when none ran or was due.
 	LayerSteps []LayerStepJSON `json:"layerSteps"`
+	// Emptied is each commit the rebase set out to replay that left no
+	// commit in the result; empty when none, and after a run that did not
+	// finish.
+	Emptied []DroppedJSON `json:"emptied"`
+	// TestsOnly is each commit whose replay kept only the declared
+	// test_paths; empty when none or when none are declared.
+	TestsOnly []DroppedJSON `json:"testsOnly"`
+}
+
+// DroppedJSON is one commit of Emptied or TestsOnly.
+type DroppedJSON struct {
+	// Commit is the original's full id, Subject its subject.
+	Commit  string `json:"commit"`
+	Subject string `json:"subject"`
+	// Layer is the layer branch it was in; null for a rebase that is not
+	// of a stack, and for a commit of no layer.
+	Layer *string `json:"layer"`
+	// Unmatched says the commit could not be told apart from another of the
+	// same author, author date and subject, of which fewer came out.
+	Unmatched bool `json:"unmatched"`
 }
 
 // RunResult is the one object wt sync rebase, resume and undo print with
@@ -277,7 +297,7 @@ func (j *RunJournal) Join(work, branch, path, before string, own *OwnRemoteSync)
 	j.Lock()
 	defer j.Unlock()
 	p := &SyncParticipant{UpParticipant: UpParticipant{Work: work, Branch: branch, Path: path, Result: ResultNotRun,
-		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}}
+		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}, Emptied: []DroppedJSON{}, TestsOnly: []DroppedJSON{}}
 	j.Res.Worktrees = append(j.Res.Worktrees, p)
 	j.byBr[branch] = p
 }
