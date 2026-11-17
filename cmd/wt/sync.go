@@ -174,7 +174,7 @@ func newSyncCmd() *cobra.Command {
 			"  wt sync --profile api         # the overview of a profile's repositories",
 		ValidArgsFunction: completeWork,
 	}
-	var rebase, resume, undo, yes, force, ifReady, allowDiverged, allowOwed, asJSON, stack, autosquash bool
+	var rebase, resume, undo, yes, force, ifReady, allowDiverged, allowOwed, adopt, asJSON, stack, autosquash bool
 	var expect, onto, upstream, edit, eachCommit string
 	var layers []string
 	var sel selectionFlags
@@ -182,7 +182,7 @@ func newSyncCmd() *cobra.Command {
 	flags := func() syncVerbFlags {
 		return syncVerbFlags{rebase: rebase, resume: resume, undo: undo,
 			yes: yes, force: force, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, push: push(),
-			allowDiverged: allowDiverged, allowOwed: allowOwed, json: asJSON, expect: expect,
+			allowDiverged: allowDiverged, allowOwed: allowOwed, adopt: adopt, json: asJSON, expect: expect,
 			stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream}
 	}
 	// The count rule is the verb's own. Two verbs at once is a flag mistake,
@@ -219,7 +219,7 @@ func newSyncCmd() *cobra.Command {
 			})
 		case "resume":
 			return withVerbContext(cmd, args, "sync resume", f.json, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				return syncResume(cmd, args[0], ctx, f.yes, f.allowOwed, f.push, j)
+				return syncResume(cmd, args[0], ctx, f.yes, f.allowOwed, f.adopt, f.push, j)
 			})
 		case "undo":
 			return withVerbContext(cmd, args, "sync undo", f.json, func(ctx *kit.Context, j *syncrun.RunJournal) error {
@@ -258,6 +258,7 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&noFFTrunk, "no-ff-trunk", false, "with --rebase: leave local <trunk> where it is after the fetch")
 	sync.Flags().BoolVar(&allowDiverged, "allow-diverged", false, "with --rebase: rebase a branch that has diverged from its own remote")
 	sync.Flags().BoolVar(&allowOwed, "allow-owed", false, "with --rebase or --resume: rebase now even when a step's need does not answer; the step is owed")
+	sync.Flags().BoolVar(&adopt, "adopt", false, "with --resume: take over a rebase finished by hand with commits made on top (see wt sync resume --help)")
 	sync.Flags().BoolVar(&stack, "stack", false, "list the layer branches on the line of the worktree named, and what holds each")
 	sync.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
 	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --rebase --stack: fold the line's fixups in place; with --onto, as the line moves there")
@@ -534,7 +535,9 @@ type syncVerbFlags struct {
 	// allowOwed rebases even when a step's need does not answer its probe:
 	// that step is owed.
 	allowOwed bool
-	push      syncrun.PushMode
+	// adopt takes over a rebase finished by hand with commits made on top.
+	adopt bool
+	push  syncrun.PushMode
 	// json prints one object on stdout: the overview, or the verb's result.
 	json bool
 	// expect is the overview's token a run must still match.
@@ -604,6 +607,8 @@ func (f syncVerbFlags) check() error {
 		return usagef("--allow-diverged needs --rebase")
 	case f.allowOwed && !rebases:
 		return usagef("--allow-owed needs --rebase or --resume")
+	case f.adopt && verb != "resume":
+		return usagef("--adopt needs --resume")
 	case f.stack && verb != "" && verb != "rebase":
 		return usagef("--stack needs --rebase, or no verb")
 	case len(f.layers) > 0 && !f.stack:
@@ -1136,7 +1141,7 @@ func newSyncStepsCmd() *cobra.Command {
 }
 
 func newSyncResumeCmd() *cobra.Command {
-	var yes, allowOwed, asJSON bool
+	var yes, allowOwed, adopt, asJSON bool
 	var push func() syncrun.PushMode
 	resume := &cobra.Command{
 		Use:   "resume <work>",
@@ -1174,6 +1179,20 @@ func newSyncResumeCmd() *cobra.Command {
 			"back instead.\n\n" +
 			"A --stack run handed over moves its layers here, once the rebase is\n" +
 			"finished, exactly as the run would have.\n\n" +
+			"A rebase you finished by hand and then committed on top of is refused:\n" +
+			"resume cannot tell your commits from a deferred step's. --adopt takes it\n" +
+			"over when the branch's reflog proves that shape: the rebase's own finish,\n" +
+			"from the tip the run started at onto what it rebased onto, then only\n" +
+			"commits added on top, no reset, amend, merge or rebase, and nothing\n" +
+			"uncommitted. It keeps the tip under refs/wt-sync-kept/<branch>/<epoch>-adopted\n" +
+			"before anything moves, moves the layers by the run's own markers (never by\n" +
+			"subject), leaves the commits made after the rebase on top and names them,\n" +
+			"runs the deferred steps, and runs the each_commit checks at every layer's\n" +
+			"tip (none under --each-commit=off). A check that fails, and a per-layer\n" +
+			"step the hand finish skipped, is owed, and nothing is pushed. A plain\n" +
+			"resume that refuses this shape says --adopt is there. wt sync undo after it\n" +
+			"puts the line and its layers back as before the run; the kept ref stays.\n" +
+			"Not for a --stack --edit run or a fold.\n\n" +
 			"At the stop --stack --edit asked for, HEAD is that commit: amend it, or\n" +
 			"add commits, leaving nothing uncommitted, and this replays the rest of\n" +
 			"the line onto what HEAD is then. Before the line moves its content is\n" +
@@ -1187,12 +1206,13 @@ func newSyncResumeCmd() *cobra.Command {
 			"  wt sync resume fix/login-crash --json # by branch; the result as JSON\n" +
 			"  wt sync resume login-crash --no-push  # then print the push command\n" +
 			"  wt sync resume login-crash --yes      # yes to everything, push included\n" +
+			"  wt sync resume login-crash --adopt    # take over a rebase finished by hand\n" +
 			"  wt sync login-crash --resume --push   # resume --push, spelled on wt sync",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withVerbContext(cmd, args, "sync resume", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				return syncResume(cmd, args[0], ctx, yes, allowOwed, push(), j)
+				return syncResume(cmd, args[0], ctx, yes, allowOwed, adopt, push(), j)
 			})
 		},
 	}
@@ -1200,13 +1220,14 @@ func newSyncResumeCmd() *cobra.Command {
 		"neither push nor ask; print the push command")
 	resume.Flags().BoolVarP(&yes, "yes", "y", false, "yes to every question: an idle session, and the push")
 	resume.Flags().BoolVar(&allowOwed, "allow-owed", false, "resume even when a step's need does not answer; the step is owed, to run later")
+	resume.Flags().BoolVar(&adopt, "adopt", false, "take over a rebase finished by hand with commits made on top, when its reflog proves that")
 	resume.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
 	return resume
 }
 
 // syncResume is wt sync resume, whichever way it was spelled.
-func syncResume(cmd *cobra.Command, work string, ctx *kit.Context, yes, allowOwed bool, push syncrun.PushMode, j *syncrun.RunJournal) error {
-	opts := syncfix.ResumeOptions{Journal: j}
+func syncResume(cmd *cobra.Command, work string, ctx *kit.Context, yes, allowOwed, adopt bool, push syncrun.PushMode, j *syncrun.RunJournal) error {
+	opts := syncfix.ResumeOptions{Journal: j, Adopt: adopt}
 	opts.AllowOwed = allowOwed
 	opts.Push = push
 	// --yes answers yes to every question, the push included, unless

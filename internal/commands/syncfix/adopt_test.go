@@ -3,6 +3,8 @@ package syncfix
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -361,5 +363,313 @@ func TestSyncResumeAdoptRefusesWhatItCannotProve(t *testing.T) {
 			}
 			c.assertStill(t, before)
 		})
+	}
+}
+
+// --adopt is for a rebase finished by hand: one still in progress is
+// refused, and nothing moves.
+func TestSyncResumeAdoptRefusesARebaseStillInProgress(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	ctx, s, _ := synccmdtest.CheckedLine(t)
+	if _, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, synccmdtest.NoAgents()); err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	tmp := s.Paths[gittest.StackTmp]
+	head := testkit.GitOut(t, tmp, "rev-parse", "HEAD")
+	refs := testkit.GitOut(t, ctx.Repo.MainRoot, "for-each-ref", "--format=%(refname) %(objectname)")
+	_, _, human, err := resumeRaw(t, ctx, adoptOptions())
+	if err == nil || !strings.Contains(err.Error(), "still in progress") || !strings.Contains(err.Error(), "nothing is resumed") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	if busy, _ := wtsync.RebaseInProgress(tmp); !busy {
+		t.Error("the rebase is no longer in progress")
+	}
+	if got := testkit.GitOut(t, tmp, "rev-parse", "HEAD"); got != head {
+		t.Errorf("HEAD moved to %s", got)
+	}
+	if got := testkit.GitOut(t, ctx.Repo.MainRoot, "for-each-ref", "--format=%(refname) %(objectname)"); got != refs {
+		t.Errorf("refs moved:\n%s\nwas\n%s", got, refs)
+	}
+}
+
+// Under --each-commit=off the adopt runs no check, and owes none.
+func TestSyncResumeAdoptUnderOffChecksNothing(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	// Nothing declared for v.txt: the run stops at s3's bump, yours.
+	ctx, s, logPath := synccmdtest.CheckedLineYAML(t, "conflicts: []\neach_commit:\n  - run: bin/check.sh\n")
+	opts := synccmdtest.NoAgents()
+	opts.EachCommit = "off"
+	if _, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, opts); err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	tmp := s.Paths[gittest.StackTmp]
+	testkit.WriteFile(t, tmp, "v.txt", "1.0.6\n")
+	testkit.GitIn(t, tmp, "add", "v.txt")
+	finishByHand(t, tmp)
+	testkit.WriteFile(t, tmp, "adapt.txt", "adapted\n")
+	testkit.GitIn(t, tmp, "add", "adapt.txt")
+	testkit.GitIn(t, tmp, "commit", "-q", "--no-verify", "-m", "fixup! feat(s1): a2.txt")
+	head := testkit.GitOut(t, tmp, "rev-parse", "HEAD")
+	res, _, human, err := resumeRaw(t, ctx, adoptOptions())
+	// Only the held layers keep it from completing.
+	if err == nil || strings.Contains(err.Error(), "owed") || !strings.Contains(err.Error(), "2 layers held") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	if got := synccmdtest.CheckedSubjects(t, logPath); len(got) != 0 {
+		t.Errorf("checks ran at %q under off", got)
+	}
+	if p := synccmdtest.Participant(t, res, gittest.StackTmp); p.Result != syncrun.ResultRebased || p.EachCommit != "off" {
+		t.Errorf("participant %s %q", p.Result, p.EachCommit)
+	}
+	if got := testkit.GitOut(t, tmp, "rev-parse", "HEAD"); got != head {
+		t.Errorf("the line is at %s, want the adopted tip %s", got, head)
+	}
+}
+
+// An adopt checks lower tips in a worktree of its own and removes only that
+// one: a detached worktree of somebody else's, whose directory is gone (a
+// disk unplugged), keeps its registration and its HEAD, which may be the
+// only thing keeping its commits alive.
+func TestSyncResumeAdoptLeavesOtherWorktreesRegistered(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	c := newAdoptCase(t)
+	c.addFixups(t)
+	main := c.ctx.Repo.MainRoot
+	offline := filepath.Join(t.TempDir(), "offline")
+	testkit.GitIn(t, main, "worktree", "add", "-q", "--detach", offline, c.s.Tips["s1"])
+	admin := filepath.Join(main, ".git", "worktrees", "offline")
+	head := readFile(t, filepath.Join(admin, "HEAD"))
+	if err := os.RemoveAll(offline); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, human, err := resumeRaw(t, c.ctx, adoptOptions()); err == nil || !strings.Contains(human, "▸ check s1 at its tip") {
+		t.Fatalf("err %v; no lower tip was checked, so the test is vacuous\n%s", err, human)
+	}
+	if got, err := os.ReadFile(filepath.Join(admin, "HEAD")); err != nil || string(got) != head {
+		t.Fatalf("the offline worktree's registration: HEAD %q, %v; want %q", got, err, head)
+	}
+	if list := testkit.GitOut(t, main, "worktree", "list", "--porcelain"); !strings.Contains(list, offline) {
+		t.Errorf("the offline worktree is no longer listed:\n%s", list)
+	}
+	assertNoTipWorktree(t, main)
+}
+
+// assertNoTipWorktree is no registration of a check's temporary worktree
+// left in the repository.
+func assertNoTipWorktree(t *testing.T, main string) {
+	t.Helper()
+	left, err := filepath.Glob(filepath.Join(main, ".git", "worktrees", "tip*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Errorf("a check's worktree is still registered: %q", left)
+	}
+}
+
+// A check only an adopted commit calls for has its needs probed before
+// anything moves: a need that does not answer refuses the adopt, and under
+// --allow-owed the check is owed, not run.
+func TestSyncResumeAdoptProbesTheNeedsOfChecksTheAdoptedCommitsCallFor(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	ran := filepath.Join(t.TempDir(), "docker-check.log")
+	yaml := synccmdtest.StackYAML + "each_commit:\n  - run: bin/check.sh\n  - run: echo ran >> '" + ran + "'\n    paths: [adapt.txt]\n    needs: [docker]\n"
+	ctx, s, _ := synccmdtest.CheckedLineYAML(t, yaml)
+	run := synccmdtest.NoAgents()
+	run.Probes = (&synccmdtest.Probe{}).Probes()
+	if _, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, run); err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	c := &adoptCase{ctx: ctx, s: s, tmp: s.Paths[gittest.StackTmp]}
+	var err error
+	if c.gitDir, err = wtsync.GitDir(c.tmp); err != nil {
+		t.Fatal(err)
+	}
+	c.st, _, _ = wtsync.ReadState(c.gitDir)
+	finishByHand(t, c.tmp)
+	c.finish = testkit.GitOut(t, c.tmp, "rev-parse", "HEAD")
+	c.addFixups(t)
+	before := c.snapshot(t)
+
+	docker := synccmdtest.DockerDown()
+	opts := adoptOptions()
+	opts.Probes = docker.Probes()
+	if _, _, human, err := resumeRaw(t, ctx, opts); err == nil || !strings.Contains(err.Error(), "docker") || !strings.Contains(err.Error(), "nothing is resumed") {
+		t.Fatalf("err %v, want the adopt refused for docker\n%s", err, human)
+	}
+	c.assertStill(t, before)
+
+	opts.AllowOwed = true
+	_, _, human, err := resumeRaw(t, ctx, opts)
+	if err == nil || !strings.Contains(err.Error(), "echo ran") {
+		t.Fatalf("err %v, want the docker check owed\n%s", err, human)
+	}
+	if _, rerr := os.Stat(ran); rerr == nil {
+		t.Errorf("the check whose need did not answer ran\n%s", human)
+	}
+}
+
+// An interrupt while a lower tip is checked: the --json result says what was
+// adopted and where the tip is kept, the interrupt says the checks are owed,
+// no check worktree is left registered, and wt sync undo then puts back the
+// line and every layer.
+func TestSyncResumeAdoptInterruptedWhileCheckingATip(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("interrupts a real run with a signal")
+	}
+	if os.Getenv(testkit.InterruptChild) != "" {
+		interruptedAdopt(t)
+		return
+	}
+	out, status := testkit.InterruptedChild(t)
+	if status != kit.InterruptStatus {
+		t.Fatalf("status %d; the adopt was not interrupted:\n%s", status, out)
+	}
+	var main, tips string
+	for _, line := range strings.Split(out, "\n") {
+		if v, ok := strings.CutPrefix(line, "MAIN="); ok {
+			main = v
+		}
+		if v, ok := strings.CutPrefix(line, "TIPS="); ok {
+			tips = v
+		}
+	}
+	start := strings.Index(out, "{")
+	if main == "" || start < 0 {
+		t.Fatalf("the child said no repository or printed no result:\n%s", out)
+	}
+	var res map[string]any
+	if err := json.NewDecoder(strings.NewReader(out[start:])).Decode(&res); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	row := res["worktrees"].([]any)[0].(map[string]any)
+	adopted, _ := row["adopted"].(map[string]any)
+	kept := wtsync.AdoptKeptRef(gittest.StackTmp, 99)
+	if adopted["keptRef"] != kept {
+		t.Errorf("an interrupted adopt reports adopted %v, want the kept ref %s\n%s", row["adopted"], kept, out)
+	}
+	recovery, _ := row["recovery"].(string)
+	if row["result"] != "interrupted" || !strings.Contains(recovery, "owed") || !strings.Contains(recovery, kept) {
+		t.Errorf("result %v, recovery %q; want interrupted, the checks owed and the kept ref", row["result"], recovery)
+	}
+	assertNoTipWorktree(t, main)
+	ctx, err := kit.Open(main, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var undo bytes.Buffer
+	if err := SyncUndo(ctx, gittest.StackTmp, noAgentsUndo(), &undo); err != nil {
+		t.Fatalf("undo after the interrupt: %v\n%s", err, undo.String())
+	}
+	for _, pair := range strings.Fields(tips) {
+		b, sha, _ := strings.Cut(pair, "=")
+		if got := testkit.GitOut(t, main, "rev-parse", b); got != sha {
+			t.Errorf("%s is at %s after the undo, want %s", b, got, sha)
+		}
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", kept); got == "" {
+		t.Error("the kept ref is gone")
+	}
+}
+
+// interruptedAdopt is the child half: the issue's case with a check that
+// interrupts wt the first time it runs at a lower tip, in the check's own
+// worktree.
+func interruptedAdopt(t *testing.T) {
+	yaml := synccmdtest.StackYAML + "each_commit:\n  - run: bin/check.sh\n  - run: 'case \"$PWD\" in *wt-sync-tip*) kill -INT $PPID; sleep 30;; esac'\n"
+	ctx, s, _ := synccmdtest.CheckedLineYAML(t, yaml)
+	if _, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, synccmdtest.NoAgents()); err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	c := &adoptCase{ctx: ctx, s: s, tmp: s.Paths[gittest.StackTmp]}
+	finishByHand(t, c.tmp)
+	c.addFixups(t)
+	var tips []string
+	for _, b := range append([]string{gittest.StackTmp}, s.Layers...) {
+		tips = append(tips, b+"="+s.Tips[b])
+	}
+	fmt.Fprintf(os.Stderr, "MAIN=%s\nTIPS=%s\n", ctx.Repo.MainRoot, strings.Join(tips, " "))
+	opts := adoptOptions()
+	opts.Journal = syncrun.NewSyncRunJournal(os.Stdout, "sync resume")
+	err := SyncResume(ctx, gittest.StackTmp, opts, io.Discard)
+	t.Fatalf("the adopt returned (%v) instead of being interrupted", err)
+}
+
+// adoptWith is the issue's case on a declaration of its own: the run stopped
+// at bin/check.sh, finished by hand, the fixups on top.
+func adoptWith(t *testing.T, yaml string) *adoptCase {
+	t.Helper()
+	ctx, s, _ := synccmdtest.CheckedLineYAML(t, yaml)
+	run := synccmdtest.NoAgents()
+	run.Probes = (&synccmdtest.Probe{}).Probes()
+	if _, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, run); err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	c := &adoptCase{ctx: ctx, s: s, tmp: s.Paths[gittest.StackTmp]}
+	var err error
+	if c.gitDir, err = wtsync.GitDir(c.tmp); err != nil {
+		t.Fatal(err)
+	}
+	c.st, _, _ = wtsync.ReadState(c.gitDir)
+	finishByHand(t, c.tmp)
+	c.finish = testkit.GitOut(t, c.tmp, "rev-parse", "HEAD")
+	c.addFixups(t)
+	return c
+}
+
+// Two each_commit entries with the same command are two checks, each with
+// its own paths and needs: the second one's need is probed too.
+func TestSyncResumeAdoptProbesEveryEntryOfACommandDeclaredTwice(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	ran := filepath.Join(t.TempDir(), "twice.log")
+	step := "echo ran >> '" + ran + "'"
+	c := adoptWith(t, synccmdtest.StackYAML+"each_commit:\n  - run: bin/check.sh\n  - run: "+step+"\n    paths: [a1.txt]\n  - run: "+step+"\n    paths: [adapt.txt]\n    needs: [docker]\n")
+	before := c.snapshot(t)
+	opts := adoptOptions()
+	opts.Probes = synccmdtest.DockerDown().Probes()
+	if _, _, human, err := resumeRaw(t, c.ctx, opts); err == nil || !strings.Contains(err.Error(), "docker") || !strings.Contains(err.Error(), "nothing is resumed") {
+		t.Fatalf("err %v, want the adopt refused for the second entry's docker\n%s", err, human)
+	}
+	c.assertStill(t, before)
+}
+
+// A check that only the deferred steps' committed output calls for has its
+// needs probed before it runs. The layers have moved by then, so a need that
+// does not answer owes the check rather than refusing.
+func TestSyncResumeAdoptProbesTheNeedsOfChecksTheDeferredOutputCallsFor(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	ran := filepath.Join(t.TempDir(), "gen-check.log")
+	c := adoptWith(t, synccmdtest.StackYAML+"each_commit:\n  - run: bin/check.sh\n  - run: echo ran >> '"+ran+"'\n    paths: [t.txt]\n    needs: [docker]\n"+
+		"defer:\n  - run: echo generated >> t.txt\n    commit: \"chore: generate\"\n")
+	opts := adoptOptions()
+	opts.Probes = synccmdtest.DockerDown().Probes()
+	_, _, human, err := resumeRaw(t, c.ctx, opts)
+	if testkit.GitOut(t, c.tmp, "log", "-1", "--format=%s") != "chore: generate" {
+		t.Fatalf("the deferred step committed nothing, so the test is vacuous: %v\n%s", err, human)
+	}
+	if _, serr := os.Stat(ran); serr == nil {
+		t.Errorf("the check whose need was never probed ran\n%s", human)
+	}
+	if err == nil || !strings.Contains(err.Error(), "echo ran") {
+		t.Errorf("err %v, want the check owed\n%s", err, human)
 	}
 }

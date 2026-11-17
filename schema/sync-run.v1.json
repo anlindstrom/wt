@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.11.0",
+  "x-version": "1.12.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync [<work>...] --rebase --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -59,7 +59,7 @@
     },
     "participant": {
       "type": "object",
-      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "layerSteps", "emptied", "testsOnly"],
+      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "layerSteps", "emptied", "testsOnly", "adopted"],
       "properties": {
         "work": { "type": "string" },
         "branch": { "type": "string" },
@@ -117,7 +117,32 @@
         "stack": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stack" }], "description": "Since 1.6.0: for a --stack run, the stack held on this worktree's line: its layers and what came of each. Null for any other run." },
         "layerSteps": { "type": "array", "items": { "$ref": "#/$defs/layerStep" }, "description": "Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish." },
         "emptied": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit a finished rebase set out to replay that left no commit in the result: trunk already had its change, or a conflict was resolved to trunk's side. Oldest first. Fixups and squashes folded by --autosquash and the commit --edit amends are not listed. Empty when none, and when the rebase did not finish." },
-        "testsOnly": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit whose replay changed only paths matching the declaration's test_paths while the original changed others too. Empty when none, when no test_paths is declared, and when the rebase did not finish." }
+        "testsOnly": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit whose replay changed only paths matching the declaration's test_paths while the original changed others too. Empty when none, when no test_paths is declared, and when the rebase did not finish." },
+        "adopted": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/adopted" }],
+          "description": "Since 1.12.0: for wt sync resume --adopt, the rebase finished by hand that it took over. Null for every other run, and for a resume --adopt that refused."
+        }
+      }
+    },
+    "adopted": {
+      "type": "object",
+      "description": "Since 1.12.0: what wt sync resume --adopt took over. See docs/json.md.",
+      "required": ["keptRef", "rebaseTip", "commits"],
+      "properties": {
+        "keptRef": { "type": "string", "description": "The ref that keeps the tip resume found, made before anything moved and never moved after: refs/wt-sync-kept/<branch>/<epoch>-adopted, or -adopted-2 and so on when that is taken. wt sync undo leaves it." },
+        "rebaseTip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where the rebase itself finished: the layers are read and moved against it." },
+        "commits": {
+          "type": "array",
+          "description": "The commits made after the rebase, oldest first: rebaseTip..the tip resume found. They stay on the line's own branch.",
+          "items": {
+            "type": "object",
+            "required": ["commit", "subject"],
+            "properties": {
+              "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+              "subject": { "type": "string" }
+            }
+          }
+        }
       }
     },
     "ownRemoteSync": {

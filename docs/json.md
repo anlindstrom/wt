@@ -1622,6 +1622,7 @@ Each participant has `wt up`'s fields, and:
 | `layerSteps` | array | since 1.7.0: what each [per-layer step](#layersteps--a-step-at-every-layer-tip) came to at the end of each layer, bottom first; empty when none is declared or the rebase did not finish |
 | `emptied` | array | since `sync-run` 1.10.0: each commit a finished rebase set out to replay that left no commit in the result (trunk already has its change, or a conflict was resolved to trunk's side), oldest first, as [`dropped`](#dropped--a-commit-a-rebase-emptied); empty when none, and when the rebase did not finish |
 | `testsOnly` | array | since `sync-run` 1.10.0: each commit whose replay changed only paths matching the declaration's [`test_paths`](sync-declaration.md#test_paths--the-test-files) while the original changed others too, as `dropped`; empty when none or when none are declared |
+| `adopted` | object \| null | since `sync-run` 1.12.0: for `wt sync resume --adopt`, the [rebase finished by hand](sync-declaration.md#wt-sync-resume---adopt--a-rebase-finished-by-hand) it took over: `keptRef` (the ref that keeps the tip it found, made before anything moved: `refs/wt-sync-kept/<branch>/<epoch>-adopted`, or `-adopted-2` and on when that is taken; undo leaves it), `rebaseTip` (where the rebase itself finished, which the layers are moved against) and `commits` (the commits made after the rebase, oldest first, each `commit` and `subject`; they stay on the branch). A check that failed at a tip is in `failedSteps`. Null for every other run, and for a resume `--adopt` refused |
 
 ### `dropped` — a commit a rebase emptied
 
@@ -2256,3 +2257,4 @@ change made it.
 | `sync` 1.9.0, `sync-run` 1.9.0 | `edit` on [`stack`](#stack--a-stack-held-on-one-line): what `wt sync rebase <work> --stack --edit <rev>` did to that commit, the paths its amend changed and the commits it emptied; null in the look and for any other run |
 | `sync-run` 1.10.0 | [`emptied` and `testsOnly`](#dropped--a-commit-a-rebase-emptied) on each participant: the commits a finished rebase left nothing of, and, with `test_paths` declared, those it left only the tests of |
 | `sync-run` 1.11.0 | `eachCommit` on each participant: `all`, `tips` or `off`, the run's `--each-commit` mode; the commits skipped under `tips` and `off` are not owed |
+| `sync-run` 1.12.0 | `adopted` on each participant: what `wt sync resume --adopt` took over, the ref keeping the tip it found, where the rebase finished, and the commits made after it |

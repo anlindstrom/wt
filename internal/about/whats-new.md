@@ -4,6 +4,15 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-17 10:27 — resume --adopt takes over a rebase finished by hand
+
+`wt sync resume <work> --adopt` takes over a rebase you finished with
+`git rebase --continue` and then committed on top of, when the branch's reflog
+proves that shape. It keeps the tip under a ref first, moves the layers by the
+run's own markers, leaves your commits on top and names them, runs the deferred
+steps and checks every layer's tip. What fails is owed. A plain resume that
+refuses this shape now says `--adopt` is there.
+
 ## 2026-11-17 08:30 — list-union merges next to a blank line and inside one line
 
 `list-union` no longer refuses a conflict because trunk added a blank line or

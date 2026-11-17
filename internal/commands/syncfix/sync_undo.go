@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/anlindstrom/wt/internal/agents"
 	"github.com/anlindstrom/wt/internal/commands/kit"
@@ -127,6 +129,7 @@ func syncUndo(ctx *kit.Context, work string, opts UndoOptions, w io.Writer) erro
 		rowWork := kit.WorktreeName(ctx, r.Branch, paths[r.Branch])
 		fmt.Fprintln(w, restoredLine(rowWork, r))
 		recordUndone(opts.Journal, rowWork, r)
+		tellAdoptedKept(ctx.Repo.MainRoot, w, opts.Journal, r)
 		switch {
 		case r.From == r.To && !r.Aborted:
 			// Nothing moved under anybody.
@@ -137,6 +140,37 @@ func syncUndo(ctx *kit.Context, work string, opts UndoOptions, w io.Writer) erro
 		}
 	}
 	return err
+}
+
+// tellAdoptedKept says where the tip a resume --adopt took over is still
+// kept, for a branch undo put back past it: the commits made after that
+// rebase are off the branch now, and only that ref holds them.
+func tellAdoptedKept(main string, w io.Writer, j *syncrun.RunJournal, r wtsync.Restored) {
+	cut := strings.LastIndex(r.Ref, "/")
+	if cut < 0 || r.From == r.To {
+		return
+	}
+	epoch, err := strconv.ParseInt(r.Ref[cut+1:], 10, 64)
+	if err != nil || r.Ref != wtsync.SafetyRef(r.Branch, epoch) {
+		return
+	}
+	kept, err := wtsync.AdoptedKept(main, r.Branch, epoch)
+	if err != nil {
+		fmt.Fprintf(w, "  note: whether %s's adopted tip is kept could not be read: %v\n", r.Branch, err)
+		return
+	}
+	for _, k := range kept {
+		line := fmt.Sprintf("the adopted tip %s is still kept under %s", git.ShortID(k.Tip, 7), k.Ref)
+		fmt.Fprintf(w, "  ⚑ %s\n", line)
+		if j != nil {
+			j.SetSync(r.Branch, func(p *syncrun.SyncParticipant) {
+				if p.Reason != nil {
+					line = *p.Reason + "; " + line
+				}
+				p.Reason = jsonout.Strp(line)
+			})
+		}
+	}
 }
 
 // recordUndone records what undo did to one branch: put back, found there

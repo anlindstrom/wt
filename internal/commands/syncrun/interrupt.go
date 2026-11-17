@@ -26,6 +26,10 @@ type RebaseInFlight struct {
 	// Forwarding is set while the run fast-forwards the branch to its own
 	// remote, before any rebase has started: there is nothing to abort.
 	Forwarding bool
+	// Adopted is the ref keeping the tip wt sync resume --adopt took over,
+	// set while it checks the tips once the line is finished: the result is
+	// pinned and the layers moved, and only the checks are left.
+	Adopted string
 }
 
 // RebaseTracker carries that across goroutines: the command sets it, the
@@ -88,6 +92,9 @@ func OnInterrupt(w io.Writer, locks []*wtsync.Lock, at *RebaseInFlight) {
 	switch {
 	case at == nil:
 		fmt.Fprintln(w, "\ninterrupted")
+	case at.Adopted != "":
+		fmt.Fprintf(w, "\ninterrupted while checking the tips of %s: it is adopted and its layers are moved, and the checks that did not finish are owed; the adopted tip is kept under %s, and %s\n",
+			at.Work, at.Adopted, wtsync.WayOut(wtsync.Way{Work: at.Work, Result: true}))
 	case at.Rebased:
 		// The run never got to pin where it left the branch, so a plain
 		// undo would refuse it as moved since the run.

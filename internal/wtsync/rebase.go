@@ -261,6 +261,9 @@ type Result struct {
 	// commit in the result, and TestsOnly each whose replay kept only the
 	// test paths the declaration names; set when the rebase finished.
 	Emptied, TestsOnly []Dropped
+	// Adopted is the rebase finished by hand that resume --adopt took
+	// over; nil for any other.
+	Adopted *Adoption
 	// Replay is the plan a rebase of a stack read from its list; nil for
 	// any other.
 	Replay *ReplayPlan

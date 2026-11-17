@@ -1,6 +1,6 @@
 export default {
   "schema": 1,
-  "schemaVersion": "1.11.0",
+  "schemaVersion": "1.12.0",
   "command": "sync undo",
   "repo": "/repos/app",
   "trunk": "main",
@@ -38,7 +38,8 @@ export default {
       "stack": null,
       "layerSteps": [],
       "emptied": [],
-      "testsOnly": []
+      "testsOnly": [],
+      "adopted": null
     }
   ],
   "recovery": null
