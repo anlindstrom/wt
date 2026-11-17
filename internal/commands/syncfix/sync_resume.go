@@ -148,6 +148,9 @@ func (r *resume) joinJournal() {
 	r.j.Join(r.name, st.Branch, r.target.Path, found, nil)
 	r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) {
 		p.SafetyRef, p.PlanFile = jsonout.Strp(st.Safety), syncrun.PlanFileOf(r.target.Path)
+		// The run's own mode, also for a resume refused or interrupted
+		// before its rebase says it.
+		p.EachCommit, _ = wtsync.EachCommitMode(st.EachCommit)
 	})
 }
 
@@ -299,8 +302,9 @@ func (r *resume) probeNeeds() error {
 	if err != nil {
 		return fmt.Errorf("%s: could not tell which steps the rest of the rebase runs: %w; nothing is resumed", r.name, err)
 	}
-	if !r.busy {
-		// Finished by hand: only the deferred steps are left.
+	if !r.busy || st.EachCommit == wtsync.EachOff {
+		// Finished by hand, or a run whose checks are off: only the deferred
+		// steps are left.
 		due.Checks, due.CheckCommits = nil, nil
 	}
 	unavailable, refusal := syncrun.NeedsFor(r.opts.Prober(), due, r.opts.AllowOwed)
@@ -347,6 +351,8 @@ func (r *resume) rebase() (wtsync.Result, error) {
 		Unavailable: r.unavailable, HandedAt: st.Stop, HandedHead: st.Head,
 	}
 	req.UncheckedBefore = st.Unchecked
+	// The run's own mode, whatever the flags of this resume (it has none).
+	req.EachCommit = st.EachCommit
 	if st.Edit != nil {
 		// A --stack --edit run goes on in place, its content held at the
 		// end of the list to the old line with the edit merged in.
@@ -387,6 +393,7 @@ func (r *resume) rebase() (wtsync.Result, error) {
 	})
 	r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) {
 		p.Checked, p.CheckFailed, p.Rechecked = res.Checked, syncrun.CheckFailedOf(res.CheckFailed), res.Rechecked
+		p.EachCommit = cmp.Or(res.EachCommit, p.EachCommit)
 	})
 	if rerr != nil && res.Restored {
 		// An edit run whose content was refused: the rebase is put back,
@@ -453,6 +460,9 @@ func (r *resume) complete(res wtsync.Result) error {
 		line += " onto " + st.OntoRef
 	}
 	fmt.Fprintln(r.w, line)
+	if note := wtsync.EachCommitNote(res.EachCommit, res.Layered); note != "" {
+		fmt.Fprintf(r.w, "    %s\n", note)
+	}
 	_, ran, cerr := syncrun.CompleteRun(r.ctx, r.w, r.cfg, r.tracker, name, r.target.Path, func() syncrun.CompleteInput {
 		// As a run does: the tip the run found is what the deferred steps
 		// compare with and what the undo line names.

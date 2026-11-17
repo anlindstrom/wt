@@ -102,6 +102,9 @@ type State struct {
 	// that stop: HEAD the commit, for a person to amend.
 	Edit   *EditStop `json:"edit,omitempty"`
 	AtEdit bool      `json:"at_edit,omitempty"`
+	// EachCommit is where the run's each_commit checks run: all, tips or
+	// off. Empty, as in a sidecar written before the flag existed, is all.
+	EachCommit string `json:"each_commit,omitempty"`
 }
 
 // CheckStop is a failed check as the handover records it.
@@ -348,6 +351,10 @@ type PlanInput struct {
 	Landing  Landing
 	Handover Handover
 	Config   *Config
+	// EachCommit is the run's --each-commit mode; the plan says so when it
+	// is not all. Stacked says the run has layers.
+	EachCommit string
+	Stacked    bool
 }
 
 // RenderPlan writes the brief left at a stop (PlanName): what landed, what
@@ -370,6 +377,9 @@ func RenderPlan(in PlanInput) (string, error) {
 		scopes = "none named"
 	}
 	fmt.Fprintf(&b, "%s. scopes: %s\n", in.Landing.Header(), scopes)
+	if note := EachCommitNote(in.EachCommit, in.Stacked); note != "" {
+		fmt.Fprintf(&b, "%s\n", note)
+	}
 	fmt.Fprintf(&b, "stopped at stop %d/%d", in.Handover.Index, in.Handover.Total)
 	if in.Handover.Subject != "" {
 		fmt.Fprintf(&b, ", replaying %q", oneLinePlan(in.Handover.Subject))

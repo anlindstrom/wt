@@ -176,6 +176,46 @@ lift amended in. A commit git drops as empty is not checked. Steps run in the
 order declared, each under its own 30 minutes; the first that fails stops the
 rest. A check must not change tracked files: one that does has failed.
 
+### `--each-commit` — where the checks run, for one run
+
+`wt sync rebase --each-commit=all|tips|off` says where this run's checks run.
+`.wt-sync.yaml` has no key for it: the declaration stays what every run is
+held to, and the flag is a person's choice for one.
+
+| mode | the checks run |
+|---|---|
+| `all` | the default: at every replayed commit that touches a step's `paths` |
+| `tips` | only at a layer's tip with `--stack` (each layer branch the line moves, and the line's own tip), and at the branch's tip without it |
+| `off` | nowhere |
+
+Use `tips` for a line whose commits do not compile one by one: trunk removed
+a method the line used, and the adaptation exists only on top of the rebased
+line, so a check at the first commit that touches it can never pass. A check is
+due at a tip when any commit replayed in that layer touched the step's `paths`
+(a step with no `paths` is due at every tip), and its `needs` are judged as
+now. A layer ends where the rebased line ends it, so a layer whose own tip trunk
+carries, or that git drops as empty, is checked at the last commit of it that
+stays, and a layer whose last commit is a fixup folded in by `--autosquash`
+is checked at the commit it folded into. A layer with a commit that called for
+a check is checked once, never zero times; a layer none of whose commits
+stays has nothing to check. A failure stops at that tip like any other: fix it, amend the
+fix in, `wt sync resume <work>`. `retry`, a script the commit predates and
+`--allow-owed` work as in `all`, at fewer commits.
+
+`tips` gives up bisectability for the run: the commits between the tips were
+never checked, and a `git bisect` over them can land on one that does not
+build. They are not owed, since leaving them out was the person's choice; the
+plan file and the end of the run say which mode ran, and so does `--json`
+(`eachCommit`). `off` runs no `each_commit` check at all and says so the same
+way.
+
+A resume takes no `--each-commit`: it goes on with the mode its run was
+given, which the handover records. `--each-commit=tips` with `--edit` is
+refused, since an edit run's checks sit at the commits above the edit; with
+`--autosquash`, `--onto` and `--if-ready` it means what it says (the
+fixups are folded in, the target is where the line goes, and an `--if-ready`
+run is still refused or taken as before).
+
 ### `retry` — a second go at the same commit
 
 A build tool's output from the commit before can make `run` fail at a commit

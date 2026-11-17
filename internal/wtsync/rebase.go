@@ -165,6 +165,9 @@ type Request struct {
 	Safety Safety
 	// Stack is a rebase of a stack held on the line: nil for any other.
 	Stack *StackRequest
+	// EachCommit is where the each_commit checks run: EachAll (also empty),
+	// EachTips or EachOff. A resume takes the run's own, from its state.
+	EachCommit string
 	// Steps names the per-layer steps to run, by their run; nil runs every
 	// one declared.
 	Steps map[string]bool
@@ -263,6 +266,11 @@ type Result struct {
 	Replay *ReplayPlan
 	// Checked is how many replayed commits the each_commit checks ran at.
 	Checked int
+	// EachCommit is where the run's each_commit checks ran: all, tips, off.
+	EachCommit string
+	// Layered says the run is a stack's: its line is known, whether or not
+	// per-layer steps are declared (Layers is set only for those).
+	Layered bool
 	// CheckFailed is the check that failed, whether the stop was handed
 	// over (Left.Check) or restored.
 	CheckFailed *CheckFailure
@@ -317,6 +325,13 @@ type driver struct {
 	before string
 	// checks is the commits the each_commit steps run after, full ids.
 	checks []string
+	// callSteps is, under --each-commit=tips, the indexes of the steps each
+	// of them calls for. layerIDs is the commands of the layer a check stop
+	// ends, as the list names their commits, and layerEdit whether one was
+	// an edit.
+	callSteps map[string][]int
+	layerIDs  []string
+	layerEdit bool
 	// checkTail is the abbreviated id of the last fixup or squash folded
 	// into the commit at a check stop, as the sequencer's done list names
 	// it; empty for a pick with none.
@@ -447,7 +462,15 @@ func (d *driver) fail(err error) (Result, error) {
 // children. An error is a git failure, after a restore to the safety ref,
 // or a restore that could not be verified.
 func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, error) {
-	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, res: Result{Branch: req.Branch, Edit: req.Edit},
+	mode, err := EachCommitMode(req.EachCommit)
+	if err != nil {
+		return Result{Branch: req.Branch}, err
+	}
+	if mode == EachTips && req.Edit != nil {
+		return Result{Branch: req.Branch}, errors.New("--each-commit=tips cannot be combined with --edit: the checks of an edit run sit at the commits above the edit")
+	}
+	req.EachCommit = mode
+	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, res: Result{Branch: req.Branch, Edit: req.Edit, EachCommit: mode, Layered: req.Stack != nil || req.ReportLine != nil},
 		stepFailed: map[string]int{}, made: map[string]bool{}}
 	old, err := d.git("rev-parse", "--verify", req.Branch)
 	if err != nil {
@@ -513,7 +536,7 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 		return early(err)
 	}
 	d.liftMarks = lift.marks
-	plan := todoPlan{liftPlan: lift, checks: d.checks}
+	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: req.EachCommit == EachTips}
 	plan.stops, plan.tail = d.layerStops()
 	plan.edit, plan.final = d.editMarks()
 	if req.Stack != nil {
@@ -667,11 +690,15 @@ func shellQuote(s string) string {
 // and certifying it would let a later undo discard commits the run never
 // made.
 func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety, log io.Writer) (Result, error) {
+	mode, err := EachCommitMode(req.EachCommit)
+	if err != nil {
+		return Result{Branch: req.Branch}, err
+	}
+	req.EachCommit = mode
 	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true,
-		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, Edit: req.Edit}, stepFailed: map[string]int{}, made: map[string]bool{}}
+		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, Edit: req.Edit, EachCommit: mode, Layered: req.Stack != nil || req.ReportLine != nil}, stepFailed: map[string]int{}, made: map[string]bool{}}
 	d.restoreLayers(req.Resumed)
 	d.res.Unchecked = slices.Clone(req.UncheckedBefore)
-	var err error
 	if d.res.SignaturesDropped, err = signedCount(req.Path, req.base(), old); err != nil {
 		return d.res, err
 	}
@@ -854,10 +881,13 @@ func (d *driver) markTodo() error {
 		return err
 	}
 	d.liftMarks = lift.marks
-	plan := todoPlan{liftPlan: lift, checks: d.checks}
+	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: d.req.EachCommit == EachTips}
 	plan.stops, plan.tail = d.layerStops()
 	plan.edit, plan.final = d.editMarks()
 	if plan.open, plan.due, err = d.stoppedGroup(); err != nil {
+		return err
+	}
+	if plan.carry, err = d.tipCarry(); err != nil {
 		return err
 	}
 	if !plan.edits() {

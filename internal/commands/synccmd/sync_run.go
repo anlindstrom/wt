@@ -42,6 +42,10 @@ type RunOptions struct {
 	// is lifted — dirt, a handover, another run's lock. A run with nothing
 	// named does not take it: that would roll over every session at once.
 	Force bool
+	// EachCommit is where the each_commit checks run: "all" (also "") at
+	// every replayed commit that touches their paths, "tips" at the end of
+	// each layer only, "off" nowhere.
+	EachCommit string
 	// Journal records what the run does, participant by participant, for
 	// --json; nil records nothing.
 	Journal *syncrun.RunJournal
@@ -148,10 +152,12 @@ type participant struct {
 // to. SyncRebase drives it through its phases in order: selectBranches, triage,
 // lockAll, then rebaseOne per worktree.
 type RunPlan struct {
-	ctx     *kit.Context
-	opts    RunOptions
-	w       io.Writer
-	tracker *syncrun.RebaseTracker
+	ctx  *kit.Context
+	opts RunOptions
+	// eachCommit is the run's --each-commit mode, checked: all, tips, off.
+	eachCommit string
+	w          io.Writer
+	tracker    *syncrun.RebaseTracker
 
 	trunk    string // trunk as a person says it, "main"
 	onto     string // what the run rebases onto, "origin/main"
@@ -241,6 +247,15 @@ func (r *RunPlan) run(works []string) error {
 	w, opts := r.w, r.opts
 	defer syncrun.WatchSignals(w, r.tracker)()
 
+	mode, err := wtsync.EachCommitMode(opts.EachCommit)
+	if err != nil {
+		return err
+	}
+	r.eachCommit = mode
+	if mode == wtsync.EachTips && opts.Stack != nil && opts.Stack.Edit != "" {
+		return errors.New("--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after")
+	}
+	opts.Journal.SetEachCommit(mode)
 	if err := ontoUsage(works, opts.Onto, opts.Upstream); err != nil {
 		return err
 	}
@@ -884,6 +899,10 @@ func (r *RunPlan) probeNeeds() {
 			r.refuseAbove(b, p.work+" was refused")
 			continue
 		}
+		if r.eachCommit == wtsync.EachOff {
+			// A check that is off needs nothing; a deferred step still does.
+			due.Checks, due.CheckCommits = nil, nil
+		}
 		unavailable, refusal := syncrun.NeedsFor(prober, due, r.opts.AllowOwed)
 		if refusal != "" {
 			p.refused = p.work + ": " + refusal
@@ -1332,7 +1351,8 @@ func (r *RunPlan) passOver(b string, p *participant) bool {
 // did not go, which settled the worktree.
 func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLabel string, ok bool) {
 	w, j := r.w, r.opts.Journal
-	req = wtsync.Request{Path: p.wt.Path, Branch: b, Trunk: r.trunkSHA, Onto: r.tgt.Onto, Upstream: r.tgt.Upstream, Epoch: r.epoch, Work: p.work, Unavailable: p.unavailable}
+	req = wtsync.Request{Path: p.wt.Path, Branch: b, Trunk: r.trunkSHA, Onto: r.tgt.Onto, Upstream: r.tgt.Upstream, Epoch: r.epoch, Work: p.work, Unavailable: p.unavailable,
+		EachCommit: r.eachCommit}
 	if line := syncrun.AllowedOwedLine(p.unavailable); line != "" {
 		fmt.Fprintf(w, "  %s\n", line)
 	}
@@ -1503,6 +1523,9 @@ func (r *RunPlan) finishRebase(b string, p *participant, res wtsync.Result, onto
 		line += fmt.Sprintf(", %s dropped", kit.Count(res.SignaturesDropped, "signature"))
 	}
 	fmt.Fprintln(w, line)
+	if note := wtsync.EachCommitNote(res.EachCommit, r.opts.Stack != nil); note != "" {
+		fmt.Fprintf(w, "    %s\n", note)
+	}
 	head, ran, derr := syncrun.CompleteRun(ctx, w, r.cfg, r.tracker, p.work, p.wt.Path, func() syncrun.CompleteInput {
 		// What the deferred steps compare and the undo line names is the tip
 		// the run found, the commits a fast-forward brought included.
