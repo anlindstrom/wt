@@ -4,6 +4,13 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-18 23:09 — needs: env:<NAME> refuses a step that lacks its token
+
+A step can now declare `needs: [env:GH_PACKAGES_TOKEN]`. The run checks that the
+variable is set and not empty (never its value) before anything moves, and
+refuses naming the variable and the step, or owes the step with `--allow-owed`.
+`wt sync doctor` shows a `needs` row for it.
+
 ## 2026-11-18 21:30 — wt sync rebase --alone rebases one worktree of a stack
 
 `wt sync rebase <work> --alone` rebases that worktree only, as a throwaway copy,

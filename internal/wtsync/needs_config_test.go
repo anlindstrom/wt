@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseEachCommitAndNeeds(t *testing.T) {
@@ -116,5 +117,43 @@ func TestProbeNeedsEnvChecksSetAndNonEmptyWithoutNamingTheValue(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), n[4:]) || strings.Contains(err.Error(), value) {
 			t.Errorf("%s: %v", n, err)
 		}
+	}
+}
+
+func TestProbeNeedsEnvReadsTheEnvironmentTheStepGets(t *testing.T) {
+	// NO_COLOR is set by wt on every step, whatever the caller has.
+	t.Setenv("NO_COLOR", "")
+	if err := os.Unsetenv("NO_COLOR"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ProbeNeeds([]string{"env:NO_COLOR"})["env:NO_COLOR"]; got != nil {
+		t.Errorf("NO_COLOR is given to every step, but the probe says %v", got)
+	}
+	// GIT_EDITOR is replaced by wt: the caller's own value does not count
+	// for a step, and an unset one is still there.
+	t.Setenv("GIT_EDITOR", "")
+	if err := os.Unsetenv("GIT_EDITOR"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ProbeNeeds([]string{"env:GIT_EDITOR"})["env:GIT_EDITOR"]; got != nil {
+		t.Errorf("GIT_EDITOR is given to every step, but the probe says %v", got)
+	}
+	// What the probe says is what a step process sees.
+	t.Setenv("WT_NEEDS_TEST_SET", "x")
+	if _, _, err := runStep(t.TempDir(), `test "$NO_COLOR" = 1 && test "$GIT_EDITOR" = true && test -n "$WT_NEEDS_TEST_SET"`, time.Minute); err != nil {
+		t.Errorf("step environment: %v", err)
+	}
+}
+
+func TestProbeEnvInTakesTheFirstEntryOfAName(t *testing.T) {
+	t.Parallel()
+	if err := probeEnvIn([]string{"NAME=tok", "NAME="}, "NAME"); err != nil {
+		t.Errorf("first entry is set: %v", err)
+	}
+	if err := probeEnvIn([]string{"NAME=", "NAME=tok"}, "NAME"); err == nil {
+		t.Error("first entry is empty, the step sees it empty")
+	}
+	if err := probeEnvIn([]string{"OTHER=x"}, "NAME"); err == nil {
+		t.Error("an absent name passed")
 	}
 }

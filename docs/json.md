@@ -724,7 +724,7 @@ each came to in [`deferred`](#wt-sync-rebaseresumeundo---json--the-result).
 |---|---|---|
 | `step` | string | the step's `run` line, the same string `deferred[].step` carries for it afterwards |
 | `paths` | array of string | the globs that gate it, as declared; empty when it has none |
-| `needs` | array of string | since `sync` 1.6.0 and `status` 1.10.0: what the step cannot run without, as declared (`docker`); empty when it has none. A run probes each before it moves anything ([needs](#needs--what-a-step-cannot-run-without)) |
+| `needs` | array of string | since `sync` 1.6.0 and `status` 1.10.0: what the step cannot run without, as declared (`docker`, and since `sync` 1.10.0 and `status` 1.11.0 `env:<NAME>`); empty when it has none. A run probes each before it moves anything ([needs](#needs--what-a-step-cannot-run-without)) |
 
 In the declared order, which is the order they run in.
 
@@ -1442,7 +1442,7 @@ refs. It changes nothing.
 
 ### `needs` — what a step cannot run without
 
-A step under `defer:` or `each_commit:` may declare `needs: [docker]`. Before
+A step under `defer:` or `each_commit:` may declare `needs: [docker]` or `needs: [env:<NAME>]`. Before
 a run moves any branch or safety ref, it probes each need once (`docker`: `docker
 info`, under a 10-second deadline), and only when a step with it may run for a
 worktree the run goes ahead with: an `each_commit` step with a commit to check,
@@ -1497,7 +1497,7 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `error` | string \| null | why there is no overview: trunk not known here, the repository not readable. The exit code is then non-zero |
 | `sessionsError` | string \| null | Agent sessions could not be listed; `sessions` are then empty, not known empty |
 | `eachCommitDeclared` | array | since 1.6.0: the `each_commit` checks trunk declares, `step`, `paths` and `needs` as in [`deferredDeclared`](#deferreddeclared--the-deferred-steps-trunk-declares); each runs after every replayed commit changing a path its `paths` match (every commit when empty). `[]` when there are none |
-| `needs` | array | since 1.6.0: every need a declared step has, once each: `need` (`docker`), `probed` (a step with it would run for some worktree, so the probe ran), `ok` (it answered; false when not probed), `error` (why it did not; null otherwise). See [needs](#needs--what-a-step-cannot-run-without) |
+| `needs` | array | since 1.6.0: every need a declared step has, once each: `need` (`docker`, or since 1.10.0 `env:<NAME>`), `probed` (a step with it would run for some worktree, so the probe ran), `ok` (it answered; false when not probed), `error` (why it did not; null otherwise). See [needs](#needs--what-a-step-cannot-run-without) |
 | `worktrees` | array | every worktree but the main checkout, in git's order |
 | `stack` | object \| null | since 1.7.0: the [stack held on one line](#stack--a-stack-held-on-one-line) of the worktree `--stack` names, its layers and what holds each; null without `--stack` |
 
@@ -2260,3 +2260,4 @@ change made it.
 | `sync-run` 1.11.0 | `eachCommit` on each participant: `all`, `tips` or `off`, the run's `--each-commit` mode; the commits skipped under `tips` and `off` are not owed |
 | `sync-run` 1.12.0 | `adopted` on each participant: what `wt sync resume --adopt` took over, the ref keeping the tip it found, where the rebase finished, and the commits made after it |
 | `sync-run` 1.13.0 | `leftAlone`: what a `wt sync rebase <work> --alone` run left as it was: the worktrees stacked on the same history as the one it rebased, or with `--stack` the layer branches of its line |
+| `sync` 1.10.0, `status` 1.11.0 | `needs` takes `env:<NAME>` as well as `docker`: a step that needs an environment variable that must be set and not empty; the probe never carries the value |

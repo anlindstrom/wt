@@ -1,6 +1,6 @@
 export default {
   "schema": 1,
-  "schemaVersion": "1.10.0",
+  "schemaVersion": "1.11.0",
   "command": "status",
   "token": "1:0123abcd",
   "trunk": "main",

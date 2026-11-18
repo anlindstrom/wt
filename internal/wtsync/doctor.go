@@ -69,6 +69,11 @@ func Doctor(mainRoot, trunk string, worktrees []repo.Worktree, opts DoctorOption
 	if cfg.DeclaresNeed(NeedDocker) {
 		checks = append(checks, dockerCheck(opts.Docker))
 	}
+	for _, n := range cfg.DeclaredNeeds() {
+		if name, ok := envNeedName(n); ok {
+			checks = append(checks, envCheck(n, name))
+		}
+	}
 
 	safety, err := safetyCheck(mainRoot, opts)
 	if err != nil {
@@ -401,6 +406,15 @@ func dockerCheck(probe func() error) Check {
 		return Check{Name: "docker", OK: false, Detail: "a run refuses the worktrees whose steps need Docker, or owes those steps with --allow-owed: " + err.Error()}
 	}
 	return Check{Name: "docker", OK: true}
+}
+
+// envCheck is the `needs` row of an env:<NAME> need: set or not set, never
+// the value.
+func envCheck(need, name string) Check {
+	if err := probeEnv(name); err != nil {
+		return Check{Name: need, OK: false, Detail: "not set: a run refuses the worktrees whose steps need it, or owes those steps with --allow-owed"}
+	}
+	return Check{Name: need, OK: true, Detail: "set"}
 }
 
 // safetyCheck flags every safety ref Prunable would delete: they pin old

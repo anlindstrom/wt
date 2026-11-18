@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json",
-  "x-version": "1.9.0",
+  "x-version": "1.10.0",
   "title": "wt sync --json",
   "description": "What a rebase onto trunk would do to every worktree of a repository, as `wt sync --json` prints it on stdout: one overview object, or with --all, --roots or --profile an array of them, one per repository. It fetches trunk and each worktree branch's own remote (unless --no-fetch) and writes nothing else. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "oneOf": [
@@ -75,7 +75,7 @@
             "type": "object",
             "required": ["need", "probed", "ok", "error"],
             "properties": {
-              "need": { "enum": ["docker"] },
+              "need": { "type": "string", "pattern": "^(docker|env:[A-Za-z_][A-Za-z0-9_]*)$" , "description": "A declared need: docker, or env:<NAME> for an environment variable that must be set and not empty (since 1.10.0)." },
               "probed": { "type": "boolean", "description": "The probe ran: some worktree has a step with this need that would run." },
               "ok": { "type": "boolean", "description": "The probe answered. False when it did not, or was not run." },
               "error": { "type": ["string", "null"], "description": "Why the probe failed; null when it answered or was not run." }
@@ -163,7 +163,7 @@
       "properties": {
         "step": { "type": "string", "description": "Its run line: the string deferred[].step carries for it in wt sync rebase --json." },
         "paths": { "type": "array", "items": { "type": "string" }, "description": "The globs that gate it, as declared. For a deferred step: empty, it runs after every finished rebase; otherwise only when the rebase changed a path one of them matches, which is not known before the rebase. For an each_commit step: empty, it runs at every replayed commit; otherwise at each one changing a path one of them matches." },
-        "needs": { "type": "array", "items": { "enum": ["docker"] }, "description": "Since 1.6.0. What the step cannot run without, as declared; the overview's needs says what each probe answered." }
+        "needs": { "type": "array", "items": { "type": "string", "pattern": "^(docker|env:[A-Za-z_][A-Za-z0-9_]*)$" }, "description": "Since 1.6.0 (env:<NAME> since 1.10.0). What the step cannot run without, as declared; the overview's needs says what each probe answered." }
       }
     },
     "stop": {

@@ -728,7 +728,7 @@ func (d *driver) uncheck(step, why string) {
 func runCheck(wtPath, run string, timeout time.Duration) (why, output string) {
 	cmd := exec.Command("sh", "-c", run)
 	cmd.Dir = wtPath
-	cmd.Env = git.Environ(append([]string{"NO_COLOR=1"}, rebaseEnv...)...)
+	cmd.Env = stepEnviron()
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	timedOut, code, err := git.RunBounded(timeout, cmd)
