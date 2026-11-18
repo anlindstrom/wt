@@ -1,6 +1,6 @@
 export default {
   "schema": 1,
-  "schemaVersion": "1.13.0",
+  "schemaVersion": "1.14.0",
   "command": "sync undo",
   "repo": "/repos/app",
   "trunk": "main",

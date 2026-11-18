@@ -11,6 +11,15 @@ variable is set and not empty (never its value) before anything moves, and
 refuses naming the variable and the step, or owes the step with `--allow-owed`.
 `wt sync doctor` shows a `needs` row for it.
 
+## 2026-11-18 21:45 — a fold names the fixups moved ahead of their context
+
+`wt sync rebase --stack --autosquash`, and the look `wt sync <work> --stack
+--autosquash`, name each fixup hunk whose context only a later commit adds,
+with that commit, before anything replays; the run still goes ahead. A stop
+there says why instead of "same hunk both sides" and suggests undo and
+retargeting the hunk. `wt sync resume` refuses a resolution that drops the
+fixup's lines (`--allow-dropped` goes on). `sync` is 1.11.0, `sync-run` 1.14.0.
+
 ## 2026-11-18 21:30 — wt sync rebase --alone rebases one worktree of a stack
 
 `wt sync rebase <work> --alone` rebases that worktree only, as a throwaway copy,

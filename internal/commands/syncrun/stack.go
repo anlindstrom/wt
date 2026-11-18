@@ -73,9 +73,31 @@ type Stack struct {
 	// Edit is what a run with --edit did to the commit it stopped at; null
 	// in the look and for any other run.
 	Edit *StackEdit `json:"edit"`
+	// ContextGaps is, for a fold (--autosquash), every hunk of a fixup
+	// that does not apply behind its target, with the later commit that
+	// carries its context; empty for any other.
+	ContextGaps []StackContextGap `json:"contextGaps"`
+	// ContextUnchecked is, for a fold, what of its fixups could not be
+	// analysed: a fixup over an earlier one that conflicts, or the whole
+	// analysis failing. Empty when every fixup was analysed.
+	ContextUnchecked []string `json:"contextUnchecked"`
 	// Restored says an edit run's line was put back at the tip the run
 	// found, its layers refused: the participant is restored, not rebased.
 	Restored bool `json:"-"`
+}
+
+// StackContextGap is one hunk of a fixup a fold moves ahead of its
+// context, as --json reports it.
+type StackContextGap struct {
+	Fixup         string `json:"fixup"`
+	FixupSubject  string `json:"fixupSubject"`
+	Target        string `json:"target"`
+	TargetSubject string `json:"targetSubject"`
+	Path          string `json:"path"`
+	Lines         string `json:"lines"`
+	Needs         string `json:"needs"`
+	NeedsSubject  string `json:"needsSubject"`
+	Message       string `json:"message"`
 }
 
 // StackEdit is the commit a --edit run stopped at, what it was amended to,
@@ -97,7 +119,7 @@ type StackCommit struct {
 // StackOf is the look's report of a line: its layers and what holds each.
 func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *Stack {
 	s := &Stack{Branch: line.Branch, Base: line.Base, Head: line.Head, Autosquash: autosquash,
-		Layers: []StackLayer{}, Skipped: []StackSkipped{}}
+		Layers: []StackLayer{}, Skipped: []StackSkipped{}, ContextGaps: []StackContextGap{}, ContextUnchecked: []string{}}
 	for i, l := range line.Layers {
 		found := LayerFoundTip
 		if l.Named {
@@ -121,6 +143,35 @@ func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *S
 		s.Skipped = append(s.Skipped, StackSkipped{Branch: k.Branch, Tip: k.Tip, Reason: k.Why})
 	}
 	return s
+}
+
+// ContextGaps is, for a fold of line, the hunks of its fixups that lack
+// their context behind their targets, set on s as --json reports them, with
+// what could not be analysed, and returned for the rebase. An analysis that
+// fails is noted on s and the look or run goes on without: the gaps are a
+// warning. PrintLayers says both.
+func ContextGaps(main string, line wtsync.Line, s *Stack) []wtsync.ContextGap {
+	gaps, unchecked, err := ContextGapsOf(main, line.Commits)
+	if err != nil {
+		s.ContextUnchecked = append(s.ContextUnchecked, "which fixups lack their context could not be read: "+err.Error())
+		return nil
+	}
+	s.ContextGaps = GapsJSON(gaps)
+	s.ContextUnchecked = append(s.ContextUnchecked, unchecked...)
+	return gaps
+}
+
+// ContextGapsOf is wtsync.ContextGaps, replaced in a test.
+var ContextGapsOf = wtsync.ContextGaps
+
+// GapsJSON is gaps as --json reports them.
+func GapsJSON(gaps []wtsync.ContextGap) []StackContextGap {
+	out := []StackContextGap{}
+	for _, g := range gaps {
+		out = append(out, StackContextGap{Fixup: g.Fixup, FixupSubject: g.FixupSubject, Target: g.Target,
+			TargetSubject: g.TargetSubject, Path: g.Path, Lines: g.Lines, Needs: g.Needs, NeedsSubject: g.NeedsSubject, Message: g.Line()})
+	}
+	return out
 }
 
 // ReadHolders reads what holds each layer of line: its worktree, and in it
@@ -161,6 +212,15 @@ func PrintLayers(w io.Writer, s *Stack) {
 	for _, k := range s.Skipped {
 		fmt.Fprintf(w, "    %-24s %s  not taken: %s\n", k.Branch, git.ShortID(k.Tip, 7), k.Reason)
 	}
+	for _, g := range s.ContextGaps {
+		fmt.Fprintf(w, "  ⚠ %s %q: %s\n", git.ShortID(g.Fixup, 7), g.FixupSubject, g.Message)
+	}
+	if len(s.ContextGaps) > 0 {
+		fmt.Fprintf(w, "    the fold stops there or loses the hunk: move each hunk into a fixup of the commit named, or resolve the stop with it kept\n")
+	}
+	for _, n := range s.ContextUnchecked {
+		fmt.Fprintf(w, "  note: %s\n", n)
+	}
 }
 
 // StackFinish is what FinishStack needs: the run's record, the rebase's
@@ -183,6 +243,12 @@ type StackFinish struct {
 	// Stopped is the paths the rebase stopped on, resolved by a strategy or
 	// by a person.
 	Stopped []string
+	// Gaps is, for a fold, the fixup hunks named before the rebase as
+	// lacking their context: the report keeps them.
+	Gaps []wtsync.ContextGap
+	// Unchecked is what of the fold's fixups could not be analysed: the
+	// report keeps it with the gaps.
+	Unchecked []string
 	// AfterMove and Between are a test's hooks into the moves; nil in a
 	// real run.
 	AfterMove func(wtsync.LayerMove) error
@@ -204,6 +270,8 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		holders[i] = wtsync.LayerHolder{Branch: l.Branch, State: wtsync.HolderNone}
 	}
 	s = StackOf(rec.Line, rec.Autosquash, holders)
+	s.ContextGaps = GapsJSON(in.Gaps)
+	s.ContextUnchecked = append(s.ContextUnchecked, in.Unchecked...)
 	refuse := func(why string) (*Stack, string, error) {
 		if rec.Edit != nil {
 			// An edit run is never left rebased under layers that did not

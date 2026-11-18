@@ -40,7 +40,11 @@ func stackLookAt(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, lo
 	if err != nil {
 		return nil, err
 	}
-	return syncrun.StackOf(line, false, holders), nil
+	s := syncrun.StackOf(line, look.Autosquash, holders)
+	if look.Autosquash {
+		syncrun.ContextGaps(ctx.Repo.MainRoot, line, s)
+	}
+	return s, nil
 }
 
 // editOnLine resolves rev, what --edit names, to the one commit of line it

@@ -150,6 +150,7 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 		Edit:       in.Res.Edit,
 		AtEdit:     in.Res.Left.Edit,
 		EachCommit: in.Res.EachCommit,
+		Context:    in.Res.Left.Context,
 	}
 	if in.Found != "" && in.Found != in.Res.OldTip {
 		st.Found = in.Found
@@ -178,6 +179,9 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 		fmt.Fprintf(w, "  ⚠ %s\n", wtsync.EditStopLine(in.Work, in.Res.Left.Commit, in.Res.Left.Subject))
 	} else {
 		fmt.Fprintf(w, "  ⚠ %s\n", wtsync.NeedsYouLine(in.Work, in.Res.Left.Left))
+		for _, g := range in.Res.Left.Context {
+			fmt.Fprintf(w, "    %s\n      %s\n", g.Line(), g.Retarget(in.Work))
+		}
 	}
 	fmt.Fprintf(w, "    plan %s\n", wtsync.PlanPath(gitDir))
 	return nil

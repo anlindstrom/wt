@@ -105,6 +105,10 @@ type State struct {
 	// EachCommit is where the run's each_commit checks run: all, tips or
 	// off. Empty, as in a sidecar written before the flag existed, is all.
 	EachCommit string `json:"each_commit,omitempty"`
+	// Context is, at a stop at a fixup a fold moved ahead of its context,
+	// the hunks of it that lack their context there: resume checks that
+	// the resolution drops none of the fixup's lines.
+	Context []ContextGap `json:"context,omitempty"`
 }
 
 // CheckStop is a failed check as the handover records it.
@@ -479,6 +483,14 @@ func RenderPlan(in PlanInput) (string, error) {
 			if c, ok := conflicts[f.Path]; ok {
 				note = shapeOf(in.MainRoot, c)
 			}
+			// A fixup moved ahead of its context conflicts because what
+			// it changes is not there yet: not two intents to merge.
+			if gaps := gapsOf(in.Handover.Context, f.Path); len(gaps) > 0 {
+				note = gaps[0].Line()
+				for _, g := range gaps[1:] {
+					note += "\n" + strings.Repeat(" ", 41) + g.Line()
+				}
+			}
 		}
 		// A path Left names but Files does not describe has no note at all,
 		// and a line of padding with nothing after it is noise.
@@ -493,6 +505,18 @@ func RenderPlan(in PlanInput) (string, error) {
 		if subject != "" {
 			fmt.Fprintf(&b, "    trunk: %s\n", oneLinePlan(subject))
 		}
+	}
+
+	if gaps := in.Handover.Context; len(gaps) > 0 {
+		fmt.Fprintf(&b, "\n## a fixup moved ahead of its context — undo and retarget, not a resolution\n")
+		fmt.Fprintf(&b, "%s %q was written above the commits that add what it changes, and the fold puts it\n",
+			git.ShortID(gaps[0].Fixup, 7), oneLinePlan(gaps[0].FixupSubject))
+		fmt.Fprintf(&b, "right behind %s %q. A resolution here has nowhere to put those hunks.\n", git.ShortID(gaps[0].Target, 7), oneLinePlan(gaps[0].TargetSubject))
+		for _, g := range gaps {
+			fmt.Fprintf(&b, "%s\n    %s\n", g.Line(), g.Retarget(in.Work))
+		}
+		fmt.Fprintf(&b, "wt sync resume %s refuses a resolution that drops lines of the fixup the old tip has and no\n", in.Work)
+		b.WriteString("later commit brings; --allow-dropped goes on when the drop is meant.\n")
 	}
 
 	if in.Config != nil {
@@ -553,6 +577,17 @@ func RenderPlan(in PlanInput) (string, error) {
 
 	fmt.Fprintf(&b, "\n%s\n", WayOut(Way{Work: in.Work, Plan: true, Rebasing: true, OwesAdd: true}))
 	return b.String(), nil
+}
+
+// gapsOf is the gaps of path.
+func gapsOf(gaps []ContextGap, path string) []ContextGap {
+	var out []ContextGap
+	for _, g := range gaps {
+		if g.Path == path {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // shapeOf describes one unresolved conflict for the brief: both sides only

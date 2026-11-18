@@ -57,6 +57,9 @@ type SyncOptions struct {
 type StackLook struct {
 	Work   string
 	Layers []string
+	// Autosquash looks at the line as a fold of its fixups would take it
+	// (--autosquash): the fixups that lack their context are named.
+	Autosquash bool
 }
 
 // shownFiles is how many files a stop names in the overview before it counts
@@ -215,7 +218,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		printAloneLook(w, leftAloneOf(ctx, all, strandedBy(stacked, ambiguous, wt.Branch)))
 	}
 	if opts.Stack != nil {
-		s, err := stackLookAt(ctx, base, onto, target, &StackLook{Work: arg, Layers: opts.Stack.Layers}, listed)
+		s, err := stackLookAt(ctx, base, onto, target, &StackLook{Work: arg, Layers: opts.Stack.Layers, Autosquash: opts.Stack.Autosquash}, listed)
 		if err != nil {
 			return err
 		}

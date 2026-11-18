@@ -154,3 +154,25 @@ func lines(s string) []string {
 	}
 	return strings.Split(s, "\n")
 }
+
+// ContextYAML is what ContextLine declares on trunk: a check of every
+// commit that fails on a marker file.
+const ContextYAML = "each_commit:\n  - run: test ! -e broken.marker\n"
+
+// ContextLine is gittest's ContextLine in a repository wt opens, with
+// ContextYAML declared on trunk; both adds its second fixup.
+func ContextLine(t *testing.T, both bool) (*kit.Context, *gittest.ContextLine) {
+	t.Helper()
+	main := testkit.CommittedRepo(t, testkit.MinimalConf)
+	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
+	wtDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := gittest.NewContextLine(t, main, wtDir, ContextYAML, both)
+	ctx, err := kit.Open(main, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ctx, s
+}
