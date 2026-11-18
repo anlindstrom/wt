@@ -782,8 +782,10 @@ func newSyncRebaseCmd() *cobra.Command {
 			"check; if it fails too, the stop names both and shows the retry's output.\n" +
 			"A run that left tracked files changed, or whose git status could not be\n" +
 			"read, is not retried: the stop is the run's.\n\n" +
-			"A step that declares needs: [docker] needs Docker. Before anything moves,\n" +
-			"the run asks docker info once, when a step that needs it may run: an\n" +
+			"A step that declares needs: [docker] needs Docker, and needs: [env:NAME]\n" +
+			"needs the variable NAME set and not empty in the environment the steps\n" +
+			"inherit; its value is never read out. Before anything moves, the run\n" +
+			"asks docker info (or looks the variable up) once, when a step that needs it may run: an\n" +
 			"each_commit step with a commit to check, or a deferred step whose paths\n" +
 			"the rebase may change. A worktree whose step needs something that did\n" +
 			"not answer is refused, with what sits on it in a stack. --allow-owed\n" +

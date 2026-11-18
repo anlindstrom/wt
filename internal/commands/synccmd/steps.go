@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"io"
-	"sort"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
@@ -105,13 +104,7 @@ func checkCommits(due wtsync.Due) []CheckCommit {
 // would run with it.
 func needProbes(cfg *wtsync.Config, dues []wtsync.Due, prober *syncrun.Prober) []NeedProbe {
 	out := []NeedProbe{}
-	var names []string
-	for n := range wtsync.KnownNeeds {
-		if cfg.DeclaresNeed(n) {
-			names = append(names, n)
-		}
-	}
-	sort.Strings(names)
+	names := cfg.DeclaredNeeds()
 	for _, n := range names {
 		np := NeedProbe{Need: n}
 		for _, d := range dues {

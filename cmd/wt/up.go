@@ -55,8 +55,9 @@ func newUpCmd() *cobra.Command {
 			"it has read would change under it. --force (-f) goes ahead anyway and\n" +
 			"names the session, so you can tell it; it lifts nothing else — dirt\n" +
 			"and a conflict that is yours still refuse.\n\n" +
-			"A step that declares needs: [docker] refuses the run before anything\n" +
-			"moves when Docker does not answer docker info, as for wt sync rebase;\n" +
+			"A step that declares needs: [docker] or needs: [env:NAME] refuses the run\n" +
+			"before anything moves when Docker does not answer docker info or the\n" +
+			"variable is unset or empty, as for wt sync rebase;\n" +
 			"--allow-owed rebases anyway and owes the step, to run by hand later.\n\n" +
 			"--json prints one result object on stdout and the progress on stderr,\n" +
 			"for a tool driving wt; --expect <token> refuses the run, touching\n" +

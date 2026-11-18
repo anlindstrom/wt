@@ -441,11 +441,19 @@ the commit it folded into, its commit, what is owed, and the proof
 ## `needs` — what a step cannot run without
 
 A step under `defer` or `each_commit` may name what it cannot run without. The
-names are wt's own; for now there is one.
+names are wt's own.
 
 | need | probed by |
 |---|---|
 | `docker` | `docker info`, within 10 seconds |
+| `env:<NAME>` | `<NAME>` is set and not empty in the environment the steps inherit |
+
+`<NAME>` is a valid environment variable name (letters, digits and `_`, not
+starting with a digit); anything else is a declaration error that `wt sync
+doctor` and a run report. The probe looks only at whether the variable is set
+and not empty: it never prints, logs, records or hashes the value, so the
+value is in no output, plan, state file or `--json`. A variable set to the empty
+string counts as missing.
 
 Before a run moves any branch, it probes each need once, and only when a step
 with it may run: an `each_commit` step with a commit to check, or a `defer`
@@ -458,8 +466,8 @@ run, and is owed as a failed one is. An `each_commit` step is then owed once
 for the branch, not checked at any commit.
 
 `wt sync --json` reports each need and what its probe answered, so a tool can
-decide before it starts, and `wt sync doctor` checks Docker when a step
-declares it.
+decide before it starts, and `wt sync doctor` shows a `needs` row for Docker
+when a step declares it, and for each `env:<NAME>` (`set` or `not set`).
 
 ```yaml
 defer:
@@ -467,6 +475,8 @@ defer:
     paths: [etc/openapi/**]
     commit: "chore(api): regenerate the openapi specs"
     needs: [docker]
+  - run: pnpm install
+    needs: [env:GH_PACKAGES_TOKEN]
 ```
 
 ## `dependency_graph` — build files worth a note

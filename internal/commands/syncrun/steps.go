@@ -78,8 +78,12 @@ func NeedsFor(p *Prober, due wtsync.Due, allowOwed bool) (unavailable map[string
 		for i, s := range steps {
 			steps[i] = "`" + s + "`"
 		}
-		return nil, fmt.Sprintf("%s needs %s, which did not answer: %s; start it, or rebase now with --allow-owed and run the step by hand later",
-			strings.Join(steps, ", "), n, kit.OneLine(err.Error()))
+		fix := "start it"
+		if strings.HasPrefix(n, wtsync.NeedEnvPrefix) {
+			fix = "set it in the environment wt runs in"
+		}
+		return nil, fmt.Sprintf("%s needs %s, which did not answer: %s; %s, or rebase now with --allow-owed and run the step by hand later",
+			strings.Join(steps, ", "), n, kit.OneLine(err.Error()), fix)
 	}
 	return unavailable, ""
 }

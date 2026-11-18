@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -35,6 +36,42 @@ func probeDocker() error {
 	return nil
 }
 
+// NeedEnvPrefix starts a need on an environment variable: env:<NAME>.
+const NeedEnvPrefix = "env:"
+
+var envNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// envNeedName is the variable of an env:<NAME> need; ok is false for any
+// other need.
+func envNeedName(need string) (name string, ok bool) {
+	return strings.CutPrefix(need, NeedEnvPrefix)
+}
+
+// stepEnviron is the environment every step and check process starts with:
+// the caller's, with NO_COLOR and the rebase editors set over it. A probe
+// reads this same list, so it and the step cannot disagree.
+func stepEnviron() []string {
+	return git.Environ(append([]string{"NO_COLOR=1"}, rebaseEnv...)...)
+}
+
+// probeEnv answers whether name is set and not empty in stepEnviron. The
+// error names the variable, never its value.
+func probeEnv(name string) error { return probeEnvIn(stepEnviron(), name) }
+
+// probeEnvIn is probeEnv over env. The first entry for name decides, as it
+// does for sh and for git.Environ.
+func probeEnvIn(env []string, name string) error {
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok && k == name {
+			if v == "" {
+				break
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("%s is not set", name)
+}
+
 // knownNeedNames is KnownNeeds' names, sorted, for a message.
 func knownNeedNames() string {
 	names := make([]string, 0, len(KnownNeeds))
@@ -47,8 +84,14 @@ func knownNeedNames() string {
 
 func checkNeeds(needs []string) error {
 	for _, n := range needs {
+		if name, ok := envNeedName(n); ok {
+			if !envNameRE.MatchString(name) {
+				return fmt.Errorf("need %q: %q is not a valid environment variable name", n, name)
+			}
+			continue
+		}
 		if _, ok := KnownNeeds[n]; !ok {
-			return fmt.Errorf("unknown need %q; the known needs are %s", n, knownNeedNames())
+			return fmt.Errorf("unknown need %q; the known needs are %s, and env:<NAME>", n, knownNeedNames())
 		}
 	}
 	return nil
@@ -63,6 +106,10 @@ func ProbeNeedsWith(probes map[string]func() error, needs []string) map[string]e
 			continue
 		}
 		probe, ok := probes[n]
+		if name, isEnv := envNeedName(n); isEnv && !ok {
+			got[n] = probeEnv(name)
+			continue
+		}
 		if !ok {
 			got[n] = fmt.Errorf("no probe for %q", n)
 			continue
@@ -218,4 +265,29 @@ func (c *Config) EachCommitOrNeeds() []string {
 		}
 	}
 	return steps
+}
+
+// DeclaredNeeds is every need a step of the declaration names, each once, sorted.
+func (c *Config) DeclaredNeeds() []string {
+	if c == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(ns []string) {
+		for _, n := range ns {
+			if !seen[n] {
+				seen[n] = true
+				out = append(out, n)
+			}
+		}
+	}
+	for _, d := range c.Defer {
+		add(d.Needs)
+	}
+	for _, e := range c.EachCommit {
+		add(e.Needs)
+	}
+	sort.Strings(out)
+	return out
 }
