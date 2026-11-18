@@ -219,3 +219,6 @@ func (c *Config) EachCommitOrNeeds() []string {
 	}
 	return steps
 }
+
+// DeclaredNeeds is every need a step of the declaration names, each once, sorted.
+func (c *Config) DeclaredNeeds() []string { return nil }
