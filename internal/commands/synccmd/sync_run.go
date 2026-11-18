@@ -265,6 +265,9 @@ func (r *RunPlan) run(works []string) error {
 	if opts.Onto != "" && opts.Steps != nil {
 		return errors.New("wt sync steps runs the steps in place and takes no --onto")
 	}
+	if err := aloneUsage(opts, works); err != nil {
+		return err
+	}
 	if err := r.declare(works); err != nil {
 		return err
 	}
@@ -734,6 +737,14 @@ func (r *RunPlan) selectBranches(works []string) error {
 			return err
 		}
 	}
+	if r.opts.Alone {
+		// The named worktree goes without its stack: the others are not
+		// triaged, locked or rebased, and say so in the run's output.
+		left := leftAloneOf(ctx, worktrees, strandedBy(r.parents, r.ambiguous, named[0]))
+		printLeftAlone(r.w, left)
+		r.opts.Journal.SetLeftAlone(left)
+		r.parents, r.ambiguous = map[string]string{}, map[string][]string{}
+	}
 	if r.target != nil {
 		if err := r.ontoBranches(named, worktrees); err != nil {
 			return err
@@ -1197,6 +1208,11 @@ func (r *RunPlan) readStack() error {
 	}
 	s := syncrun.StackOf(line, r.opts.Stack.Autosquash, holders)
 	syncrun.PrintLayers(r.w, s)
+	if r.opts.Alone {
+		if err := r.layersLeftAlone(b, line); err != nil {
+			return err
+		}
+	}
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s })
 	return nil
 }
@@ -1265,7 +1281,16 @@ func (r *RunPlan) stackRecord(b string, p *participant, req wtsync.Request) (*wt
 	}
 	rec := &wtsync.StackRecord{Epoch: r.epoch, Work: p.work, Branch: b, Path: p.wt.Path, Onto: req.Onto, OntoRef: r.ontoRef(), Upstream: req.Upstream,
 		Autosquash: st.Autosquash, InPlace: r.opts.Steps != nil, Force: r.opts.Force, Line: r.line, Edit: r.edit}
-	return rec, wtsync.WriteStackRecord(r.ctx.Repo.MainRoot, rec)
+	if err := wtsync.WriteStackRecord(r.ctx.Repo.MainRoot, rec); err != nil {
+		return rec, err
+	}
+	if r.opts.Alone {
+		// A resume of this run's handover must move no layer either.
+		if err := syncrun.MarkAlone(r.ctx.Repo.MainRoot, r.epoch); err != nil {
+			return rec, err
+		}
+	}
+	return rec, nil
 }
 
 // finishStack checks and moves the layers once the line's rebase has

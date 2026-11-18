@@ -244,6 +244,16 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", why, rec.Work))
 		}
 	}
+	if IsAlone(main, rec.Epoch) {
+		// --alone: the line is rebased, and no layer is checked, moved or
+		// held. Each was named when the run began.
+		defer ClearAlone(main, rec.Epoch)
+		if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
+			fmt.Fprintf(w, "  ✗ the stack's record could not be removed (%v): wt sync undo %s removes it\n", ferr, rec.Work)
+		}
+		fmt.Fprintf(w, "  no layer moved: --alone leaves every layer on the old commits; wt sync undo %s puts the line back\n", rec.Work)
+		return s, "", nil
+	}
 	plans := rec.Plans
 	if rec.Edit != nil {
 		// The commits the amend emptied were dropped: the plan follows.

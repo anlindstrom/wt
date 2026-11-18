@@ -1,6 +1,6 @@
 export default {
   "schema": 1,
-  "schemaVersion": "1.12.0",
+  "schemaVersion": "1.13.0",
   "command": "sync undo",
   "repo": "/repos/app",
   "trunk": "main",
@@ -11,6 +11,7 @@ export default {
   "trunkSync": null,
   "outcome": "done",
   "error": null,
+  "leftAlone": [],
   "worktrees": [
     {
       "work": "login",

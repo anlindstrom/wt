@@ -216,6 +216,32 @@ refused, since an edit run's checks sit at the commits above the edit; with
 fixups are folded in, the target is where the line goes, and an `--if-ready`
 run is still refused or taken as before).
 
+### `--alone` — one worktree of a stack, as a throwaway copy
+
+`wt sync rebase <work> --alone` rebases the one worktree named and nothing else
+that is stacked on the same history. Without it, a run takes every worktree of
+the stack and refuses all of them for one that is dirty. With it only the named
+branch moves, onto trunk, replaying every commit it has above trunk: the
+commits of a worktree below it are replayed too, as a copy of them. The other
+worktrees of the stack are not triaged, locked, rebased, refused on or touched,
+whatever state they are in; each is named, with the note that it sits on the old
+commits. `wt sync <work> --alone` is the look: it names who a run would leave and
+changes nothing.
+
+| with | meaning |
+|---|---|
+| `wt sync undo <work>` | puts back what the run moved, the one branch and its worktree, and only that |
+| `--if-ready` | the worktree named alone is judged: ready or refused; the rest of its stack is not asked about |
+| `--json` | `leftAlone` lists the worktrees left, `work`, `branch` and `path`; `[]` for any other run |
+| `--stack`, `--autosquash` | the line is rebased and folded exactly as a `--stack` run does (layer markers, the checks at layers, `--each-commit=tips`), and only the named branch moves: no layer branch is checked, moved, held, reset or locked, and no layer's worktree is touched. Each layer is named as left on the old commits, and is in `leftAlone`. A reference run of a copy of a stacked line. `wt sync undo <work>` puts back the copy |
+| `--edit` | refused: it moves the layers by the amend, and `--alone` moves none |
+| `--onto` | refused: `--onto` already moves exactly the worktrees named |
+| more than one worktree, none, `--all`, `--roots`, `--profile` | refused: it takes one worktree of one repository |
+| `resume`, `undo`, `steps` | refused: they have no stack to leave out |
+
+`wt up` takes no `--alone`: it moves the stack of the worktree it is in, and a
+rebase of one worktree of a stack is a run you name.
+
 ### `retry` — a second go at the same commit
 
 A build tool's output from the commit before can make `run` fail at a commit

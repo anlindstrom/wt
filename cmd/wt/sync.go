@@ -38,6 +38,8 @@ func newSyncCmd() *cobra.Command {
 			"                                    nothing of yours\n" +
 			"          wt sync <work> --stack    the layer branches on its line, bottom\n" +
 			"                                    first, and what holds each\n" +
+			"          wt sync <work> --alone    that worktree, and which of its stack a\n" +
+			"                                    run of it alone would leave\n" +
 			"          wt sync <work>            one worktree in full: every stop,\n" +
 			"                                    file and key\n" +
 			"          wt sync <work> --onto <ref>\n" +
@@ -174,7 +176,7 @@ func newSyncCmd() *cobra.Command {
 			"  wt sync --profile api         # the overview of a profile's repositories",
 		ValidArgsFunction: completeWork,
 	}
-	var rebase, resume, undo, yes, force, ifReady, allowDiverged, allowOwed, adopt, asJSON, stack, autosquash bool
+	var rebase, resume, undo, yes, force, ifReady, allowDiverged, allowOwed, adopt, asJSON, stack, autosquash, alone bool
 	var expect, onto, upstream, edit, eachCommit string
 	var layers []string
 	var sel selectionFlags
@@ -183,7 +185,7 @@ func newSyncCmd() *cobra.Command {
 		return syncVerbFlags{rebase: rebase, resume: resume, undo: undo,
 			yes: yes, force: force, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, push: push(),
 			allowDiverged: allowDiverged, allowOwed: allowOwed, adopt: adopt, json: asJSON, expect: expect,
-			stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream}
+			stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream, alone: alone}
 	}
 	// The count rule is the verb's own. Two verbs at once is a flag mistake,
 	// which RunE reports the way --push with --no-push is reported.
@@ -201,6 +203,9 @@ func newSyncCmd() *cobra.Command {
 		}
 		verb, _ := f.verb()
 		if err := f.checkOnto(args, sel.selection()); err != nil {
+			return err
+		}
+		if err := f.checkAlone(args, sel.selection()); err != nil {
 			return err
 		}
 		if f.stack && (sel.selection().Any() || len(args) != 1) {
@@ -235,7 +240,7 @@ func newSyncCmd() *cobra.Command {
 		if ctx == nil {
 			return kit.ErrNotInRepo
 		}
-		opts := synccmd.SyncOptions{NoFetch: noFetch, Onto: onto, Upstream: upstream}
+		opts := synccmd.SyncOptions{NoFetch: noFetch, Onto: onto, Upstream: upstream, Alone: alone}
 		if f.stack {
 			opts.Stack = &synccmd.StackLook{Work: args[0], Layers: layers}
 		}
@@ -261,6 +266,7 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&adopt, "adopt", false, "with --resume: take over a rebase finished by hand with commits made on top (see wt sync resume --help)")
 	sync.Flags().BoolVar(&stack, "stack", false, "list the layer branches on the line of the worktree named, and what holds each")
 	sync.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
+	sync.Flags().BoolVar(&alone, "alone", false, "rebase, or look at, the one worktree named without the rest of its stack; the others are left as they are")
 	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --rebase --stack: fold the line's fixups in place; with --onto, as the line moves there")
 	sync.Flags().StringVar(&eachCommit, "each-commit", "", "with --rebase: where the each_commit checks run: all (default), tips or off")
 	sync.Flags().StringVar(&edit, "edit", "", "with --rebase --stack: stop at this commit of the line for you to amend, in place")
@@ -537,6 +543,8 @@ type syncVerbFlags struct {
 	allowOwed bool
 	// adopt takes over a rebase finished by hand with commits made on top.
 	adopt bool
+	// alone rebases the one worktree named without the rest of its stack.
+	alone bool
 	push  syncrun.PushMode
 	// json prints one object on stdout: the overview, or the verb's result.
 	json bool
@@ -631,6 +639,14 @@ func (f syncVerbFlags) check() error {
 		return usagef("--each-commit needs --rebase: a resume goes on with the mode its run was given")
 	case f.eachCommit == wtsync.EachTips && f.edit != "":
 		return usagef("--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after")
+	case f.alone && verb != "" && verb != "rebase":
+		return usagef("--alone needs --rebase, or no verb")
+	case f.alone && f.json && verb == "":
+		return usagef("--alone with --json needs --rebase: the look has no JSON of it")
+	case f.alone && f.edit != "":
+		return usagef("--alone and --edit: --edit moves the layers by the amend, and --alone moves none; edit first without --alone")
+	case f.alone && f.onto != "":
+		return usagef("--alone and --onto: --onto already moves exactly the worktrees named and none of their stack; leave --alone out")
 	case f.upstream != "" && f.onto == "":
 		return usagef("--upstream needs --onto: it says where the commits rebased onto --onto's ref start")
 	case f.onto != "" && verb != "" && verb != "rebase":
@@ -647,6 +663,18 @@ func validEachCommit(mode string) bool {
 
 // checkOnto refuses --onto where it has no piece of work to go with: a
 // target is chosen per piece of work.
+func (f syncVerbFlags) checkAlone(args []string, sel reposel.Selection) error {
+	switch {
+	case !f.alone:
+		return nil
+	case sel.Any():
+		return usagef("--alone rebases one worktree of one repository; leave out --all, --roots and --profile")
+	case len(args) != 1:
+		return usagef("--alone rebases one worktree without the rest of its stack: name the one (wt sync rebase <work> --alone)")
+	}
+	return nil
+}
+
 func (f syncVerbFlags) checkOnto(args []string, sel reposel.Selection) error {
 	switch {
 	case f.onto == "":
@@ -713,7 +741,7 @@ func syncArgs(verb string) cobra.PositionalArgs {
 }
 
 func newSyncRebaseCmd() *cobra.Command {
-	var noFetch, noFFTrunk, yes, ifReady, force, allowDiverged, allowOwed, asJSON, stack, autosquash bool
+	var noFetch, noFFTrunk, yes, ifReady, force, allowDiverged, allowOwed, asJSON, stack, autosquash, alone bool
 	var expect, onto, upstream, edit, eachCommit string
 	var layers []string
 	var sel selectionFlags
@@ -858,6 +886,17 @@ func newSyncRebaseCmd() *cobra.Command {
 			"of work: --onto needs a worktree named, and takes no --all, --roots or\n" +
 			"--profile. --expect with --onto takes the token of\n" +
 			"wt sync <work> --onto <ref> --json, which covers the target.\n\n" +
+			"--alone rebases the one worktree named as a throwaway copy of its\n" +
+			"line: only its branch moves, onto trunk. The other worktrees stacked\n" +
+			"on the same history are not rebased, not refused on and not touched,\n" +
+			"dirt included; each is named, left on the old commits it was on, and\n" +
+			"a worktree below it keeps the commits the copy replays, so the copy\n" +
+			"carries them again. --json names them under leftAlone. wt sync undo\n" +
+			"<work> puts back what the run moved, and only that. It takes one\n" +
+			"worktree, and not --onto or --edit. With --stack the line is rebased\n" +
+			"and folded as --stack does, and only the named branch moves: no layer\n" +
+			"branch is moved, held or reset, no worktree of one touched; each is\n" +
+			"named, left on its old commits. wt sync <work> --alone looks first.\n\n" +
 			"--stack rebases a stack held on one line: <work> is the worktree whose\n" +
 			"branch is the top of the line (a tmp branch at the top, or the top layer\n" +
 			"itself), and the line is every commit from where it leaves trunk to its\n" +
@@ -923,6 +962,8 @@ func newSyncRebaseCmd() *cobra.Command {
 			"One --edit per run; to fold or move the line too, run that after.\n\n" +
 			"Also spelled wt sync <work>... --rebase, with the same flags.",
 		Example: "  wt sync rebase login-crash api-tidy --yes --json --expect 1:0123abcd # a tool\n" +
+			"  wt sync rebase login-crash --alone  # only this one; its stack is left as it is\n" +
+			"  wt sync rebase tmp/ref --alone --stack --autosquash  # fold a copy; no layer moves\n" +
 			"  wt sync rebase tmp/stack --stack --each-commit=tips  # check each layer's tip only\n" +
 			"  wt sync rebase tmp/stack --stack   # the whole line once, then every layer\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash  # fold review fixes in place\n" +
@@ -939,11 +980,14 @@ func newSyncRebaseCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f := syncVerbFlags{rebase: true, yes: yes, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, force: force,
 				allowDiverged: allowDiverged, allowOwed: allowOwed, push: push(), json: asJSON, expect: expect,
-				stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream}
+				stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream, alone: alone}
 			if err := f.check(); err != nil {
 				return err
 			}
 			if err := f.checkOnto(args, sel.selection()); err != nil {
+				return err
+			}
+			if err := f.checkAlone(args, sel.selection()); err != nil {
 				return err
 			}
 			if f.stack && (sel.selection().Any() || len(args) != 1) {
@@ -968,6 +1012,7 @@ func newSyncRebaseCmd() *cobra.Command {
 	rebase.Flags().StringVar(&expect, "expect", "", "refuse unless the overview still matches this token from wt sync --json")
 	rebase.Flags().BoolVar(&stack, "stack", false, "rebase the line of the worktree named once, and move every layer branch on it")
 	rebase.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
+	rebase.Flags().BoolVar(&alone, "alone", false, "rebase the one worktree named without the rest of its stack: the others are not refused on, moved or touched")
 	rebase.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: fold the line's fixups, in place; with --onto <ref>, as the line moves onto it")
 	rebase.Flags().StringVar(&eachCommit, "each-commit", "", "where the each_commit checks run: all (every commit that touches a step's paths, the default), tips (only each layer's tip) or off")
 	_ = rebase.RegisterFlagCompletionFunc("each-commit", cobra.FixedCompletions([]string{"all", "tips", "off"}, cobra.ShellCompDirectiveNoFileComp))
@@ -983,7 +1028,7 @@ func newSyncRebaseCmd() *cobra.Command {
 // gets its result for --json.
 func syncRebase(cmd *cobra.Command, works []string, ctx *kit.Context, f syncVerbFlags, j *syncrun.RunJournal) error {
 	opts, _ := runOptions(cmd, f, len(works) == 0)
-	opts.Journal, opts.Expect, opts.Stack = j, f.expect, f.stackOptions()
+	opts.Journal, opts.Expect, opts.Stack, opts.Alone = j, f.expect, f.stackOptions(), f.alone
 	return synccmd.SyncRebase(ctx, works, opts, cmd.OutOrStdout())
 }
 
