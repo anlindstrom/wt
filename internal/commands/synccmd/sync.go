@@ -57,6 +57,9 @@ type SyncOptions struct {
 type StackLook struct {
 	Work   string
 	Layers []string
+	// Autosquash looks at the line as a fold of its fixups would take it
+	// (--autosquash): the fixups that lack their context are named.
+	Autosquash bool
 }
 
 // shownFiles is how many files a stop names in the overview before it counts

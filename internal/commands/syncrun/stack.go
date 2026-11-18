@@ -73,9 +73,31 @@ type Stack struct {
 	// Edit is what a run with --edit did to the commit it stopped at; null
 	// in the look and for any other run.
 	Edit *StackEdit `json:"edit"`
+	// ContextGaps is, for a fold (--autosquash), every hunk of a fixup
+	// that does not apply behind its target, with the later commit that
+	// carries its context; empty for any other.
+	ContextGaps []StackContextGap `json:"contextGaps"`
+	// ContextUnchecked is, for a fold, what of its fixups could not be
+	// analysed: a fixup over an earlier one that conflicts, or the whole
+	// analysis failing. Empty when every fixup was analysed.
+	ContextUnchecked []string `json:"contextUnchecked"`
 	// Restored says an edit run's line was put back at the tip the run
 	// found, its layers refused: the participant is restored, not rebased.
 	Restored bool `json:"-"`
+}
+
+// StackContextGap is one hunk of a fixup a fold moves ahead of its
+// context, as --json reports it.
+type StackContextGap struct {
+	Fixup         string `json:"fixup"`
+	FixupSubject  string `json:"fixupSubject"`
+	Target        string `json:"target"`
+	TargetSubject string `json:"targetSubject"`
+	Path          string `json:"path"`
+	Lines         string `json:"lines"`
+	Needs         string `json:"needs"`
+	NeedsSubject  string `json:"needsSubject"`
+	Message       string `json:"message"`
 }
 
 // StackEdit is the commit a --edit run stopped at, what it was amended to,
@@ -97,7 +119,7 @@ type StackCommit struct {
 // StackOf is the look's report of a line: its layers and what holds each.
 func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *Stack {
 	s := &Stack{Branch: line.Branch, Base: line.Base, Head: line.Head, Autosquash: autosquash,
-		Layers: []StackLayer{}, Skipped: []StackSkipped{}}
+		Layers: []StackLayer{}, Skipped: []StackSkipped{}, ContextGaps: []StackContextGap{}, ContextUnchecked: []string{}}
 	for i, l := range line.Layers {
 		found := LayerFoundTip
 		if l.Named {
@@ -122,6 +144,9 @@ func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *S
 	}
 	return s
 }
+
+// ContextGapsOf is wtsync.ContextGaps, replaced in a test.
+var ContextGapsOf = wtsync.ContextGaps
 
 // ReadHolders reads what holds each layer of line: its worktree, and in it
 // tracked changes, a rebase, a session or a process.

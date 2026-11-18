@@ -555,6 +555,8 @@ type syncVerbFlags struct {
 	stack      bool
 	layers     []string
 	autosquash bool
+	// allowDropped is resume's --allow-dropped.
+	allowDropped bool
 	// edit is the commit of the line a --stack run stops at for a person.
 	edit string
 	// eachCommit is where the each_commit checks run: all, tips or off; ""

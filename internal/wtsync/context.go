@@ -376,6 +376,22 @@ func (b blobCache) has(tree, path string, lines []string) (bool, error) {
 // other.
 func containsRun(file, lines []string) bool { return indexRun(file, lines) >= 0 }
 
+// HunkDrop is lines of a fixup's hunk that a resolution left out.
+type HunkDrop struct {
+	Path   string
+	Lines  string
+	N      int
+	Binary bool
+}
+
+// ResolutionDrops is what the resolution of a stop at fixup leaves out.
+func ResolutionDrops(wtPath, fixup, oldTip string) ([]HunkDrop, []string, error) {
+	return nil, nil, nil
+}
+
+// DropsLine is what a person is told about drops of fixup.
+func DropsLine(drops []HunkDrop, fixup, subject string) string { return "" }
+
 // indexRun is where lines start in file, -1 when they are not in it.
 func indexRun(file, lines []string) int {
 	for i := 0; i+len(lines) <= len(file); i++ {

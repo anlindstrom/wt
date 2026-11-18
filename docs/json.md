@@ -1670,6 +1670,8 @@ what it sees; a run (`wt sync rebase <work> --stack --json`) fills the rest.
 | `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name; `--layer` takes it) |
 | `refusal` | string \| null | the run's: why no layer moved, a new tip that failed its check, or a fold that changed the line's content; the line itself is left rebased, and `wt sync undo` puts it back. Null in the look, and when each layer was moved or held |
 | `edit` | object \| null | since 1.9.0: what a run with `--edit <rev>` did to that commit (below); null in the look and for any other run |
+| `contextGaps` | array | since `sync` 1.11.0 and `sync-run` 1.14.0: for a fold (`--autosquash`), in the look and in the run, every hunk of a fixup that does not apply where autosquash puts it, behind its target, because only a later commit of the line carries its context (below); line order. Empty for any other look or run. A warning: the run goes ahead |
+| `contextUnchecked` | array of string | since `sync` 1.11.0 and `sync-run` 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed, and for any other look or run |
 
 Each layer:
 
@@ -1697,6 +1699,29 @@ Each layer:
 A moved layer has a safety ref and a result ref under the run's epoch, so
 `wt sync undo <line>` puts it back with the line; a held one has none and is no
 part of that undo.
+
+`contextGaps`, since `sync` 1.11.0 and `sync-run` 1.14.0, for
+`wt sync <work> --stack --autosquash` and `wt sync rebase <work> --stack
+--autosquash`, with or without `--onto`: a fixup written at the top of the line
+and folded into a commit low on it can carry hunks whose context only a later
+commit adds. Each fixup is merged, in the object store, onto its target with the
+fixups of the same target before it, from its own parent; a file that does not
+merge clean is looked at hunk by hunk. The trees are the line's own, before any
+move onto `--onto`'s ref.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `fixup`, `fixupSubject` | string | the fixup!, squash! or amend! commit, as the line has it |
+| `target`, `targetSubject` | string | the commit autosquash folds it into |
+| `path`, `lines` | string | the hunk: its file, and the lines it changes in the fixup's own file, `13` or `13-15` |
+| `needs`, `needsSubject` | string | the first commit after the target, in line order, that carries the hunk's context |
+| `message` | string | the line wt prints: `fixup moved ahead of its context: <path>:<lines> needs <sha> "<subject>", which comes later on the line` |
+
+A stop at such a fixup says the same in its plan and output, and suggests
+`wt sync undo <work>` and moving that hunk into a fixup of `needs`. A
+`wt sync resume` there refuses a resolution that drops lines of the fixup the
+old tip has and no later commit brings (`--allow-dropped` goes on past it): the
+participant is `refused`, with the lines in `reason`.
 
 `edit`, since 1.9.0, for `wt sync rebase <work> --stack --edit <rev>`: the line
 replayed in place with a stop at `<rev>` for a person to amend.
@@ -2261,3 +2286,4 @@ change made it.
 | `sync-run` 1.12.0 | `adopted` on each participant: what `wt sync resume --adopt` took over, the ref keeping the tip it found, where the rebase finished, and the commits made after it |
 | `sync-run` 1.13.0 | `leftAlone`: what a `wt sync rebase <work> --alone` run left as it was: the worktrees stacked on the same history as the one it rebased, or with `--stack` the layer branches of its line |
 | `sync` 1.10.0, `status` 1.11.0 | `needs` takes `env:<NAME>` as well as `docker`: a step that needs an environment variable that must be set and not empty; the probe never carries the value |
+| `sync` 1.11.0, `sync-run` 1.14.0 | `contextGaps` and `contextUnchecked` on [`stack`](#stack--a-stack-held-on-one-line): for a fold, the hunks of fixups that lack their context behind their target, each with the later commit that carries it; a `wt sync resume` refused for a resolution that drops such a hunk is `refused` with the lines in `reason` |

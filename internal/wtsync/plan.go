@@ -105,6 +105,10 @@ type State struct {
 	// EachCommit is where the run's each_commit checks run: all, tips or
 	// off. Empty, as in a sidecar written before the flag existed, is all.
 	EachCommit string `json:"each_commit,omitempty"`
+	// Context is, at a stop at a fixup a fold moved ahead of its context,
+	// the hunks of it that lack their context there: resume checks that
+	// the resolution drops none of the fixup's lines.
+	Context []ContextGap `json:"context,omitempty"`
 }
 
 // CheckStop is a failed check as the handover records it.

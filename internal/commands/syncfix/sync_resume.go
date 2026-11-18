@@ -30,6 +30,9 @@ type ResumeOptions struct {
 	// Adopt takes over a rebase finished by hand with commits added on top,
 	// when the branch's reflog proves that shape: --adopt.
 	Adopt bool
+	// AllowDropped goes on past a resolution that drops lines of a fixup
+	// moved ahead of its context: --allow-dropped.
+	AllowDropped bool
 	syncrun.VerbOptions
 	syncrun.PushOptions
 	syncrun.StepOptions
