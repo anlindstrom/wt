@@ -42,6 +42,9 @@ type RunOptions struct {
 	// is lifted — dirt, a handover, another run's lock. A run with nothing
 	// named does not take it: that would roll over every session at once.
 	Force bool
+	// Alone rebases the one worktree named and none of the others stacked on
+	// the same history (--alone): they are not refused on, moved or touched.
+	Alone bool
 	// EachCommit is where the each_commit checks run: "all" (also "") at
 	// every replayed commit that touches their paths, "tips" at the end of
 	// each layer only, "off" nowhere.

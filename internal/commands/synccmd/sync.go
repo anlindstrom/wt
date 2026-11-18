@@ -48,6 +48,9 @@ type SyncOptions struct {
 	// Work is the worktree wt sync <work> --onto <ref> --json is of: with
 	// --onto the overview holds that one alone.
 	Work string
+	// Alone looks at the one worktree as wt sync rebase --alone would run
+	// it: the others stacked on its history are named as left alone.
+	Alone bool
 }
 
 // StackLook is the look at one line's stack.
