@@ -218,6 +218,10 @@ type RunPlan struct {
 	line wtsync.Line
 	// edit is the commit of the line --edit names, resolved; nil without.
 	edit *wtsync.EditStop
+	// gaps is, for a fold, the hunks of its fixups that lack their context
+	// behind their targets, named before the rebase.
+	gaps          []wtsync.ContextGap
+	gapsUnchecked []string
 	// stackBroken is why the layers of a finished --stack rebase are not
 	// moved: their plan could not be recorded.
 	stackBroken string
@@ -1207,6 +1211,11 @@ func (r *RunPlan) readStack() error {
 		return err
 	}
 	s := syncrun.StackOf(line, r.opts.Stack.Autosquash, holders)
+	if r.opts.Stack.Autosquash {
+		// Named before anything replays; a warning, so the run goes ahead.
+		r.gaps = syncrun.ContextGaps(r.ctx.Repo.MainRoot, line, s)
+		r.gapsUnchecked = s.ContextUnchecked
+	}
 	syncrun.PrintLayers(r.w, s)
 	if r.opts.Alone {
 		if err := r.layersLeftAlone(b, line); err != nil {
@@ -1334,7 +1343,7 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) (rest
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: res.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: r.own, Listed: listed, ListErr: lerr, Force: rec.Force, Now: r.opts.Clock(), AfterMove: st.AfterMove, Between: st.Between,
-		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops)})
+		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops), Gaps: r.gaps, Unchecked: r.gapsUnchecked})
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s })
 	restored = s != nil && s.Restored
 	if ferr != nil {
@@ -1391,6 +1400,7 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 	}
 	if st := r.opts.Stack; st != nil {
 		req.Stack = &wtsync.StackRequest{Line: r.line, Autosquash: st.Autosquash}
+		req.Gaps = r.gaps
 		// A fold is in place unless --onto names where the line goes; an
 		// edit always is.
 		if (st.Autosquash && r.target == nil) || r.opts.Steps != nil || r.edit != nil {

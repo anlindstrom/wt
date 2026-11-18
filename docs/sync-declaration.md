@@ -297,6 +297,67 @@ the base it is replayed onto already carries or reaches (trunk with `--onto
 one that is ambiguous or names nothing is refused with the fixup and the name
 it gave. Every new layer tip must descend from the destination.
 
+#### A fixup moved ahead of its context
+
+A fixup written against the top of the line and folded into a commit low on
+it can change lines that only a later commit adds: right behind its target,
+its hunk has no context. Before anything replays, `wt sync rebase <work>
+--stack --autosquash` (with or without `--onto`) names each such hunk, and
+`wt sync <work> --stack --autosquash` says the same and moves nothing:
+
+```
+⚠ 1a2b3c4 "fixup! feat: page size": fixup moved ahead of its context: src/state.ts:13 needs 5d6e7f8 "feat: open flag", which comes later on the line
+```
+
+Each fixup is merged in the object store onto its target with the fixups of
+the same target before it, from its own parent, as the rebase will merge it;
+a file that does not merge clean is looked at hunk by hunk, and a hunk whose
+lines before the change the target lacks names the first later commit whose
+tree has them. A conflict no later commit explains is an ordinary one and is
+not named. A fixup that conflicts leaves its clean part folded in for the
+next fixup of the same target; when what that next one lacks may be the
+earlier fixup's conflicting part, or another fixup's, it is named as not
+analysed rather than given a commit it does not need. The trees are the
+line's own, before any move onto `--onto`'s ref. No ref, index or worktree
+is touched. It is a warning: the run goes ahead, and `--json` has the hunks
+as `contextGaps` on the stack, and what could not be analysed, an analysis
+that failed included, as `contextUnchecked`; the look and the run print
+both.
+
+When the run stops at such a fixup, the plan file and the stop say why with
+that line instead of `same hunk both sides`, and point the way out: not a
+resolution, but `wt sync undo <work>` and moving that hunk into a fixup of the
+commit named (`git commit --fixup=<sha>`). If you resolve it anyway,
+`wt sync resume <work>` checks the fixup line by line before anything
+replays, counting the net effect: for each line the fixup adds, the copies of
+it in the resolution, plus those the commits still to be replayed add, less
+those they remove, must come to the copies the old tip (the run's safety ref)
+has in that file. So a later commit that takes the line away again does not
+count, and a copy the target already had does not stand in for the fixup's.
+A file a later commit renames is followed to its new name, in the old tip and
+in the commits to come, and one the rebase's target renamed (with `--onto`)
+to the name the index holds. A binary file is compared by blob: the old tip
+has the fixup's version, the resolution does not, and no commit to come
+writes it in its own change; a deletion the fixup made and the resolution
+kept is no drop. A line short is a loss, and resume refuses, changing
+nothing:
+
+```
+the resolution drops 1 line of 1a2b3c4 "fixup! feat: page size" that the old tip has: src/state.ts:13
+```
+
+Fix the resolution, `git add` it and resume again. `--allow-dropped` goes on
+when the drop is meant; the fold's content check at the end still holds the
+layers to the old line. What the check cannot tell is printed as not
+checked, never passed in silence: lines with no letter or digit (blank
+lines, braces), too common to prove anything; a file the old tip no longer
+has under a name git can follow; a binary file the line changes again after
+the fixup; a binary file the fixup deletes and the resolution keeps; a file
+still unmerged or not in the index under a name that can be followed; a file
+that could not be read. A check that cannot run at all refuses with the
+reason, and `--allow-dropped` goes on past that too. A fixup's removed lines
+are left to the content check.
+
 `wt sync` says how many commits a run would check, and `wt sync <work>` which,
 without running anything. After the last commit, `defer` is still the place
 for work that runs once.

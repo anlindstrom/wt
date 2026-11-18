@@ -218,7 +218,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		printAloneLook(w, leftAloneOf(ctx, all, strandedBy(stacked, ambiguous, wt.Branch)))
 	}
 	if opts.Stack != nil {
-		s, err := stackLookAt(ctx, base, onto, target, &StackLook{Work: arg, Layers: opts.Stack.Layers}, listed)
+		s, err := stackLookAt(ctx, base, onto, target, &StackLook{Work: arg, Layers: opts.Stack.Layers, Autosquash: opts.Stack.Autosquash}, listed)
 		if err != nil {
 			return err
 		}

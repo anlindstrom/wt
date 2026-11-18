@@ -79,6 +79,9 @@ func syncResume(ctx *kit.Context, work string, opts ResumeOptions, w io.Writer) 
 	if err := r.checkStack(); err != nil {
 		return err
 	}
+	if err := r.checkDropped(); err != nil {
+		return err
+	}
 	// Released however the resume ends, the refusal after the take-over
 	// included, unless a fresh handover keeps it.
 	defer func() {
@@ -141,6 +144,11 @@ type resume struct {
 	adoptTips []wtsync.LayerTip
 	// probed is every need probed before anything moved.
 	probed map[string]bool
+	// gaps is, for a fold, the hunks of its fixups that lack their context
+	// behind their targets.
+	gaps []wtsync.ContextGap
+	// unchecked is what of the fold's fixups could not be analysed.
+	unchecked []string
 }
 
 // joinJournal records the run's repository and trunk, and the branch as
@@ -424,6 +432,15 @@ func (r *resume) rebase() (wtsync.Result, error) {
 		if rec.Replay == nil && !rec.Autosquash {
 			req.ReportPlan = &wtsync.ReplayPlan{Folds: []string{}}
 		}
+	}
+	if hasRec && rec.Autosquash {
+		// A later stop at a fixup ahead of its context says so too, and
+		// the report keeps them.
+		if r.gaps, r.unchecked, err = syncrun.ContextGapsOf(r.ctx.Repo.MainRoot, rec.Line.Commits); err != nil {
+			r.unchecked = []string{"which fixups lack their context could not be read: " + err.Error()}
+			fmt.Fprintf(r.w, "  note: %s\n", r.unchecked[0])
+		}
+		req.Gaps = r.gaps
 	}
 	// A run with per-layer steps goes on as it was: the same layers, the
 	// same steps, and what its stops did before the handover.
@@ -754,6 +771,57 @@ func (r *resume) checkStack() error {
 	return nil
 }
 
+// checkDropped refuses, at a stop at a fixup a fold moved ahead of its
+// context, a resolution that drops lines of the fixup the old tip has and no
+// commit still to be replayed brings: today such a loss shows only at the
+// content check after the whole run. It reads and moves nothing but what it
+// prints; --allow-dropped goes on, saying what it lets through.
+func (r *resume) checkDropped() error {
+	st, name := r.st, r.name
+	if !r.busy || r.adopt != nil || len(st.Context) == 0 {
+		return nil
+	}
+	fixup := st.Context[0]
+	// A check that cannot run is never a block --allow-dropped cannot pass.
+	cannot := func(err error) error {
+		why := fmt.Sprintf("what the resolution keeps of %s could not be checked: %v", git.ShortID(fixup.Fixup, 7), err)
+		if r.opts.AllowDropped {
+			fmt.Fprintf(r.w, "  ⚠ --allow-dropped: %s; going on\n", why)
+			return nil
+		}
+		return fmt.Errorf("%s: %s; nothing is resumed: --allow-dropped goes on without the check", name, why)
+	}
+	p, err := wtsync.RebaseProgress(r.target.Path)
+	if err != nil {
+		return cannot(err)
+	}
+	if p.Index != st.Stop || len(wtsync.GapsAt(st.Context, p.Commit)) == 0 {
+		// The rebase went on by hand past the fixup's stop: what it made of
+		// the fixup is committed, and the content check at the end holds
+		// the line to the old tip.
+		return nil
+	}
+	drops, unchecked, err := wtsync.ResolutionDrops(r.target.Path, fixup.Fixup, st.Safety)
+	if err != nil {
+		return cannot(err)
+	}
+	// What the check cannot see is said, never passed in silence.
+	for _, u := range unchecked {
+		fmt.Fprintf(r.w, "  ⚠ not checked, of %s: %s\n", git.ShortID(fixup.Fixup, 7), u)
+	}
+	if len(drops) == 0 {
+		return nil
+	}
+	line := wtsync.DropsLine(drops, fixup.Fixup, fixup.FixupSubject)
+	if r.opts.AllowDropped {
+		fmt.Fprintf(r.w, "  ⚠ --allow-dropped: %s; going on as resolved\n", line)
+		return nil
+	}
+	return fmt.Errorf("%s: %s, and no later commit brings them; nothing is resumed: put them in the resolution, git add it and wt sync resume %s, "+
+		"or wt sync undo %s and move that hunk into a fixup of %s; --allow-dropped goes on when the drop is meant",
+		name, line, name, name, git.ShortID(fixup.Needs, 7))
+}
+
 // finishStack checks and moves the layers of a stack held on the line, when
 // the run that handed this rebase over was one, exactly as the run would
 // have once its rebase finished. It returns the failure the resume ends with.
@@ -779,7 +847,8 @@ func (r *resume) finishStack(res wtsync.Result) string {
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: r.st.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch), Listed: listed, ListErr: lerr,
-		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg), Stopped: append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...)})
+		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg), Stopped: append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...),
+		Gaps: r.gaps, Unchecked: r.unchecked})
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s })
 	r.restored = s != nil && s.Restored
 	if ferr != nil {

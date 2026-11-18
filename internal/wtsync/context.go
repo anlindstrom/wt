@@ -2,8 +2,11 @@ package wtsync
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/anlindstrom/wt/internal/git"
 )
@@ -376,21 +379,495 @@ func (b blobCache) has(tree, path string, lines []string) (bool, error) {
 // other.
 func containsRun(file, lines []string) bool { return indexRun(file, lines) >= 0 }
 
-// HunkDrop is lines of a fixup's hunk that a resolution left out.
+// HunkDrop is lines of a fixup's hunk that a resolution left out: the old
+// tip has them, and no commit still to be replayed brings them.
 type HunkDrop struct {
-	Path   string
-	Lines  string
-	N      int
+	Path  string
+	Lines string // where the old tip has them, "13" or "13-15"
+	N     int
+	// Binary is a binary file whose change the resolution left out.
 	Binary bool
 }
 
-// ResolutionDrops is what the resolution of a stop at fixup leaves out.
-func ResolutionDrops(wtPath, fixup, oldTip string) ([]HunkDrop, []string, error) {
-	return nil, nil, nil
+// ResolutionDrops is what the resolution of a stop at fixup leaves out of
+// it, read-only, and what of it could not be checked. Line by line, with
+// their counts: each line the fixup adds to a file that the old tip still
+// has there (following renames after the fixup) must be in the resolution,
+// or added by a commit the sequencer still has to replay; a line short is
+// dropped. A line with no letter or digit in it (a blank, a lone brace) is
+// too common to prove anything and is not checked; when such lines fall
+// short they are named as not checked. A binary file is compared by blob:
+// the old tip has the fixup's blob, the index does not, and nothing to come
+// writes it, is a drop. A file the old tip no longer has under a name that
+// can be followed, a binary file changed again after the fixup, and a file
+// still unmerged, are named as not checked, never passed. Only objects and
+// the index are read; no ref, index entry or file moves.
+func ResolutionDrops(wtPath, fixup, oldTip string) (drops []HunkDrop, unchecked []string, err error) {
+	later, err := todoCommits(wtPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	binary, err := binaryPaths(wtPath, fixup)
+	if err != nil {
+		return nil, nil, err
+	}
+	paths, err := pathsOfCommit(wtPath, fixup)
+	if err != nil {
+		return nil, nil, err
+	}
+	renamed, gone, err := followTo(wtPath, fixup, oldTip)
+	if err != nil {
+		return nil, nil, err
+	}
+	staged, err := stagedNames(wtPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, p := range paths {
+		d, why, err := pathDrop(wtPath, fixup, oldTip, p, later, binary[p], renamed, gone, staged)
+		if err != nil {
+			// A file that cannot be read is said, never a block.
+			why = p + ": could not be checked: " + kitOneLine(err.Error())
+		}
+		if why != "" {
+			unchecked = append(unchecked, why)
+		}
+		if d != nil {
+			drops = append(drops, *d)
+		}
+	}
+	return drops, unchecked, nil
+}
+
+// pathDrop is what the resolution drops of fixup's change to p, or why it
+// cannot tell.
+func pathDrop(wtPath, fixup, oldTip, p string, later []string, binary bool, renamed map[string]string, gone map[string]bool, staged func(string) string) (*HunkDrop, string, error) {
+	if unmerged, err := gitEnv(wtPath, nil, nil, "--literal-pathspecs", "ls-files", "--unmerged", "--", p); err != nil {
+		return nil, "", err
+	} else if unmerged != "" {
+		return nil, p + ": still unmerged, so what the resolution keeps of it is not checked", nil
+	}
+	at := p
+	if q, ok := renamed[p]; ok {
+		at = q
+	}
+	if gone[p] {
+		return nil, p + ": the old tip no longer has it under a name that can be followed, so what the resolution keeps of it is not checked", nil
+	}
+	names, err := namesAhead(wtPath, later, p)
+	if err != nil {
+		return nil, "", err
+	}
+	if binary {
+		return binaryDrop(wtPath, fixup, oldTip, p, at, later, names, staged(p))
+	}
+	return textDrop(wtPath, fixup, oldTip, p, at, later, names, staged(p))
+}
+
+// stagedNames is where the index holds a path of the line: the path itself,
+// or the name git carried it to when the rebase is onto a branch that
+// renamed it, read by comparing the stop's target with HEAD, its rebased
+// self; "" when it is in the index under neither.
+func stagedNames(wtPath string) (func(string) string, error) {
+	listed, err := gitEnv(wtPath, nil, nil, "ls-files", "-z", "--stage")
+	if err != nil {
+		return nil, err
+	}
+	in := map[string]bool{}
+	for _, rec := range strings.Split(listed, "\x00") {
+		if _, path, ok := strings.Cut(rec, "\t"); ok {
+			in[path] = true
+		}
+	}
+	moved := map[string]string{}
+	if target, err := stopTarget(wtPath); err == nil && target != "" {
+		if out, err := gitEnv(wtPath, nil, nil, "diff-tree", "-r", "-z", "-M", "--name-status", target, "HEAD"); err == nil {
+			f := strings.Split(out, "\x00")
+			for i := 0; i+2 < len(f); i++ {
+				if strings.HasPrefix(f[i], "R") {
+					moved[f[i+1]] = f[i+2]
+					i += 2
+				}
+			}
+		}
+	}
+	return func(p string) string {
+		switch {
+		case in[p]:
+			return p
+		case in[moved[p]]:
+			return moved[p]
+		}
+		return ""
+	}, nil
+}
+
+// stopTarget is the commit the stopped fixup folds into, as the
+// sequencer's done list names it: the last pick before the fixups.
+func stopTarget(wtPath string) (string, error) {
+	dir, err := rebaseDir(wtPath)
+	if err != nil {
+		return "", err
+	}
+	done, err := os.ReadFile(filepath.Join(dir, "done"))
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(strings.TrimSpace(string(done)), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		f := strings.Fields(lines[i])
+		if len(f) < 2 {
+			continue
+		}
+		switch f[0] {
+		case "pick", "p", "edit", "e", "reword", "r":
+			return gitEnv(wtPath, nil, nil, "rev-parse", "--verify", "--quiet", f[1]+"^{commit}")
+		}
+	}
+	return "", nil
+}
+
+// textDrop is what the resolution drops of the lines fixup adds to p, at
+// in the old tip, rp in the index; why names what it cannot tell. Each
+// line counts with what the commits to come do to it: what the
+// resolution has of it, plus what they add, less what they remove, must
+// come to what the old tip has.
+func textDrop(wtPath, fixup, oldTip, p, at string, later []string, names map[string][]string, rp string) (*HunkDrop, string, error) {
+	runs, err := fixupHunkAdds(wtPath, fixup, p)
+	if err != nil {
+		return nil, "", err
+	}
+	added := map[string]bool{}
+	for _, r := range runs {
+		for _, l := range r {
+			added[l] = true
+		}
+	}
+	if len(added) == 0 {
+		return nil, "", nil
+	}
+	if rp == "" {
+		return nil, p + ": not in the resolution under a name that can be followed, so what it keeps of it is not checked", nil
+	}
+	blobs := blobCache{dir: wtPath, got: map[string]*string{}}
+	old, err := blobs.file(oldTip+"^{tree}", at)
+	if err != nil || old == nil {
+		return nil, "", err
+	}
+	oldLines := strings.Split(*old, "\n")
+	oldCount := countLines(oldLines)
+	resolved, err := gitEnv(wtPath, nil, nil, "cat-file", "-p", ":0:"+rp)
+	if err != nil {
+		return nil, "", err
+	}
+	expected := countLines(strings.Split(resolved, "\n"))
+	for _, c := range later {
+		ns := names[c]
+		if len(ns) == 0 {
+			continue
+		}
+		adds, removes, err := commitChanges(wtPath, c, ns...)
+		if err != nil {
+			return nil, "", err
+		}
+		for _, l := range adds {
+			expected[l]++
+		}
+		for _, l := range removes {
+			expected[l]--
+		}
+	}
+	short, common := map[string]int{}, 0
+	for l := range added {
+		missing := oldCount[l] - expected[l]
+		if missing <= 0 {
+			continue
+		}
+		if !strings.ContainsFunc(l, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
+			common += missing
+			continue
+		}
+		short[l] = missing
+	}
+	why := ""
+	if common > 0 {
+		why = fmt.Sprintf("%s: %s with no letter or digit (blank lines, braces) may be dropped; too common to tell, not checked", at, plural(common, "line"))
+	}
+	if len(short) == 0 {
+		return nil, why, nil
+	}
+	var at1 []int
+	n := 0
+	for i := len(oldLines) - 1; i >= 0; i-- {
+		// The last ones: a copy the target had already comes first.
+		if l := oldLines[i]; short[l] > 0 {
+			at1 = append([]int{i + 1}, at1...)
+			short[l]--
+			n++
+		}
+	}
+	return &HunkDrop{Path: at, Lines: lineRanges(at1), N: n}, why, nil
+}
+
+// binaryDrop is whether the resolution drops fixup's change to the binary
+// file p, at in the old tip, rp in the index. A commit to come brings it
+// back only when its own change writes that blob.
+func binaryDrop(wtPath, fixup, oldTip, p, at string, later []string, names map[string][]string, rp string) (*HunkDrop, string, error) {
+	blob := func(rev string) (string, error) {
+		// An absent path is exit 1 under --quiet: absence, not an error.
+		out, code, err := gitEnvAllow(wtPath, nil, nil, 1, "rev-parse", "--verify", "--quiet", rev)
+		if err != nil || code != 0 {
+			return "", err
+		}
+		return out, nil
+	}
+	mine, err := blob(fixup + ":" + p)
+	if err != nil {
+		return nil, "", err
+	}
+	idx := ""
+	if rp != "" {
+		if idx, err = blob(":0:" + rp); err != nil {
+			return nil, "", err
+		}
+	}
+	if mine == "" {
+		// The fixup deletes it: kept when the resolution has it no more.
+		if idx == "" {
+			return nil, "", nil
+		}
+		return nil, p + ": a binary file the fixup deletes and the resolution keeps: not checked", nil
+	}
+	old, err := blob(oldTip + ":" + at)
+	if err != nil {
+		return nil, "", err
+	}
+	if old != mine {
+		return nil, at + ": a binary file the line changes again after the fixup, or removes: not checked", nil
+	}
+	if idx == mine {
+		return nil, "", nil
+	}
+	for _, c := range later {
+		if len(names[c]) == 0 {
+			continue
+		}
+		out, err := gitEnv(wtPath, nil, nil, append([]string{"--literal-pathspecs", "diff-tree", "-r", "-z", "--no-renames", c + "^", c, "--"}, names[c]...)...)
+		if err != nil {
+			return nil, "", err
+		}
+		for _, rec := range strings.Split(out, "\x00") {
+			// ":<mode> <mode> <old> <new> <status>"
+			if f := strings.Fields(strings.TrimPrefix(rec, ":")); len(f) >= 4 && f[3] == mine {
+				return nil, "", nil
+			}
+		}
+	}
+	return &HunkDrop{Path: at, Binary: true}, "", nil
+}
+
+// binaryPaths is the files commit c changes that git diffs as binary.
+func binaryPaths(dir, c string) (map[string]bool, error) {
+	out, err := gitEnv(dir, nil, nil, "diff-tree", "--numstat", "-z", "--no-renames", "-r", c+"^", c)
+	if err != nil {
+		return nil, err
+	}
+	bin := map[string]bool{}
+	for _, rec := range strings.Split(out, "\x00") {
+		f := strings.SplitN(rec, "\t", 3)
+		if len(f) == 3 && f[0] == "-" && f[1] == "-" {
+			bin[f[2]] = true
+		}
+	}
+	return bin, nil
+}
+
+// followTo is where each path fixup has is in the old tip: renamed is the
+// files git sees renamed or copied on the way, gone those the old tip has
+// no more under any name git can follow.
+func followTo(dir, fixup, oldTip string) (renamed map[string]string, gone map[string]bool, err error) {
+	renamed, gone = map[string]string{}, map[string]bool{}
+	out, err := gitEnv(dir, nil, nil, "diff-tree", "-r", "-z", "-M", "--name-status", fixup, oldTip)
+	if err != nil {
+		return nil, nil, err
+	}
+	f := strings.Split(out, "\x00")
+	for i := 0; i < len(f); i++ {
+		status := f[i]
+		switch {
+		case status == "":
+		case (status[0] == 'R' || status[0] == 'C') && i+2 < len(f):
+			if status[0] == 'R' {
+				renamed[f[i+1]] = f[i+2]
+			}
+			i += 2
+		case status[0] == 'D' && i+1 < len(f):
+			gone[f[i+1]] = true
+			i++
+		default:
+			i++
+		}
+	}
+	return renamed, gone, nil
+}
+
+// namesAhead is, for each commit still to be replayed, the names p goes by
+// in that commit's change, following the renames git sees along the way:
+// the name before it and, when it renames p, the name after.
+func namesAhead(dir string, later []string, p string) (map[string][]string, error) {
+	names := map[string][]string{}
+	name := p
+	for _, c := range later {
+		out, err := gitEnv(dir, nil, nil, "diff-tree", "-r", "-z", "-M", "--name-status", c+"^", c)
+		if err != nil {
+			return nil, err
+		}
+		names[c] = []string{name}
+		f := strings.Split(out, "\x00")
+		for i := 0; i+2 < len(f); i++ {
+			if strings.HasPrefix(f[i], "R") && f[i+1] == name {
+				name = f[i+2]
+				names[c] = append(names[c], name)
+				break
+			}
+		}
+	}
+	return names, nil
+}
+
+// commitChanges is every line commit c's change to paths adds and every
+// line it removes, renames followed, so a moved file's lines count as
+// neither.
+func commitChanges(dir, c string, paths ...string) (adds, removes []string, err error) {
+	out, err := gitEnv(dir, nil, nil, append([]string{"--literal-pathspecs", "diff-tree", "-p", "--no-color", "--no-ext-diff", "-M", "-U0",
+		"--src-prefix=a/", "--dst-prefix=b/", c + "^", c, "--"}, paths...)...)
+	if err != nil {
+		return nil, nil, err
+	}
+	body := false
+	for _, l := range strings.Split(out, "\n") {
+		switch {
+		case strings.HasPrefix(l, "diff --git "):
+			body = false
+		case strings.HasPrefix(l, "@@ "):
+			body = true
+		case body && strings.HasPrefix(l, "+"):
+			adds = append(adds, l[1:])
+		case body && strings.HasPrefix(l, "-"):
+			removes = append(removes, l[1:])
+		}
+	}
+	return adds, removes, nil
+}
+
+func countLines(lines []string) map[string]int {
+	n := map[string]int{}
+	for _, l := range lines {
+		n[l]++
+	}
+	return n
+}
+
+// lineRanges is sorted line numbers as "3", "3-5" or "3-5,9".
+func lineRanges(at []int) string {
+	var parts []string
+	for i := 0; i < len(at); {
+		j := i
+		for j+1 < len(at) && at[j+1] == at[j]+1 {
+			j++
+		}
+		parts = append(parts, hunk{first: at[i], end: at[j]}.lines())
+		i = j + 1
+	}
+	return strings.Join(parts, ",")
 }
 
 // DropsLine is what a person is told about drops of fixup.
-func DropsLine(drops []HunkDrop, fixup, subject string) string { return "" }
+func DropsLine(drops []HunkDrop, fixup, subject string) string {
+	n, bins := 0, 0
+	var where []string
+	for _, d := range drops {
+		if d.Binary {
+			bins++
+			where = append(where, d.Path+" (binary)")
+			continue
+		}
+		n += d.N
+		where = append(where, d.Path+":"+d.Lines)
+	}
+	var what []string
+	if n > 0 {
+		what = append(what, plural(n, "line"))
+	}
+	if bins > 0 {
+		what = append(what, "the change to "+plural(bins, "binary file"))
+	}
+	return fmt.Sprintf("the resolution drops %s of %s %q that the old tip has: %s", strings.Join(what, " and "), git.ShortID(fixup, 7), oneLinePlan(subject), strings.Join(where, ", "))
+}
+
+// fixupHunkAdds is each run of lines commit c's change to path adds,
+// in order.
+func fixupHunkAdds(dir, c, path string) ([][]string, error) {
+	out, err := gitEnv(dir, nil, nil, "--literal-pathspecs", "diff-tree", "-p", "--no-color", "--no-ext-diff", "--no-renames", "-U0",
+		"--src-prefix=a/", "--dst-prefix=b/", "--root", c, "--", path)
+	if err != nil {
+		return nil, err
+	}
+	var runs [][]string
+	var run []string
+	end := func() {
+		if len(run) > 0 {
+			runs = append(runs, run)
+		}
+		run = nil
+	}
+	body := false
+	for _, l := range strings.Split(out, "\n") {
+		switch {
+		case strings.HasPrefix(l, "@@ "):
+			end()
+			body = true
+		case !body:
+		case strings.HasPrefix(l, "+"):
+			run = append(run, l[1:])
+		default:
+			end()
+		}
+	}
+	end()
+	return runs, nil
+}
+
+// todoCommits is the commits the sequencer in wtPath still has to replay.
+func todoCommits(wtPath string) ([]string, error) {
+	dir, err := rebaseDir(wtPath)
+	if err != nil {
+		return nil, err
+	}
+	todo, err := os.ReadFile(filepath.Join(dir, "git-rebase-todo"))
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, l := range strings.Split(string(todo), "\n") {
+		f := strings.Fields(l)
+		if len(f) < 2 || strings.HasPrefix(f[0], "#") {
+			continue
+		}
+		switch f[0] {
+		case "pick", "p", "edit", "e", "reword", "r", "squash", "s", "fixup", "f":
+			id := f[1]
+			if strings.HasPrefix(id, "-") && len(f) > 2 { // fixup -C <id>
+				id = f[2]
+			}
+			sha, err := gitEnv(wtPath, nil, nil, "rev-parse", "--verify", "--quiet", id+"^{commit}")
+			if err == nil && sha != "" {
+				out = append(out, sha)
+			}
+		}
+	}
+	return out, nil
+}
 
 // indexRun is where lines start in file, -1 when they are not in it.
 func indexRun(file, lines []string) int {

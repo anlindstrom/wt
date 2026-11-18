@@ -37,7 +37,9 @@ func newSyncCmd() *cobra.Command {
 			"  look    wt sync                   every worktree, grouped; changes\n" +
 			"                                    nothing of yours\n" +
 			"          wt sync <work> --stack    the layer branches on its line, bottom\n" +
-			"                                    first, and what holds each\n" +
+			"                                    first, and what holds each; with\n" +
+			"                                    --autosquash, the fixups a fold\n" +
+			"                                    moves ahead of their context\n" +
 			"          wt sync <work> --alone    that worktree, and which of its stack a\n" +
 			"                                    run of it alone would leave\n" +
 			"          wt sync <work>            one worktree in full: every stop,\n" +
@@ -176,7 +178,7 @@ func newSyncCmd() *cobra.Command {
 			"  wt sync --profile api         # the overview of a profile's repositories",
 		ValidArgsFunction: completeWork,
 	}
-	var rebase, resume, undo, yes, force, ifReady, allowDiverged, allowOwed, adopt, asJSON, stack, autosquash, alone bool
+	var rebase, resume, undo, yes, force, ifReady, allowDiverged, allowOwed, adopt, allowDropped, asJSON, stack, autosquash, alone bool
 	var expect, onto, upstream, edit, eachCommit string
 	var layers []string
 	var sel selectionFlags
@@ -184,7 +186,7 @@ func newSyncCmd() *cobra.Command {
 	flags := func() syncVerbFlags {
 		return syncVerbFlags{rebase: rebase, resume: resume, undo: undo,
 			yes: yes, force: force, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, push: push(),
-			allowDiverged: allowDiverged, allowOwed: allowOwed, adopt: adopt, json: asJSON, expect: expect,
+			allowDiverged: allowDiverged, allowOwed: allowOwed, adopt: adopt, allowDropped: allowDropped, json: asJSON, expect: expect,
 			stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream, alone: alone}
 	}
 	// The count rule is the verb's own. Two verbs at once is a flag mistake,
@@ -224,7 +226,7 @@ func newSyncCmd() *cobra.Command {
 			})
 		case "resume":
 			return withVerbContext(cmd, args, "sync resume", f.json, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				return syncResume(cmd, args[0], ctx, f.yes, f.allowOwed, f.adopt, f.push, j)
+				return syncResume(cmd, args[0], ctx, f.yes, f.allowOwed, f.adopt, f.allowDropped, f.push, j)
 			})
 		case "undo":
 			return withVerbContext(cmd, args, "sync undo", f.json, func(ctx *kit.Context, j *syncrun.RunJournal) error {
@@ -242,7 +244,7 @@ func newSyncCmd() *cobra.Command {
 		}
 		opts := synccmd.SyncOptions{NoFetch: noFetch, Onto: onto, Upstream: upstream, Alone: alone}
 		if f.stack {
-			opts.Stack = &synccmd.StackLook{Work: args[0], Layers: layers}
+			opts.Stack = &synccmd.StackLook{Work: args[0], Layers: layers, Autosquash: autosquash}
 		}
 		if len(args) == 1 {
 			return synccmd.SyncWorktree(ctx, args[0], opts, cmd.OutOrStdout())
@@ -264,10 +266,11 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&allowDiverged, "allow-diverged", false, "with --rebase: rebase a branch that has diverged from its own remote")
 	sync.Flags().BoolVar(&allowOwed, "allow-owed", false, "with --rebase or --resume: rebase now even when a step's need does not answer; the step is owed")
 	sync.Flags().BoolVar(&adopt, "adopt", false, "with --resume: take over a rebase finished by hand with commits made on top (see wt sync resume --help)")
+	sync.Flags().BoolVar(&allowDropped, "allow-dropped", false, "with --resume: go on past a resolution that drops lines of a fixup moved ahead of its context")
 	sync.Flags().BoolVar(&stack, "stack", false, "list the layer branches on the line of the worktree named, and what holds each")
 	sync.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
 	sync.Flags().BoolVar(&alone, "alone", false, "rebase, or look at, the one worktree named without the rest of its stack; the others are left as they are")
-	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --rebase --stack: fold the line's fixups in place; with --onto, as the line moves there")
+	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: name the fixups a fold moves ahead of their context; with --rebase, fold them")
 	sync.Flags().StringVar(&eachCommit, "each-commit", "", "with --rebase: where the each_commit checks run: all (default), tips or off")
 	sync.Flags().StringVar(&edit, "edit", "", "with --rebase --stack: stop at this commit of the line for you to amend, in place")
 	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk; with --rebase, rebase onto it")
@@ -275,7 +278,7 @@ func newSyncCmd() *cobra.Command {
 	// The verbs spelled as flags, and their own flags, work on this line but
 	// belong to the verbs: their help is wt sync rebase, resume and undo --help,
 	// and the table here keeps to what the overview itself takes.
-	for _, name := range []string{"rebase", "resume", "undo", "yes", "push", "no-push", "force", "if-ready", "expect", "no-ff-trunk", "allow-diverged", "allow-owed", "autosquash", "edit", "each-commit"} {
+	for _, name := range []string{"rebase", "resume", "undo", "yes", "push", "no-push", "force", "if-ready", "expect", "no-ff-trunk", "allow-diverged", "allow-owed", "allow-dropped", "edit", "each-commit"} {
 		_ = sync.Flags().MarkHidden(name)
 	}
 	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncStepsCmd(), newSyncPushToCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
@@ -619,14 +622,14 @@ func (f syncVerbFlags) check() error {
 		return usagef("--allow-owed needs --rebase or --resume")
 	case f.adopt && verb != "resume":
 		return usagef("--adopt needs --resume")
+	case f.allowDropped && verb != "resume":
+		return usagef("--allow-dropped needs --resume")
 	case f.stack && verb != "" && verb != "rebase":
 		return usagef("--stack needs --rebase, or no verb")
 	case len(f.layers) > 0 && !f.stack:
 		return usagef("--layer needs --stack")
 	case f.autosquash && !f.stack:
 		return usagef("--autosquash needs --stack")
-	case f.autosquash && verb != "rebase":
-		return usagef("--autosquash needs --rebase")
 	case f.edit != "" && !f.stack:
 		return usagef("--edit needs --stack")
 	case f.edit != "" && verb != "rebase":
@@ -708,7 +711,7 @@ func (f syncVerbFlags) stackOptions() *synccmd.StackOptions {
 func syncOverviewJSON(cmd *cobra.Command, args []string, sel reposel.Selection, f syncVerbFlags) error {
 	opts := synccmd.SyncOptions{NoFetch: f.noFetch, Onto: f.onto, Upstream: f.upstream}
 	if f.stack {
-		opts.Stack = &synccmd.StackLook{Work: args[0], Layers: f.layers}
+		opts.Stack = &synccmd.StackLook{Work: args[0], Layers: f.layers, Autosquash: f.autosquash}
 	}
 	if f.onto != "" {
 		opts.Work = args[0]
@@ -948,7 +951,14 @@ func newSyncRebaseCmd() *cobra.Command {
 			"resolved is held to the rest of that merge. In place or onto <ref>, a\n" +
 			"fixup that does not name exactly one commit to be replayed (the target\n" +
 			"carries it, it is ambiguous or names nothing) is refused before anything\n" +
-			"moves.\n\n" +
+			"moves. A fixup written at the top of the line can change lines only a\n" +
+			"later commit adds: folded behind its target it lacks their context.\n" +
+			"Before anything replays the run names each such hunk, with the first\n" +
+			"later commit that carries the context (fixup moved ahead of its context:\n" +
+			"<path>:<lines> needs <sha> \"<subject>\", which comes later on the line),\n" +
+			"and goes ahead; wt sync <work> --stack --autosquash says the same and\n" +
+			"moves nothing. A stop there says so and suggests undo and retargeting the\n" +
+			"hunk; wt sync resume refuses a resolution that drops it.\n\n" +
 			"--stack --edit <rev> moves a change down the line to an earlier commit:\n" +
 			"the fix a review asks of a low commit that a later one already carries.\n" +
 			"The line is replayed in place, onto its own base, and stops at <rev>,\n" +
@@ -1190,7 +1200,7 @@ func newSyncStepsCmd() *cobra.Command {
 }
 
 func newSyncResumeCmd() *cobra.Command {
-	var yes, allowOwed, adopt, asJSON bool
+	var yes, allowOwed, adopt, allowDropped, asJSON bool
 	var push func() syncrun.PushMode
 	resume := &cobra.Command{
 		Use:   "resume <work>",
@@ -1242,6 +1252,19 @@ func newSyncResumeCmd() *cobra.Command {
 			"resume that refuses this shape says --adopt is there. wt sync undo after it\n" +
 			"puts the line and its layers back as before the run; the kept ref stays.\n" +
 			"Not for a --stack --edit run or a fold.\n\n" +
+			"At a stop of a fold (--stack --autosquash) at a fixup moved ahead of its\n" +
+			"context, written above the commits that add what it changes, the plan\n" +
+			"says so and suggests wt sync undo and moving the hunk into a fixup of the\n" +
+			"commit it names. Before anything replays this checks the fixup line by\n" +
+			"line: for each line it adds, your resolution plus what the commits still\n" +
+			"to be replayed add and remove must give as many copies as the old tip\n" +
+			"has, renames followed; a binary file is compared by blob. A resolution\n" +
+			"that drops one is refused, naming the path and the lines, and nothing\n" +
+			"changes: fix it and run this again. A check that cannot run refuses\n" +
+			"with its reason. What it cannot tell (blank lines and braces, a file it\n" +
+			"cannot follow) is printed as not checked. --allow-dropped goes on past\n" +
+			"either when the drop is meant; the fold's content check at the end\n" +
+			"still holds the layers to the old line.\n\n" +
 			"At the stop --stack --edit asked for, HEAD is that commit: amend it, or\n" +
 			"add commits, leaving nothing uncommitted, and this replays the rest of\n" +
 			"the line onto what HEAD is then. Before the line moves its content is\n" +
@@ -1256,12 +1279,13 @@ func newSyncResumeCmd() *cobra.Command {
 			"  wt sync resume login-crash --no-push  # then print the push command\n" +
 			"  wt sync resume login-crash --yes      # yes to everything, push included\n" +
 			"  wt sync resume login-crash --adopt    # take over a rebase finished by hand\n" +
+			"  wt sync resume tmp/stack --allow-dropped  # past a fixup hunk dropped on purpose\n" +
 			"  wt sync login-crash --resume --push   # resume --push, spelled on wt sync",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withVerbContext(cmd, args, "sync resume", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				return syncResume(cmd, args[0], ctx, yes, allowOwed, adopt, push(), j)
+				return syncResume(cmd, args[0], ctx, yes, allowOwed, adopt, allowDropped, push(), j)
 			})
 		},
 	}
@@ -1270,13 +1294,14 @@ func newSyncResumeCmd() *cobra.Command {
 	resume.Flags().BoolVarP(&yes, "yes", "y", false, "yes to every question: an idle session, and the push")
 	resume.Flags().BoolVar(&allowOwed, "allow-owed", false, "resume even when a step's need does not answer; the step is owed, to run later")
 	resume.Flags().BoolVar(&adopt, "adopt", false, "take over a rebase finished by hand with commits made on top, when its reflog proves that")
+	resume.Flags().BoolVar(&allowDropped, "allow-dropped", false, "go on past a resolution that drops lines of a fixup moved ahead of its context, when the drop is meant")
 	resume.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
 	return resume
 }
 
 // syncResume is wt sync resume, whichever way it was spelled.
-func syncResume(cmd *cobra.Command, work string, ctx *kit.Context, yes, allowOwed, adopt bool, push syncrun.PushMode, j *syncrun.RunJournal) error {
-	opts := syncfix.ResumeOptions{Journal: j, Adopt: adopt}
+func syncResume(cmd *cobra.Command, work string, ctx *kit.Context, yes, allowOwed, adopt, allowDropped bool, push syncrun.PushMode, j *syncrun.RunJournal) error {
+	opts := syncfix.ResumeOptions{Journal: j, Adopt: adopt, AllowDropped: allowDropped}
 	opts.AllowOwed = allowOwed
 	opts.Push = push
 	// --yes answers yes to every question, the push included, unless

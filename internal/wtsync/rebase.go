@@ -199,6 +199,9 @@ type Request struct {
 	// HandedHead is HEAD as that handover recorded it: a stop a person
 	// reached past it must be on top of it.
 	HandedHead string
+	// Gaps is the hunks of the fold's fixups that lack their context behind
+	// their targets (ContextGaps): a stop at one of those fixups says so.
+	Gaps []ContextGap
 	// Content is the content check of an edit run at the end of its list,
 	// before the line's branch moves: given the rebased tip, the edit as the
 	// run went on from it, and the paths this rebase stopped on, why the
@@ -247,6 +250,9 @@ type Handover struct {
 	// Edit says this is the stop --edit asked for: HEAD is the commit, for
 	// a person to amend, and nothing is unmerged.
 	Edit bool
+	// Context is, at a fixup moved ahead of its context, the hunks of it
+	// that lack their context here.
+	Context []ContextGap
 }
 
 // Result is what a rebase did.
@@ -1497,6 +1503,7 @@ func (d *driver) handover(stop StopResult, conflicts []Conflict) (*Handover, err
 	h := &Handover{
 		Index: stop.Index, Total: stop.Total, Commit: stop.Commit, Subject: stop.Subject,
 		Conflicts: conflicts, Files: stop.Files, Staged: map[string]string{},
+		Context: GapsAt(d.req.Gaps, stop.Commit),
 	}
 	d.res.LayerState = d.layerState()
 	for _, f := range stop.Files {
