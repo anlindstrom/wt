@@ -4,6 +4,12 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-18 23:31 — --stack leaves every backup branch alone
+
+`wt sync --stack` now recognises a backup branch the way `wt refs sweep` does,
+where `*` crosses a `/`: `backup/2026-11-11/door-ux` and `feat/x-backup` are
+listed as backups and never moved, and are taken as layers only with `--layer`.
+
 ## 2026-11-18 23:30 — a layer's end follows a dropped or folded last commit
 
 In a `--stack` run, a layer whose last commit the rebase drops as empty (a

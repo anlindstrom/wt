@@ -3,11 +3,11 @@ package wtsync
 import (
 	"errors"
 	"fmt"
-	"path"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/anlindstrom/wt/internal/config"
 	"github.com/anlindstrom/wt/internal/git"
 )
 
@@ -56,6 +56,7 @@ func isFold(subject string) bool {
 // at the rewrite of its last commit that stands on its own (planLayers).
 func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) {
 	line := Line{Branch: branch}
+	sweep := config.CompileRefPatterns(backups)
 	var err error
 	if line.Head, err = gitEnv(dir, nil, nil, "rev-parse", "--verify", "refs/heads/"+branch); err != nil {
 		return line, err
@@ -117,7 +118,7 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 			if pos[f.tip] == 0 {
 				continue
 			}
-			if backup(name, backups) {
+			if backup(name, sweep) {
 				line.Skipped = append(line.Skipped, SkippedBranch{Branch: name, Tip: f.tip, Why: "a backup name; name it with --layer to move it"})
 				continue
 			}
@@ -133,14 +134,11 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 	return line, nil
 }
 
-// backup is whether name matches one of the patterns.
-func backup(name string, patterns []string) bool {
-	for _, p := range patterns {
-		if ok, _ := path.Match(p, name); ok {
-			return true
-		}
-	}
-	return false
+// backup is whether name matches one of the patterns the way wt refs sweep
+// matches them: * crosses a slash.
+func backup(name string, patterns []config.RefPattern) bool {
+	_, ok := config.MatchRefPattern(patterns, name)
+	return ok
 }
 
 // StackRequest is a rebase of a stack held on the line: every layer of Line
