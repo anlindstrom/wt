@@ -243,6 +243,12 @@ type StackFinish struct {
 	// Stopped is the paths the rebase stopped on, resolved by a strategy or
 	// by a person.
 	Stopped []string
+	// Dropped is the commits the finished rebase dropped as empty, as
+	// ReportReplay names them, and Confirmed says wt drove that rebase from
+	// start to end: only then are the drops it is certain of taken out of
+	// the plan.
+	Dropped   []wtsync.Dropped
+	Confirmed bool
 	// Gaps is, for a fold, the fixup hunks named before the rebase as
 	// lacking their context: the report keeps them.
 	Gaps []wtsync.ContextGap
@@ -329,17 +335,29 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		if plans, rerr = wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit); rerr != nil {
 			return refuse(rerr.Error())
 		}
-	} else if rec.Upstream != "" {
-		// Above an upstream git empties the picks the target already has:
-		// the plan follows what the finished rebase dropped.
+	} else {
+		// git empties the picks the target already has (above an upstream)
+		// and the ones a conflict rule resolved to trunk's side: the plan
+		// follows the drops wt is certain of.
 		var rerr error
-		if plans, rerr = wtsync.ReconcileDropped(main, in.Onto, plans); rerr != nil {
+		if plans, rerr = wtsync.ApplyDrops(main, in.Onto, plans, in.Dropped, in.Confirmed); rerr != nil {
 			return refuse(rerr.Error())
 		}
 	}
 	tips, cerr := wtsync.CheckLayers(main, in.NewTip, in.Onto, plans)
 	if cerr != nil {
-		return refuse(cerr.Error())
+		why := cerr.Error()
+		if !in.Confirmed && rec.Edit == nil && len(in.Dropped) > 0 {
+			why += "; the replay was advanced by hand past the run's stop, or the remaining replay was edited by hand, so no dropped commit is taken out of the plan"
+		}
+		if unclear := wtsync.UnclearDrops(plans, in.Dropped); len(unclear) > 0 && rec.Edit == nil {
+			var names []string
+			for _, d := range unclear {
+				names = append(names, git.ShortID(d.Commit, 7)+" "+d.Subject)
+			}
+			why += "; the rebase dropped " + strings.Join(names, ", ") + ", which wt cannot tell from another commit with the same author, date and subject, so no layer's count was lowered for it"
+		}
+		return refuse(why)
 	}
 	scan, scanErr := agents.ScanHolders(in.Listed)
 	if in.ListErr != nil {
@@ -374,6 +392,12 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 			patch, why = "changed", fmt.Sprintf("the edit emptied %s of it", kit.Count(t.LeftOut, "commit"))
 		case rec.Edit != nil:
 			patch, why = "changed", "the edit of "+git.ShortID(rec.Edit.Commit, 7)+" changed it, or a stop after it was resolved"
+		case foldedOnly(t, rec):
+			patch, why = "changed", "every commit of it was folded into an earlier commit"
+		case len(t.Emptied) > 0 && rec.Upstream == "" && t.Mapped == wtsync.MappedEmptied:
+			patch, why = "changed", "every commit of it was dropped as empty"
+		case len(t.Emptied) > 0 && rec.Upstream == "" && t.LeftOut == len(t.Emptied):
+			patch, why = "changed", kit.Count(len(t.Emptied), "commit")+" of it dropped as empty"
 		case t.Mapped == wtsync.MappedEmptied:
 			patch, why = "changed", carrier+" already carries all of its commits"
 		case t.LeftOut > 0:
@@ -389,6 +413,22 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		}
 		mapped := map[string]string{wtsync.MappedTip: "", wtsync.MappedTipDropped: ", tip dropped: " + carrier + " carries it",
 			wtsync.MappedEmptied: ", emptied: " + carrier + " carries every commit of it"}[t.Mapped]
+		if len(t.Emptied) > 0 && rec.Edit == nil && rec.Upstream == "" {
+			mapped = emptiedClause(main, t, tips, i)
+		}
+		if t.Mapped == wtsync.MappedTipDropped && t.TipFolded && rec.Edit == nil && t.LeftOut == 0 && len(t.Emptied) == 0 {
+			mapped = ", tip folded: the fixup went into an earlier commit"
+			if out, err := git.Run(main, "log", "-1", "--format=%h %s", t.New); err == nil {
+				mapped += "; ends at " + strings.TrimSpace(out)
+			}
+		}
+		if foldedOnly(t, rec) {
+			below := "the new base"
+			if i > 0 {
+				below = tips[i-1].Branch
+			}
+			mapped = ", folded: every commit of it went into an earlier commit; ends where " + below + " ends"
+		}
 		if rec.Edit != nil {
 			mapped = map[string]string{wtsync.MappedTip: "", wtsync.MappedTipDropped: ", tip dropped: the edit emptied it",
 				wtsync.MappedEmptied: ", emptied: the edit emptied every commit of it"}[t.Mapped]
@@ -580,4 +620,39 @@ func StackAfterRebase(ctx *kit.Context, rec *wtsync.StackRecord, res wtsync.Resu
 	}
 	rec.Plans, rec.Replay = res.Layers, res.Replay
 	return wtsync.WriteStackRecord(ctx.Repo.MainRoot, rec)
+}
+
+// emptiedClause says, on a layer's line, which of its commits the rebase
+// dropped as empty and where the layer now ends: at its last commit left, or,
+// when none is left, where the layer below (tips[i-1]) ends.
+func emptiedClause(main string, t wtsync.LayerTip, tips []wtsync.LayerTip, i int) string {
+	var dropped []string
+	for _, sha := range t.Emptied {
+		if out, err := git.Run(main, "log", "-1", "--format=%h %s", sha); err == nil {
+			dropped = append(dropped, strings.TrimSpace(out))
+		} else {
+			dropped = append(dropped, git.ShortID(sha, 7))
+		}
+	}
+	clause := ", dropped as empty: " + strings.Join(dropped, ", ")
+	switch t.Mapped {
+	case wtsync.MappedEmptied:
+		below := "the new base"
+		if i > 0 {
+			below = tips[i-1].Branch
+		}
+		return clause + "; ends where " + below + " ends"
+	case wtsync.MappedTipDropped:
+		if out, err := git.Run(main, "log", "-1", "--format=%h %s", t.New); err == nil {
+			return clause + "; ends at " + strings.TrimSpace(out)
+		}
+	}
+	return clause
+}
+
+// foldedOnly is whether a layer's every commit was folded by --autosquash
+// into an earlier commit, so that it ends where the layer below ends: no
+// commit of it was left out or dropped.
+func foldedOnly(t wtsync.LayerTip, rec *wtsync.StackRecord) bool {
+	return rec.Edit == nil && rec.Autosquash && t.Mapped == wtsync.MappedEmptied && t.LeftOut == 0 && len(t.Emptied) == 0 && len(t.Picks) == 0
 }

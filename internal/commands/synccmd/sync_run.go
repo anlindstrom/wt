@@ -1343,7 +1343,7 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) (rest
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: res.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: r.own, Listed: listed, ListErr: lerr, Force: rec.Force, Now: r.opts.Clock(), AfterMove: st.AfterMove, Between: st.Between,
-		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops), Gaps: r.gaps, Unchecked: r.gapsUnchecked})
+		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops), Dropped: res.Emptied, Confirmed: res.Replay != nil && res.Replay.Confirmed, Gaps: r.gaps, Unchecked: r.gapsUnchecked})
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s })
 	restored = s != nil && s.Restored
 	if ferr != nil {

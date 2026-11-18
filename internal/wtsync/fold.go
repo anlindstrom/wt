@@ -274,6 +274,7 @@ func (d *driver) atLayerEnd(n int) error {
 			return err
 		}
 		d.res.Layers[n-1].Subject = subject
+		d.res.Layers[n-1].StepEnd = true
 	}
 	d.subjectMoved = moved
 	return d.noteLayerStart(n+1, tip)
@@ -332,6 +333,7 @@ func (d *driver) planEmptied(n int, commits []string) (int, error) {
 	for i := n - 1; i < len(d.res.Layers); i++ {
 		d.res.Layers[i].Expect -= dropped
 	}
+	d.res.Layers[n-1].Stepped += dropped
 	if d.log != nil {
 		fmt.Fprintf(d.log, "  · layer %d/%d %s: %s left empty: the folds below carry %s\n", n, d.segments(), d.layerName(n),
 			plural(dropped, "commit"), map[bool]string{true: "it", false: "them"}[dropped == 1])

@@ -61,6 +61,8 @@ type HandoverInput struct {
 	// the branch before the rebase: what the safety ref pins. Empty
 	// otherwise.
 	Found string
+	// ByHand says an earlier leg of the run was advanced by hand past its stop.
+	ByHand bool
 	// Earlier is the paths the run's earlier handovers stopped on.
 	Earlier []string
 	// Tracker is the verb's, still set to the rebase being handed over; it
@@ -140,7 +142,7 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 		Branch: in.Branch, Work: in.Work, Trunk: in.TrunkSHA, TrunkRef: in.TrunkRef,
 		Onto: in.Onto, OntoRef: in.OntoRef, FollowUps: in.FollowUps, Upstream: in.Upstream, Epoch: in.Epoch,
 		Safety: in.Res.Safety.Ref, OldTip: in.Res.OldTip, Head: head,
-		Stop: in.Res.Left.Index, Total: in.Res.Left.Total,
+		Stop: in.Res.Left.Index, Total: in.Res.Left.Total, StoppedCommit: in.Res.Left.Commit, ByHand: in.ByHand, TodoHash: wtsync.TodoHash(in.Path),
 		Resolved: in.Res.Left.Staged, Strategy: map[string]string{}, Lifted: map[string]string{},
 		Deleted: in.Res.Left.Deleted, Left: in.Res.Left.Left,
 		Stopped:    PathsOnce(in.Earlier, wtsync.StopPaths(in.Res.Stops), in.Res.ByHand),
