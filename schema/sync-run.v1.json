@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.12.0",
+  "x-version": "1.13.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync [<work>...] --rebase --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
-  "required": ["schema", "schemaVersion", "command", "repo", "trunk", "trunkRef", "onto", "target", "fetched", "trunkSync", "outcome", "error", "worktrees", "recovery"],
+  "required": ["schema", "schemaVersion", "command", "repo", "trunk", "trunkRef", "onto", "target", "fetched", "trunkSync", "outcome", "error", "worktrees", "leftAlone", "recovery"],
   "properties": {
     "schema": { "const": 1, "description": "The major version: a new one only for a change that breaks readers." },
     "schemaVersion": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$", "description": "The full semantic version of this schema that the output follows." },
@@ -23,6 +23,20 @@
     },
     "error": { "type": ["string", "null"], "description": "Why the verb stopped before touching any participant; for undo, also why it stopped after putting some back." },
     "worktrees": { "type": "array", "description": "The participants, parents first.", "items": { "$ref": "#/$defs/participant" } },
+    "leftAlone": {
+      "type": "array",
+      "description": "Since 1.13.0: what a `--alone` run did not take along and left on the commits it was on, each named by `work`, `branch` and `path`: the worktrees stacked on the same history as the one it rebased, or, with --stack, the layer branches of the line. [] for every other run.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["work", "branch", "path"],
+        "properties": {
+          "work": { "type": ["string", "null"], "description": "The worktree; null for a layer branch of a --stack line that is in none." },
+          "branch": { "type": "string" },
+          "path": { "type": ["string", "null"] }
+        }
+      }
+    },
     "recovery": { "type": ["string", "null"], "description": "For interrupted: the way back wt printed." }
   },
   "$defs": {

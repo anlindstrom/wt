@@ -4,6 +4,16 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-18 21:30 — wt sync rebase --alone rebases one worktree of a stack
+
+`wt sync rebase <work> --alone` rebases that worktree only, as a throwaway copy,
+and takes none of the worktrees stacked on the same history: a dirty one no
+longer refuses the run, and none of them is moved or touched. Each is named as
+left on the old commits, and `--json` lists them as `leftAlone`. With `--stack`
+(and `--autosquash`) a copy of a line is folded as ever and no layer branch or
+worktree is moved or held. `wt sync <work> --alone` shows who it would leave;
+`wt sync undo` puts back only what moved.
+
 ## 2026-11-17 10:27 — resume --adopt takes over a rebase finished by hand
 
 `wt sync resume <work> --adopt` takes over a rebase you finished with

@@ -183,9 +183,22 @@ type RunResult struct {
 	Outcome       string             `json:"outcome"`
 	Error         *string            `json:"error"`
 	Worktrees     []*SyncParticipant `json:"worktrees"`
-	Recovery      *string            `json:"recovery"`
+	// LeftAlone is the worktrees a run given --alone did not take along:
+	// stacked on the same history as the one it rebased, and still on the
+	// commits they were on. [] for every other run.
+	LeftAlone []LeftAlone `json:"leftAlone"`
+	Recovery  *string     `json:"recovery"`
 	// TrunkSource is printed by wt up alone, not by sync-run.
 	TrunkSource *string `json:"-"`
+}
+
+// LeftAlone is one worktree a run with --alone left as it was.
+type LeftAlone struct {
+	// Work and Path are null for a layer branch of a --stack line that is in
+	// no worktree.
+	Work   *string `json:"work"`
+	Branch string  `json:"branch"`
+	Path   *string `json:"path"`
 }
 
 // UpResult is the one object wt up --json prints.
@@ -240,7 +253,7 @@ func NewSyncRunJournal(out io.Writer, command string) *RunJournal {
 func newJournal(out io.Writer, schemaName, command string) *RunJournal {
 	j := &RunJournal{byBr: map[string]*SyncParticipant{}, eachCommit: wtsync.EachAll}
 	j.Journal = jsonout.NewJournal(out, RunResult{Schema: 1, SchemaVersion: schema.VersionOf(schemaName), Command: command,
-		Worktrees: []*SyncParticipant{}},
+		Worktrees: []*SyncParticipant{}, LeftAlone: []LeftAlone{}},
 		jsonout.JournalRules[RunResult]{Error: func(r *RunResult, err error) { r.Error = jsonout.Strp(err.Error()) },
 			Caught: j.caught, Close: j.close})
 	return j
@@ -346,6 +359,16 @@ func (j *RunJournal) Join(work, branch, path, before string, own *OwnRemoteSync)
 		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}, EachCommit: j.eachCommit, Emptied: []DroppedJSON{}, TestsOnly: []DroppedJSON{}}
 	j.Res.Worktrees = append(j.Res.Worktrees, p)
 	j.byBr[branch] = p
+}
+
+// SetLeftAlone records the worktrees an --alone run left as they were.
+func (j *RunJournal) SetLeftAlone(left []LeftAlone) {
+	if j == nil {
+		return
+	}
+	j.Lock()
+	defer j.Unlock()
+	j.Res.LeftAlone = left
 }
 
 // OnSignal has a signal ask changed which participants still recorded as

@@ -1604,6 +1604,7 @@ value for results saved before that), and:
 | `target` | object \| null | since 1.8.0: [what `onto` is](#target--trunk-or---onto); for resume, what the handed-over run rebased onto; null for undo |
 | `trunkSync` | object \| null | as for `wt up`; always null for resume and undo, which do not fetch |
 | `error` | string \| null | as for `wt up`; also a question answered no (or nobody there to answer it), and for undo, why it stopped after putting some back |
+| `leftAlone` | array | since 1.13.0: for `wt sync rebase <work> --alone`, each worktree stacked on the same history that the run left as it was (not rebased, not refused on, not touched, on the old commits), or with `--stack` each layer branch of the line (none is moved, held or reset), as `work`, `branch` and `path`, the first and last null for a layer in no worktree; `[]` for every other run, and for an `--alone` run with nothing stacked on its worktree |
 
 Each participant has `wt up`'s fields, and:
 
@@ -2258,3 +2259,4 @@ change made it.
 | `sync-run` 1.10.0 | [`emptied` and `testsOnly`](#dropped--a-commit-a-rebase-emptied) on each participant: the commits a finished rebase left nothing of, and, with `test_paths` declared, those it left only the tests of |
 | `sync-run` 1.11.0 | `eachCommit` on each participant: `all`, `tips` or `off`, the run's `--each-commit` mode; the commits skipped under `tips` and `off` are not owed |
 | `sync-run` 1.12.0 | `adopted` on each participant: what `wt sync resume --adopt` took over, the ref keeping the tip it found, where the rebase finished, and the commits made after it |
+| `sync-run` 1.13.0 | `leftAlone`: what a `wt sync rebase <work> --alone` run left as it was: the worktrees stacked on the same history as the one it rebased, or with `--stack` the layer branches of its line |

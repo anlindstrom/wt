@@ -48,6 +48,9 @@ type SyncOptions struct {
 	// Work is the worktree wt sync <work> --onto <ref> --json is of: with
 	// --onto the overview holds that one alone.
 	Work string
+	// Alone looks at the one worktree as wt sync rebase --alone would run
+	// it: the others stacked on its history are named as left alone.
+	Alone bool
 }
 
 // StackLook is the look at one line's stack.
@@ -197,12 +200,29 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	}
 	a := wtsync.AssessTo(ctx.Repo.MainRoot, tgt, cfg, wt, listed, syncrun.OwnStateOf(own, wt.Branch))
 	printDetail(w, work, a)
+	if opts.Alone && target != nil {
+		return errors.New("--alone and --onto: --onto already moves exactly the worktrees named and none of their stack; leave --alone out")
+	}
+	if opts.Alone && opts.Stack == nil {
+		all, err := ctx.Repo.Worktrees()
+		if err != nil {
+			return err
+		}
+		stacked, ambiguous, err := wtsync.Parents(ctx.Repo.MainRoot, onto, all)
+		if err != nil {
+			return err
+		}
+		printAloneLook(w, leftAloneOf(ctx, all, strandedBy(stacked, ambiguous, wt.Branch)))
+	}
 	if opts.Stack != nil {
 		s, err := stackLookAt(ctx, base, onto, target, &StackLook{Work: arg, Layers: opts.Stack.Layers}, listed)
 		if err != nil {
 			return err
 		}
 		syncrun.PrintLayers(w, s)
+		if opts.Alone {
+			fmt.Fprintln(w, "  --alone  a run folds and rebases the line and moves no layer: each stays on its old commits, its worktree untouched")
+		}
 	}
 	if len(cfg.EachCommitOrNeeds()) > 0 {
 		if target == nil {
