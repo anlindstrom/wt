@@ -283,7 +283,15 @@ they fork from, and nothing of the declaration runs on them: no conflict rule,
 no check, no deferred step. A side branch whose commits conflict there is held
 with `wt sync rebase <branch> --onto <new> --upstream <old>`, a run of its own
 that does run them, with its stops, `wt sync resume` and `wt sync undo`. A
-branch with a backup name is listed and never moved.
+branch with a backup name is listed and never moved. Branches at one commit
+are siblings: carried together onto one new commit, or held together when
+anything holds one of them, and what is stacked above them goes onto that
+commit. The look names what holds a branch once, short (`a process in its
+worktree: bash (pid 31227)`), and what frees it; only a run prints the
+command that moves a held branch, since only a run knows the new commits.
+
+The look lists the line's own branch as the last row of its layer table,
+marked as the top, with its commits from the line's base.
 
 `--autosquash` alone folds in place, onto the line's own base, so the replayed
 trees can predate a script trunk declared since. A step whose `run` starts
