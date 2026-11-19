@@ -75,8 +75,8 @@ func RemoteBackups(t *testing.T) (ctx *kit.Context, main, origin, run string) {
 	ctx, main, origin = testkit.SweepRepo(t)
 	first := testkit.GitOut(t, main, "rev-parse", "main")
 	testkit.GitIn(t, main, "commit", "-q", "--allow-empty", "-m", "second")
-	testkit.GitIn(t, main, "push", "-q", "origin", "main", "main:refs/heads/backup/landed")
-	testkit.GitIn(t, main, "branch", "backup/local", first)
+	testkit.GitIn(t, main, "push", "-q", "origin", "main", "main:refs/heads/safe/landed")
+	testkit.GitIn(t, main, "branch", "safe/local", first)
 	r, human, err := RefsSweepJSON(t, ctx, refs.Options{Remote: true, OpenPRs: testkit.NoPRs})
 	if err != nil || r.Outcome != jsonout.OutcomeDone || r.RunID == nil {
 		t.Fatalf("%v %+v\n%s", err, r, human)

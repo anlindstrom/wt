@@ -42,12 +42,12 @@ var NoPRs = func([]string) (map[string]bool, error) { return map[string]bool{}, 
 
 // BackupsRepo is a repository with origin and one of each kind of backup:
 //
-//	backup/contained  a branch at a commit main has
-//	backup/old        a branch with a commit of its own, made and branched 30 days ago
-//	backup/rebased    a branch cut today from a feature branch last committed 30 days ago
+//	safe/contained  a branch at a commit main has
+//	safe/old        a branch with a commit of its own, made and branched 30 days ago
+//	safe/rebased    a branch cut today from a feature branch last committed 30 days ago
 //	safe-tag          an annotated tag on main's first commit, tagged 30 days ago
-//	backup/checked    a contained branch checked out in a worktree
-//	release-backup    a contained branch with a protected name
+//	safe/checked    a contained branch checked out in a worktree
+//	release-safe    a contained branch with a protected name
 //	feature           a branch no pattern matches
 func BackupsRepo(t *testing.T) (*kit.Context, string) {
 	t.Helper()
@@ -56,18 +56,18 @@ func BackupsRepo(t *testing.T) (*kit.Context, string) {
 	first := GitOut(t, main, "rev-parse", "main")
 	GitIn(t, main, "commit", "-q", "--allow-empty", "-m", "second")
 	GitIn(t, main, "push", "-q", "origin", "main")
-	GitIn(t, main, "branch", "backup/contained", first)
-	gitAt(t, main, old, "branch", "backup/old", "main")
-	CommitOn(t, main, "backup/old", "old work", old)
+	GitIn(t, main, "branch", "safe/contained", first)
+	gitAt(t, main, old, "branch", "safe/old", "main")
+	CommitOn(t, main, "safe/old", "old work", old)
 	gitAt(t, main, old, "branch", "feature", "main")
 	CommitOn(t, main, "feature", "feature work", old)
-	GitIn(t, main, "branch", "backup/rebased", "feature")
+	GitIn(t, main, "branch", "safe/rebased", "feature")
 	CommitOn(t, main, "feature", "rebased away", time.Now())
 	GitIn(t, main, "update-ref", "refs/heads/feature", GitOut(t, main, "rev-parse", "main"))
 	gitAt(t, main, old, "tag", "-a", "-m", "safety", "safe-tag", first)
-	GitIn(t, main, "branch", "backup/checked", first)
-	GitIn(t, main, "worktree", "add", "-q", filepath.Join(t.TempDir(), "checked"), "backup/checked")
-	GitIn(t, main, "branch", "release-backup", first)
-	GitIn(t, main, "config", "branch.backup/contained.description", "mine")
+	GitIn(t, main, "branch", "safe/checked", first)
+	GitIn(t, main, "worktree", "add", "-q", filepath.Join(t.TempDir(), "checked"), "safe/checked")
+	GitIn(t, main, "branch", "release-safe", first)
+	GitIn(t, main, "config", "branch.safe/contained.description", "mine")
 	return ctx, main
 }

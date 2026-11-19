@@ -37,7 +37,7 @@ func TestRefsSweepPinsAndDeletes(t *testing.T) {
 	}
 	run := *r.RunID
 	recordedVersion(t, ctx, run)
-	for _, id := range []string{"refs/heads/backup/contained", "refs/heads/backup/old", "refs/tags/safe-tag"} {
+	for _, id := range []string{"refs/heads/safe/contained", "refs/heads/safe/old", "refs/tags/safe-tag"} {
 		it := refs.RefResultOf(t, r, id)
 		if it.Result != refs.RefSwept || !it.Pinned || !it.Deleted || it.Pin == nil || len(it.RestoreCommand) != 7 ||
 			it.RestoreCommand[3] != run {
@@ -51,16 +51,16 @@ func TestRefsSweepPinsAndDeletes(t *testing.T) {
 	if pin := jsonout.Deref(refs.RefResultOf(t, r, "refs/tags/safe-tag").Pin); pin != refpins.SweptPrefix+run+"/tags/safe-tag" {
 		t.Errorf("tag pin = %s", pin)
 	}
-	if it := refs.RefResultOf(t, r, "refs/heads/backup/rebased"); it.Result != refs.RefNotSelected || it.Pinned {
+	if it := refs.RefResultOf(t, r, "refs/heads/safe/rebased"); it.Result != refs.RefNotSelected || it.Pinned {
 		t.Errorf("young = %+v", it)
 	}
-	if it := refs.RefResultOf(t, r, "refs/heads/backup/checked"); it.Result != refs.RefResultKept || jsonout.Deref(it.Reason) != refs.KeptWorktree {
+	if it := refs.RefResultOf(t, r, "refs/heads/safe/checked"); it.Result != refs.RefResultKept || jsonout.Deref(it.Reason) != refs.KeptWorktree {
 		t.Errorf("kept = %+v", it)
 	}
-	if ctx.Repo.BranchExists("backup/old") || !ctx.Repo.BranchExists("backup/rebased") {
-		t.Error("backup/old must be gone and backup/rebased kept")
+	if ctx.Repo.BranchExists("safe/old") || !ctx.Repo.BranchExists("safe/rebased") {
+		t.Error("safe/old must be gone and safe/rebased kept")
 	}
-	if out, _ := exec.Command("git", "-C", main, "config", "branch.backup/contained.description").Output(); len(out) > 0 {
+	if out, _ := exec.Command("git", "-C", main, "config", "branch.safe/contained.description").Output(); len(out) > 0 {
 		t.Errorf("the branch's config is left: %s", out)
 	}
 }
@@ -70,7 +70,7 @@ func TestRefsSweepExpectRefusesAChangedPlan(t *testing.T) {
 	t.Parallel()
 	ctx, main := testkit.BackupsRepo(t)
 	plan, _ := refs.RefsPlanJSON(t, ctx, refs.Options{NoFetch: true})
-	testkit.GitIn(t, main, "branch", "backup/new", "main")
+	testkit.GitIn(t, main, "branch", "safe/new", "main")
 	before := testkit.RepoState(t, main)
 	r, _, err := refstest.RefsSweepJSON(t, ctx, refs.Options{NoFetch: true, Expect: *plan.Token})
 	if !errors.Is(err, refs.ErrRefsPlanChanged) || r.Outcome != jsonout.OutcomeRefused || r.Error == nil || r.RunID != nil {
@@ -87,7 +87,7 @@ func TestRefsSweepOnly(t *testing.T) {
 	t.Parallel()
 	ctx, _ := testkit.BackupsRepo(t)
 	full, _ := refs.RefsPlanJSON(t, ctx, refs.Options{NoFetch: true})
-	only := []string{"refs/heads/backup/rebased"}
+	only := []string{"refs/heads/safe/rebased"}
 	p, err := refs.RefsPlanJSON(t, ctx, refs.Options{NoFetch: true, Only: only})
 	if err != nil || jsonout.Deref(p.Token) != jsonout.Deref(full.Token) {
 		t.Fatalf("--only changed the token or failed: %v", err)
@@ -97,19 +97,19 @@ func TestRefsSweepOnly(t *testing.T) {
 			t.Errorf("%s selected = %v", it.ID, it.Selected)
 		}
 	}
-	for _, bad := range []string{"refs/heads/backup/checked", "refs/heads/nope"} {
+	for _, bad := range []string{"refs/heads/safe/checked", "refs/heads/nope"} {
 		p, err := refs.RefsPlanJSON(t, ctx, refs.Options{NoFetch: true, Only: []string{only[0], bad}})
 		if err == nil || p.Token != nil || !strings.Contains(jsonout.Deref(p.Error), bad) {
 			t.Errorf("--only %s: err %v, plan %+v", bad, err, p.Error)
 		}
 		r, _, err := refstest.RefsSweepJSON(t, ctx, refs.Options{NoFetch: true, Only: []string{only[0], bad}})
-		if err == nil || r.Outcome != jsonout.OutcomeRefused || !ctx.Repo.BranchExists("backup/rebased") {
+		if err == nil || r.Outcome != jsonout.OutcomeRefused || !ctx.Repo.BranchExists("safe/rebased") {
 			t.Errorf("--only %s swept: %v %+v", bad, err, r)
 		}
 	}
 	r, _, err := refstest.RefsSweepJSON(t, ctx, refs.Options{NoFetch: true, Only: only, Expect: *full.Token})
 	if err != nil || r.Outcome != jsonout.OutcomeDone || refs.RefResultOf(t, r, only[0]).Result != refs.RefSwept ||
-		refs.RefResultOf(t, r, "refs/heads/backup/old").Result != refs.RefNotSelected {
+		refs.RefResultOf(t, r, "refs/heads/safe/old").Result != refs.RefNotSelected {
 		t.Fatalf("%v %+v", err, r)
 	}
 }
@@ -121,8 +121,8 @@ func TestRefsRestorePutsBack(t *testing.T) {
 	ctx, main := testkit.BackupsRepo(t)
 	r := refstest.SweepAll(t, ctx, refs.Options{})
 	run := *r.RunID
-	old := refs.RefResultOf(t, r, "refs/heads/backup/old")
-	testkit.GitIn(t, main, "branch", "backup/contained", "main")
+	old := refs.RefResultOf(t, r, "refs/heads/safe/old")
+	testkit.GitIn(t, main, "branch", "safe/contained", "main")
 	p, err := refstest.RestorePlanJSON(t, ctx, run, nil)
 	if err != nil || p.Token == nil || !strings.HasPrefix(*p.Token, "rr1-") {
 		t.Fatalf("%v %+v", err, p)
@@ -131,7 +131,7 @@ func TestRefsRestorePutsBack(t *testing.T) {
 	for _, it := range p.Items {
 		actions[it.ID] = it.Action
 	}
-	if actions["refs/heads/backup/old"] != refs.RestoreCreate || actions["refs/heads/backup/contained"] != refs.RestoreOccupied ||
+	if actions["refs/heads/safe/old"] != refs.RestoreCreate || actions["refs/heads/safe/contained"] != refs.RestoreOccupied ||
 		actions["refs/tags/safe-tag"] != refs.RestoreCreate {
 		t.Fatalf("actions = %v", actions)
 	}
@@ -139,17 +139,17 @@ func TestRefsRestorePutsBack(t *testing.T) {
 	if err != nil || res.Outcome != jsonout.OutcomeDone {
 		t.Fatalf("%v %+v", err, res)
 	}
-	if got := testkit.GitOut(t, main, "rev-parse", "refs/heads/backup/old"); got != old.Object {
-		t.Errorf("backup/old back at %s, want %s", got, old.Object)
+	if got := testkit.GitOut(t, main, "rev-parse", "refs/heads/safe/old"); got != old.Object {
+		t.Errorf("safe/old back at %s, want %s", got, old.Object)
 	}
 	if testkit.GitOut(t, main, "cat-file", "-t", "refs/tags/safe-tag") != "tag" {
 		t.Error("the annotated tag must come back as the tag object")
 	}
 	pins := testkit.GitOut(t, main, "for-each-ref", "--format=%(refname)", refpins.SweptPrefix+run+"/")
-	if pins != refpins.SweptPrefix+run+"/heads/backup/contained\n"+refpins.SweptPrefix+run+"/meta" {
+	if pins != refpins.SweptPrefix+run+"/heads/safe/contained\n"+refpins.SweptPrefix+run+"/meta" {
 		t.Errorf("pins left: %q", pins)
 	}
-	if _, err := refstest.RestorePlanJSON(t, ctx, run, []string{"refs/heads/backup/contained"}); err == nil {
+	if _, err := refstest.RestorePlanJSON(t, ctx, run, []string{"refs/heads/safe/contained"}); err == nil {
 		t.Error("--only on a name that is taken must refuse")
 	}
 	if _, err := refstest.RestorePlanJSON(t, ctx, "20200101T000000Z-0000", nil); err == nil {
@@ -161,15 +161,15 @@ func TestRefsRestorePutsBack(t *testing.T) {
 func TestRefsOnlyTakesAnIDWithAComma(t *testing.T) {
 	t.Parallel()
 	ctx, main := testkit.BackupsRepo(t)
-	testkit.GitIn(t, main, "branch", "backup/a,b", "main")
-	id := "refs/heads/backup/a,b"
+	testkit.GitIn(t, main, "branch", "safe/a,b", "main")
+	id := "refs/heads/safe/a,b"
 	r := refstest.SweepAll(t, ctx, refs.Options{Only: []string{id}})
 	it := refs.RefResultOf(t, r, id)
 	if it.Result != refs.RefSwept || !slices.Equal(it.RestoreCommand, []string{"wt", "refs", "restore", *r.RunID, "--only", id, "--yes"}) {
 		t.Fatalf("%+v", it)
 	}
 	res, err := refstest.RestoreJSON(t, ctx, *r.RunID, refs.RestoreRefsOptions{Only: []string{id}})
-	if err != nil || res.Outcome != jsonout.OutcomeDone || !ctx.Repo.BranchExists("backup/a,b") {
+	if err != nil || res.Outcome != jsonout.OutcomeDone || !ctx.Repo.BranchExists("safe/a,b") {
 		t.Fatalf("%v %+v", err, res)
 	}
 }
@@ -182,20 +182,20 @@ func TestRefsSweepRemote(t *testing.T) {
 	ctx, main, origin := testkit.SweepRepo(t)
 	first := testkit.GitOut(t, main, "rev-parse", "main")
 	testkit.GitIn(t, main, "commit", "-q", "--allow-empty", "-m", "second")
-	testkit.GitIn(t, main, "branch", "backup/landed", first)
-	testkit.GitIn(t, main, "branch", "backup/pr", first)
-	testkit.GitIn(t, main, "branch", "backup/unique", "main")
-	testkit.CommitOn(t, main, "backup/unique", "only here and there", time.Now())
+	testkit.GitIn(t, main, "branch", "safe/landed", first)
+	testkit.GitIn(t, main, "branch", "safe/pr", first)
+	testkit.GitIn(t, main, "branch", "safe/unique", "main")
+	testkit.CommitOn(t, main, "safe/unique", "only here and there", time.Now())
 	testkit.GitIn(t, main, "tag", "-a", "-m", "safety", "safe-remote", first)
-	testkit.GitIn(t, main, "push", "-q", "origin", "main", "backup/landed", "backup/pr", "backup/unique", "safe-remote")
+	testkit.GitIn(t, main, "push", "-q", "origin", "main", "safe/landed", "safe/pr", "safe/unique", "safe-remote")
 	testkit.GitIn(t, main, "fetch", "-q", "origin")
-	for _, b := range []string{"backup/landed", "backup/pr", "backup/unique"} {
+	for _, b := range []string{"safe/landed", "safe/pr", "safe/unique"} {
 		testkit.GitIn(t, main, "branch", "-D", b)
 	}
 	testkit.GitIn(t, main, "tag", "-d", "safe-remote")
 	testkit.GitIn(t, main, "fetch", "-q", "origin", "refs/tags/safe-remote:refs/tags/elsewhere")
 
-	prs := func([]string) (map[string]bool, error) { return map[string]bool{"backup/pr": true}, nil }
+	prs := func([]string) (map[string]bool, error) { return map[string]bool{"safe/pr": true}, nil }
 	p, err := refs.RefsPlanJSON(t, ctx, refs.Options{Remote: true, OpenPRs: prs})
 	if err != nil {
 		t.Fatal(err)
@@ -203,15 +203,15 @@ func TestRefsSweepRemote(t *testing.T) {
 	if !p.Remote || !p.Fetched {
 		t.Errorf("plan = %+v", p)
 	}
-	if it := refs.RefPlanItem(t, p, "origin:refs/heads/backup/landed"); it.Kind != refpins.RefRemoteBranch ||
+	if it := refs.RefPlanItem(t, p, "origin:refs/heads/safe/landed"); it.Kind != refpins.RefRemoteBranch ||
 		it.Category != refs.RefBackupContained || !it.Selected || jsonout.Deref(it.ContainedIn) != "origin:refs/heads/main" {
 		t.Errorf("landed = %+v", it)
 	}
-	if it := refs.RefPlanItem(t, p, "origin:refs/heads/backup/pr"); it.Category != refs.RefKept ||
+	if it := refs.RefPlanItem(t, p, "origin:refs/heads/safe/pr"); it.Category != refs.RefKept ||
 		!slices.Equal(it.Kept, []string{refs.KeptPullRequestOpen}) {
 		t.Errorf("pr = %+v", it)
 	}
-	if it := refs.RefPlanItem(t, p, "origin:refs/heads/backup/unique"); it.Category != refs.RefKept ||
+	if it := refs.RefPlanItem(t, p, "origin:refs/heads/safe/unique"); it.Category != refs.RefKept ||
 		!slices.Equal(it.Kept, []string{refs.KeptNotContained}) {
 		t.Errorf("unique = %+v", it)
 	}
@@ -221,7 +221,7 @@ func TestRefsSweepRemote(t *testing.T) {
 	}
 	unknown := func([]string) (map[string]bool, error) { return nil, errors.New("gh is not on your PATH") }
 	if p, _ := refs.RefsPlanJSON(t, ctx, refs.Options{Remote: true, NoFetch: true, OpenPRs: unknown}); !slices.Contains(
-		refs.RefPlanItem(t, p, "origin:refs/heads/backup/landed").Kept, refs.KeptPullRequestUnknown) {
+		refs.RefPlanItem(t, p, "origin:refs/heads/safe/landed").Kept, refs.KeptPullRequestUnknown) {
 		t.Error("without GitHub every remote branch is kept")
 	}
 
@@ -230,7 +230,7 @@ func TestRefsSweepRemote(t *testing.T) {
 		t.Fatalf("%v %+v\n%s", err, r, human)
 	}
 	run := *r.RunID
-	for _, ref := range []string{"refs/heads/backup/landed", "refs/tags/safe-remote"} {
+	for _, ref := range []string{"refs/heads/safe/landed", "refs/tags/safe-remote"} {
 		if out := testkit.GitOut(t, origin, "for-each-ref", ref); out != "" {
 			t.Errorf("origin still has %s", ref)
 		}
@@ -239,14 +239,14 @@ func TestRefsSweepRemote(t *testing.T) {
 			t.Errorf("%s = %+v", ref, it)
 		}
 	}
-	if pin := refpins.PinOf(run, refpins.RefRemoteBranch, "backup/landed"); testkit.GitOut(t, main, "rev-parse", pin) != first {
+	if pin := refpins.PinOf(run, refpins.RefRemoteBranch, "safe/landed"); testkit.GitOut(t, main, "rev-parse", pin) != first {
 		t.Errorf("pin %s is not at %s", pin, first)
 	}
 	res, err := refstest.RestoreJSON(t, ctx, run, refs.RestoreRefsOptions{})
 	if err != nil || res.Outcome != jsonout.OutcomeDone {
 		t.Fatalf("%v %+v", err, res)
 	}
-	if testkit.GitOut(t, origin, "rev-parse", "refs/heads/backup/landed") != first ||
+	if testkit.GitOut(t, origin, "rev-parse", "refs/heads/safe/landed") != first ||
 		testkit.GitOut(t, origin, "cat-file", "-t", "refs/tags/safe-remote") != "tag" {
 		t.Error("origin must have both back")
 	}
@@ -260,7 +260,7 @@ func TestRefsSweepRunID(t *testing.T) {
 	t.Parallel()
 	ctx, main := testkit.BackupsRepo(t)
 	id := "20260930T091500Z-00c0ffee"
-	r := refstest.SweepAll(t, ctx, refs.Options{RunID: id, Only: []string{"refs/heads/backup/contained"}})
+	r := refstest.SweepAll(t, ctx, refs.Options{RunID: id, Only: []string{"refs/heads/safe/contained"}})
 	if jsonout.Deref(r.RunID) != id {
 		t.Fatalf("run = %v", r.RunID)
 	}
@@ -289,8 +289,8 @@ func TestRefsRestoreRemoteKeepsThePinUntilOriginHasIt(t *testing.T) {
 	ctx, main, origin, run := refstest.RemoteBackups(t)
 	hook := filepath.Join(origin, "hooks", "pre-receive")
 	gittest.WriteExecutable(t, hook, "#!/bin/sh\necho no >&2\nexit 1\n")
-	pin := refpins.PinOf(run, refpins.RefRemoteBranch, "backup/landed")
-	id := "origin:refs/heads/backup/landed"
+	pin := refpins.PinOf(run, refpins.RefRemoteBranch, "safe/landed")
+	id := "origin:refs/heads/safe/landed"
 	res, err := refstest.RestoreJSON(t, ctx, run, refs.RestoreRefsOptions{Only: []string{id}})
 	it := res.Items[slices.IndexFunc(res.Items, func(i *refs.RefRestoreItem) bool { return i.ID == id })]
 	if err == nil || it.Result != refs.RefFailed || it.PinDeleted || it.Restored {
@@ -302,7 +302,7 @@ func TestRefsRestoreRemoteKeepsThePinUntilOriginHasIt(t *testing.T) {
 	if err := os.Remove(hook); err != nil {
 		t.Fatal(err)
 	}
-	testkit.GitIn(t, main, "push", "-q", "origin", pin+":refs/heads/backup/landed")
+	testkit.GitIn(t, main, "push", "-q", "origin", pin+":refs/heads/safe/landed")
 	p, _ := refstest.RestorePlanJSON(t, ctx, run, []string{id})
 	if p.Items[slices.IndexFunc(p.Items, func(i refs.RefRestorePlanItem) bool { return i.ID == id })].Action != refs.RestoreNone {
 		t.Fatalf("origin has it back: %+v", p.Items)
@@ -321,15 +321,15 @@ func TestRefsRestoreRemoteKeepsThePinUntilOriginHasIt(t *testing.T) {
 func TestRefsRestoreNoneKeepsThePinOfARefThatWent(t *testing.T) {
 	t.Parallel()
 	ctx, main := testkit.BackupsRepo(t)
-	r := refstest.SweepAll(t, ctx, refs.Options{Only: []string{"refs/heads/backup/old"}})
+	r := refstest.SweepAll(t, ctx, refs.Options{Only: []string{"refs/heads/safe/old"}})
 	run := *r.RunID
-	obj := refs.RefResultOf(t, r, "refs/heads/backup/old").Object
-	testkit.GitIn(t, main, "branch", "backup/old", obj)
+	obj := refs.RefResultOf(t, r, "refs/heads/safe/old").Object
+	testkit.GitIn(t, main, "branch", "safe/old", obj)
 	plan, err := refs.PlanRefsRestore(ctx, run)
 	if err != nil || plan.Rows[0].Action != refs.RestoreNone {
 		t.Fatalf("%v %+v", err, plan.Rows)
 	}
-	testkit.GitIn(t, main, "branch", "-D", "backup/old")
+	testkit.GitIn(t, main, "branch", "-D", "safe/old")
 	st := refs.RestoreRef(main, "", plan.Rows[0])
 	if st.Kept == "" || st.PinDeleted {
 		t.Errorf("state = %+v", st)

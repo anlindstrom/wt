@@ -71,17 +71,17 @@ func TestRefsPlanSortsTheBackups(t *testing.T) {
 		jsonout.Deref(p.Trunk) != "main" || jsonout.Deref(p.Age) != "14d" || len(p.Patterns) != 9 {
 		t.Fatalf("plan = %+v", p)
 	}
-	it := RefPlanItem(t, p, "refs/heads/backup/contained")
+	it := RefPlanItem(t, p, "refs/heads/safe/contained")
 	if it.Category != RefBackupContained || !it.Selected || jsonout.Deref(it.ContainedIn) != "refs/heads/main" ||
-		it.UniqueCommits != nil || it.Pattern != "backup/*" || jsonout.Deref(it.DateSource) != DateReflog || it.Annotated != nil {
+		it.UniqueCommits != nil || it.Pattern != "safe/*" || jsonout.Deref(it.DateSource) != DateReflog || it.Annotated != nil {
 		t.Errorf("contained = %+v", it)
 	}
-	it = RefPlanItem(t, p, "refs/heads/backup/old")
+	it = RefPlanItem(t, p, "refs/heads/safe/old")
 	if it.Category != RefBackupOld || !it.Selected || it.ContainedIn != nil || it.UniqueCommits == nil ||
 		*it.UniqueCommits != 1 || jsonout.Deref(it.Subject) != "old work" {
 		t.Errorf("old = %+v", it)
 	}
-	it = RefPlanItem(t, p, "refs/heads/backup/rebased")
+	it = RefPlanItem(t, p, "refs/heads/safe/rebased")
 	if it.Category != RefBackupYoung || it.Selected || jsonout.Deref(it.DateSource) != DateReflog {
 		t.Errorf("a backup made today of an old branch must be young: %+v", it)
 	}
@@ -90,11 +90,11 @@ func TestRefsPlanSortsTheBackups(t *testing.T) {
 		it.Object == jsonout.Deref(it.Tip) || jsonout.Deref(it.ContainedIn) != "refs/heads/main" {
 		t.Errorf("tag = %+v", it)
 	}
-	if it := RefPlanItem(t, p, "refs/heads/backup/checked"); it.Category != RefKept || it.Selected ||
+	if it := RefPlanItem(t, p, "refs/heads/safe/checked"); it.Category != RefKept || it.Selected ||
 		!slices.Equal(it.Kept, []string{KeptWorktree}) {
 		t.Errorf("checked out = %+v", it)
 	}
-	if it := RefPlanItem(t, p, "refs/heads/release-backup"); it.Category != RefKept ||
+	if it := RefPlanItem(t, p, "refs/heads/release-safe"); it.Category != RefKept ||
 		!slices.Equal(it.Kept, []string{KeptProtected}) {
 		t.Errorf("protected = %+v", it)
 	}
@@ -114,7 +114,7 @@ func TestRefsSweepKeepsARefThatMoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.CommitOn(t, main, "backup/old", "more", time.Now())
+	testkit.CommitOn(t, main, "safe/old", "more", time.Now())
 	var out bytes.Buffer
 	j := NewRefsJournal(&out)
 	j.planned(plan, refsToken(plan))
@@ -126,8 +126,8 @@ func TestRefsSweepKeepsARefThatMoved(t *testing.T) {
 	j.Finish()
 	var r Result
 	_ = json.Unmarshal(out.Bytes(), &r)
-	it := RefResultOf(t, r, "refs/heads/backup/old")
-	if it.Result != RefResultKept || it.Pinned || it.Deleted || !ctx.Repo.BranchExists("backup/old") {
+	it := RefResultOf(t, r, "refs/heads/safe/old")
+	if it.Result != RefResultKept || it.Pinned || it.Deleted || !ctx.Repo.BranchExists("safe/old") {
 		t.Errorf("moved = %+v", it)
 	}
 	if r.Outcome != jsonout.OutcomePartial {
@@ -179,7 +179,7 @@ func TestRefsJournalWritesOneObjectWhenInterrupted(t *testing.T) {
 	j := NewRefsJournal(&out)
 	j.planned(plan, refsToken(plan))
 	j.begin(refpins.NewRunID(time.Now()))
-	j.start("refs/heads/backup/old")
+	j.start("refs/heads/safe/old")
 	j.Interrupted("", "interrupted")
 	j.Finish()
 	testkit.ValidateJSON(t, "refs-sweep", out.Bytes())
@@ -191,7 +191,7 @@ func TestRefsJournalWritesOneObjectWhenInterrupted(t *testing.T) {
 	if dec.More() {
 		t.Error("a second object was written")
 	}
-	if r.Outcome != jsonout.OutcomeInterrupted || RefResultOf(t, r, "refs/heads/backup/old").Result != RefInterrupted ||
+	if r.Outcome != jsonout.OutcomeInterrupted || RefResultOf(t, r, "refs/heads/safe/old").Result != RefInterrupted ||
 		jsonout.Deref(r.Recovery) != "interrupted" {
 		t.Errorf("%+v", r)
 	}
@@ -224,7 +224,7 @@ func TestRefsPlanTime(t *testing.T) {
 		if i%2 == 1 {
 			at = testkit.GitOut(t, main, "commit-tree", "-p", history[i], "-m", fmt.Sprintf("backup %d", i), tree)
 		}
-		fmt.Fprintf(&refs, "create refs/heads/backup/b%d %s\n", i, at)
+		fmt.Fprintf(&refs, "create refs/heads/safe/b%d %s\n", i, at)
 	}
 	cmd := exec.Command("git", "-C", main, "update-ref", "--stdin")
 	cmd.Stdin = strings.NewReader(refs.String())
@@ -311,13 +311,13 @@ func TestRefsSweepRemoteGuards(t *testing.T) {
 	t.Parallel()
 	ctx, main, origin := testkit.SweepRepo(t)
 	testkit.GitIn(t, main, "commit", "-q", "--allow-empty", "-m", "second")
-	testkit.GitIn(t, main, "push", "-q", "origin", "main", "main:refs/heads/backup/rejected", "main~1:refs/heads/backup/moved")
+	testkit.GitIn(t, main, "push", "-q", "origin", "main", "main:refs/heads/safe/rejected", "main~1:refs/heads/safe/moved")
 	testkit.GitIn(t, main, "fetch", "-q", "origin")
 	plan, err := planRefs(ctx, Options{Remote: true, NoFetch: true, OpenPRs: testkit.NoPRs}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.GitIn(t, main, "push", "-q", "--force", "origin", "main:refs/heads/backup/moved")
+	testkit.GitIn(t, main, "push", "-q", "--force", "origin", "main:refs/heads/safe/moved")
 	hook := filepath.Join(origin, "hooks", "pre-receive")
 	gittest.WriteExecutable(t, hook, "#!/bin/sh\nexit 1\n")
 	var out bytes.Buffer
@@ -330,13 +330,13 @@ func TestRefsSweepRemoteGuards(t *testing.T) {
 	testkit.ValidateJSON(t, "refs-sweep", out.Bytes())
 	var r Result
 	_ = json.Unmarshal(out.Bytes(), &r)
-	if it := RefResultOf(t, r, "origin:refs/heads/backup/rejected"); it.Result != RefFailed || it.Pinned || it.Deleted {
+	if it := RefResultOf(t, r, "origin:refs/heads/safe/rejected"); it.Result != RefFailed || it.Pinned || it.Deleted {
 		t.Errorf("rejected = %+v", it)
 	}
-	if it := RefResultOf(t, r, "origin:refs/heads/backup/moved"); it.Result != RefResultKept || it.Pinned {
+	if it := RefResultOf(t, r, "origin:refs/heads/safe/moved"); it.Result != RefResultKept || it.Pinned {
 		t.Errorf("moved = %+v", it)
 	}
-	if testkit.GitOut(t, origin, "for-each-ref", "--format=%(refname)", "refs/heads/backup/") == "" {
+	if testkit.GitOut(t, origin, "for-each-ref", "--format=%(refname)", "refs/heads/safe/") == "" {
 		t.Error("origin must keep both")
 	}
 	if r.Outcome != jsonout.OutcomeRefused {
@@ -355,7 +355,7 @@ func TestRefsSweepKeepsABranchCheckedOutSinceThePlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.GitIn(t, main, "worktree", "add", "-q", filepath.Join(t.TempDir(), "late"), "backup/old")
+	testkit.GitIn(t, main, "worktree", "add", "-q", filepath.Join(t.TempDir(), "late"), "safe/old")
 	var out bytes.Buffer
 	j := NewRefsJournal(&out)
 	j.planned(plan, refsToken(plan))
@@ -365,8 +365,8 @@ func TestRefsSweepKeepsABranchCheckedOutSinceThePlan(t *testing.T) {
 	j.Finish()
 	var r Result
 	_ = json.Unmarshal(out.Bytes(), &r)
-	if it := RefResultOf(t, r, "refs/heads/backup/old"); it.Result != RefResultKept || it.Pinned ||
-		!ctx.Repo.BranchExists("backup/old") {
+	if it := RefResultOf(t, r, "refs/heads/safe/old"); it.Result != RefResultKept || it.Pinned ||
+		!ctx.Repo.BranchExists("safe/old") {
 		t.Errorf("checked out since = %+v", it)
 	}
 }
@@ -381,12 +381,12 @@ func TestRefsRemoteObjectMissing(t *testing.T) {
 	testkit.GitIn(t, other, "config", "user.email", "t@example.com")
 	testkit.GitIn(t, other, "config", "user.name", "T")
 	testkit.GitIn(t, other, "commit", "-q", "--allow-empty", "-m", "elsewhere")
-	testkit.GitIn(t, other, "push", "-q", "origin", "HEAD:refs/heads/backup/elsewhere")
+	testkit.GitIn(t, other, "push", "-q", "origin", "HEAD:refs/heads/safe/elsewhere")
 	p, err := RefsPlanJSON(t, ctx, Options{Remote: true, NoFetch: true, OpenPRs: testkit.NoPRs})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if it := RefPlanItem(t, p, "origin:refs/heads/backup/elsewhere"); it.Category != RefKept || it.Tip != nil ||
+	if it := RefPlanItem(t, p, "origin:refs/heads/safe/elsewhere"); it.Category != RefKept || it.Tip != nil ||
 		!slices.Contains(it.Kept, KeptObjectMissing) {
 		t.Errorf("missing = %+v", it)
 	}

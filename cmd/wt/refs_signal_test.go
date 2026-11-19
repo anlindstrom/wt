@@ -19,13 +19,13 @@ import (
 	"github.com/anlindstrom/wt/internal/jsonout"
 )
 
-// sigtermRepo is a repository with three backups, backup/a to backup/c,
+// sigtermRepo is a repository with three backups, safe/a to safe/c,
 // and a reference-transaction hook that holds the second transaction
 // touching a branch pin open until killed: the move a signal is sent in.
 func sigtermRepo(t *testing.T) (main, mark string) {
 	t.Helper()
 	main = gittest.NewRepo(t, t.TempDir(), "r")
-	for _, b := range []string{"backup/a", "backup/b", "backup/c"} {
+	for _, b := range []string{"safe/a", "safe/b", "safe/c"} {
 		gittest.Git(t, main, "branch", b)
 	}
 	dir := t.TempDir()
@@ -129,13 +129,13 @@ func TestRefsSweepSIGTERMWritesTheObject(t *testing.T) {
 	if r.Outcome != jsonout.OutcomeInterrupted || r.RunID == nil || r.Recovery == nil {
 		t.Fatalf("result = %+v", r)
 	}
-	want := map[string]string{"refs/heads/backup/a": refs.RefSwept, "refs/heads/backup/b": refs.RefInterrupted,
-		"refs/heads/backup/c": refs.RefNotRun}
+	want := map[string]string{"refs/heads/safe/a": refs.RefSwept, "refs/heads/safe/b": refs.RefInterrupted,
+		"refs/heads/safe/c": refs.RefNotRun}
 	for _, it := range r.Items {
 		if it.Result != want[it.ID] {
 			t.Errorf("%s is %s, want %s", it.ID, it.Result, want[it.ID])
 		}
-		if it.ID == "refs/heads/backup/b" && (it.Pinned || it.Deleted) {
+		if it.ID == "refs/heads/safe/b" && (it.Pinned || it.Deleted) {
 			t.Errorf("the move the signal caught was never committed: %+v", it)
 		}
 	}
@@ -153,13 +153,13 @@ func TestRefsRestoreSIGTERMWritesTheObject(t *testing.T) {
 	if r.Outcome != jsonout.OutcomeInterrupted || r.Recovery == nil {
 		t.Fatalf("result = %+v", r)
 	}
-	want := map[string]string{"refs/heads/backup/a": refs.RefRestored, "refs/heads/backup/b": refs.RefInterrupted,
-		"refs/heads/backup/c": refs.RefNotRun}
+	want := map[string]string{"refs/heads/safe/a": refs.RefRestored, "refs/heads/safe/b": refs.RefInterrupted,
+		"refs/heads/safe/c": refs.RefNotRun}
 	for _, it := range r.Items {
 		if it.Result != want[it.ID] {
 			t.Errorf("%s is %s, want %s", it.ID, it.Result, want[it.ID])
 		}
-		if it.ID == "refs/heads/backup/b" && (it.Restored || it.PinDeleted) {
+		if it.ID == "refs/heads/safe/b" && (it.Restored || it.PinDeleted) {
 			t.Errorf("the restore the signal caught was never committed: %+v", it)
 		}
 	}
@@ -177,8 +177,8 @@ func TestRefsPurgeSIGTERMWritesTheObject(t *testing.T) {
 	if r.Outcome != jsonout.OutcomeInterrupted || r.Recovery == nil || len(r.Runs) != 1 {
 		t.Fatalf("result = %+v", r)
 	}
-	want := map[string]string{"refs/heads/backup/a": refs.RefPurgeDeleted, "refs/heads/backup/b": refs.RefInterrupted,
-		"refs/heads/backup/c": refs.RefNotRun}
+	want := map[string]string{"refs/heads/safe/a": refs.RefPurgeDeleted, "refs/heads/safe/b": refs.RefInterrupted,
+		"refs/heads/safe/c": refs.RefNotRun}
 	for _, it := range r.Runs[0].Refs {
 		if it.Result != want[it.ID] {
 			t.Errorf("%s is %s, want %s", it.ID, it.Result, want[it.ID])
