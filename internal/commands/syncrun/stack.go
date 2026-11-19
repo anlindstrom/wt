@@ -154,6 +154,45 @@ type Stack struct {
 	// Restored says an edit run's line was put back at the tip the run
 	// found, its layers refused: the participant is restored, not rebased.
 	Restored bool `json:"-"`
+	// Fold is what a fold's tree guard compared, for the run's own
+	// `fold` field; it is not part of the look, so it is not serialized here.
+	Fold *StackFold `json:"-"`
+}
+
+// StackFold is, for a run that folds the line (--autosquash, --edit or
+// wt sync steps --stack), what it folded and what its tree guard held it
+// to; the run's participant carries it as `fold`.
+type StackFold struct {
+	// InPlace says the line is folded on its own base, not moved onto a
+	// target: the run's `target` then says only where the declaration was
+	// read from and what the line was assessed against.
+	InPlace bool `json:"inPlace"`
+	// Base is the line's own base: the commit it is folded on when InPlace.
+	Base string `json:"base"`
+	// Guard is the tree guard's comparison; null when none ran (the run has
+	// not finished, or it was an edit).
+	Guard *FoldGuard `json:"guard"`
+}
+
+// FoldGuard is what the guard compared and how it came out.
+type FoldGuard struct {
+	// OldTip and NewTip are the line's tips before and after the rebase.
+	OldTip string `json:"oldTip"`
+	NewTip string `json:"newTip"`
+	// Onto is the commit a moving fold's old line was merged onto to compare;
+	// null for a fold in place, which is compared with the old tip itself.
+	Onto *string `json:"onto"`
+	// ExcludedGlobs is the declared per-layer step paths a changed file
+	// matched, which the guard left out of the comparison.
+	ExcludedGlobs []string `json:"excludedGlobs"`
+	// ConflictAllowed is, for a moving fold, the files that conflicted when
+	// merged and were resolved at a stop: only the lines of the merge outside
+	// the conflicting regions must still be in them, in order.
+	ConflictAllowed []string `json:"conflictAllowed"`
+	// Outcome is passed or failed; Reason is why it failed, null when it
+	// passed.
+	Outcome string  `json:"outcome"`
+	Reason  *string `json:"reason"`
 }
 
 // StackContextGap is one hunk of a fixup a fold moves ahead of its
