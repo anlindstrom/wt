@@ -120,8 +120,9 @@ func TestBulletUnionRefusalStopsAndLosesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log.String())
 	}
-	if len(res.Stops) == 0 || res.Stops[0].Files[0].Resolved {
-		t.Fatalf("the refused stop was resolved: %+v", res)
+	// The first commit's stop is resolved; the reword's is not.
+	if n := len(res.Stops); n != 2 || !res.Stops[0].Files[0].Resolved || res.Stops[1].Files[0].Resolved {
+		t.Fatalf("stops: %+v", res.Stops)
 	}
 	if ok, _ := RebaseInProgress(wt); !ok {
 		t.Error("the stop is not left for a person")

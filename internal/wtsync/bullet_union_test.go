@@ -69,16 +69,20 @@ func TestBulletUnionMovesAnItemWithItsNestedLinesWhole(t *testing.T) {
 func TestBulletUnionRefusesWhatIsNotAdding(t *testing.T) {
 	t.Parallel()
 	base := readme("- Java 21", "- Docker")
-	cases := []struct{ name, trunk, branch, why string }{
-		{"the branch removes an item", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Gradle 9"), "branch removes"},
-		{"trunk removes an item", readme("- Java 21", "- Node 22"), readme("- Java 21", "- Docker", "- Gradle 9"), "trunk removes"},
-		{"the branch rewords an item", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Docker 27", "- Gradle 9"), "branch removes"},
-		{"a block holds prose", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Docker", "Install these first."), "not a bullet item"},
-		{"different markers", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Docker", "* Gradle 9"), "marker"},
-		{"different indents", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Docker", "  - Gradle 9"), "indent"},
+	cases := []struct{ name, base, trunk, branch, why string }{
+		{"the branch removes an item", "", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Gradle 9"), "branch removes"},
+		{"trunk removes an item", "", readme("- Java 21", "- Node 22"), readme("- Java 21", "- Docker", "- Gradle 9"), "trunk removes"},
+		{"the branch rewords an item", "", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Docker 27", "- Gradle 9"), "branch removes"},
+		{"a block holds prose", "", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Docker", "Install these first."), "not a bullet item"},
+		{"different markers", "", readme("- Java 21", "- Docker", "- Node 22"), readme("- Java 21", "- Docker", "* Gradle 9"), "marker"},
+		{"different indents", readme("  - Java 21", "  - Docker"), readme("  - Java 21", "  - Docker", "  - Node 22"), readme("  - Java 21", "  - Docker", "- Gradle 9"), "indent"},
 	}
 	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) { refusedBullets(t, base, c.trunk, c.branch, c.why) })
+		b := base
+		if c.base != "" {
+			b = c.base
+		}
+		t.Run(c.name, func(t *testing.T) { refusedBullets(t, b, c.trunk, c.branch, c.why) })
 	}
 }
 

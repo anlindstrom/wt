@@ -9,11 +9,12 @@ import (
 
 // The strategies a declaration may name.
 const (
-	StrategyOwnedLine = "owned-line"
-	StrategyOpenAPI   = "openapi"
-	StrategyListUnion = "list-union"
-	StrategyTakeTrunk = "take-trunk"
-	StrategyScript    = "script"
+	StrategyOwnedLine   = "owned-line"
+	StrategyOpenAPI     = "openapi"
+	StrategyListUnion   = "list-union"
+	StrategyBulletUnion = "bullet-union"
+	StrategyTakeTrunk   = "take-trunk"
+	StrategyScript      = "script"
 )
 
 // Strategy resolves one conflict shape. Resolve returns the resolved file, a
@@ -93,6 +94,10 @@ var kinds = map[string]struct {
 			}
 			return ListUnion{Line: re, Delimiter: r.Delimiter}, nil
 		},
+	},
+	StrategyBulletUnion: {
+		prepare: func(*Rule) error { return nil },
+		build:   func(Rule, string, string) (Strategy, error) { return BulletUnion{}, nil },
 	},
 	StrategyTakeTrunk: {
 		prepare: func(*Rule) error { return nil },
