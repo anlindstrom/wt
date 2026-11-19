@@ -226,3 +226,47 @@ func TestFoldMarksAForkAtAFixupWhereTheCommitBelowEnds(t *testing.T) {
 		t.Errorf("a1.txt at the fork's new commit is %q, want the fixup folded in", got)
 	}
 }
+
+// A side branch is replayed in the object store alone: its own commits on
+// the new base, with their authors and messages, no ref and no worktree
+// touched; a commit the new base already has drops, and a conflict leaves
+// nothing and says where.
+func TestReplaySideReplaysOnlyItsOwnCommits(t *testing.T) {
+	t.Parallel()
+	s := stackLine(t, "")
+	b2 := gitIn(t, s.Dir, "rev-parse", s.Tips["s2"]+"~1")
+	sideCommit(t, s.Dir, "side", b2, "x1.txt")
+	tip := sideCommit(t, s.Dir, "side-more", "side", "x2.txt")
+	newBase := gitIn(t, s.Dir, "rev-parse", "origin/main")
+	got, conflict, err := ReplaySide(s.Dir, s.Base, tip, newBase)
+	if err != nil || conflict != "" {
+		t.Fatalf("%v %s", err, conflict)
+	}
+	if n := gitIn(t, s.Dir, "rev-list", "--count", newBase+".."+got); n != "6" {
+		t.Errorf("%s commits on the new base, want the 6 of the line below b2's fork and the side's", n)
+	}
+	if a, b := gitIn(t, s.Dir, "log", "-1", "--format=%an %ae %ad %B", tip), gitIn(t, s.Dir, "log", "-1", "--format=%an %ae %ad %B", got); a != b {
+		t.Errorf("author or message changed: %q, now %q", a, b)
+	}
+	if gitIn(t, s.Dir, "rev-parse", "refs/heads/side-more") != tip {
+		t.Error("the branch moved")
+	}
+	// x1.txt on a base that already has it, the same: dropped.
+	path := filepath.Join(t.TempDir(), "same")
+	gitIn(t, s.Dir, "worktree", "add", "-q", "--detach", path, s.Base)
+	gitIn(t, path, "cherry-pick", "side")
+	same := gitIn(t, path, "rev-parse", "HEAD")
+	got, conflict, err = ReplaySide(s.Dir, b2, tip, same)
+	if err != nil || conflict != "" {
+		t.Fatalf("%v %s", err, conflict)
+	}
+	if n := gitIn(t, s.Dir, "rev-list", "--count", same+".."+got); n != "1" {
+		t.Errorf("%s commits above the base, want x1.txt dropped, x2.txt kept", n)
+	}
+	// x2.txt with other content on the base: a conflict.
+	other := sideCommit(t, s.Dir, "x2", s.Base, "x2.txt")
+	got, conflict, err = ReplaySide(s.Dir, "side", tip, other)
+	if err != nil || got != "" || !strings.Contains(conflict, "x2.txt") {
+		t.Errorf("got %q conflict %q err %v, want a conflict in x2.txt", got, conflict, err)
+	}
+}

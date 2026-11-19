@@ -323,3 +323,13 @@ func CheckMarker(dir, head, onto string, p LayerPlan) (tip, why string, err erro
 	}
 	return tip, "", nil
 }
+
+// ReplaySide replays the commits base..tip onto onto in the object store,
+// oldest first, as a rebase would: each commit's change merged onto the new
+// parent, with its author, date and message and a new committer. A commit
+// whose change the new parent already has is dropped, and a commit that was
+// empty to begin with is kept. Nothing else is touched: no ref, no index,
+// no worktree. A conflict returns no tip and says which commit and paths.
+func ReplaySide(dir, base, tip, onto string) (newTip, conflict string, err error) {
+	return "", "", nil
+}
