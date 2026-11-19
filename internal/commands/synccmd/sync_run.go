@@ -310,6 +310,11 @@ func (r *RunPlan) run(works []string) error {
 	if len(works) == 0 && opts.AllowDiverged {
 		return errors.New("--allow-diverged rebases a worktree you name over commits its remote has; name it")
 	}
+	if opts.Stack != nil {
+		if err := wtsync.CheckLayerPatterns(r.ctx.Repo.MainRoot, opts.Stack.Layers); err != nil {
+			return err
+		}
+	}
 	// Every refusal --onto has comes before local trunk is touched.
 	if r.target != nil {
 		if err := r.ontoPrecheck(works); err != nil {

@@ -117,6 +117,12 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 				add(name, branches[name], true)
 			}
 		}
+		literal := map[string]bool{}
+		for _, value := range named {
+			if !IsLayerPattern(value) {
+				literal[value] = true
+			}
+		}
 		for _, value := range named {
 			if !IsLayerPattern(value) {
 				f, ok := branches[value]
@@ -137,6 +143,13 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 				}
 				f := branches[name]
 				switch {
+				case literal[name]:
+					// Named on its own, it is a layer and never listed as
+					// not taken; off the line, its own name refuses it.
+					if pos[f.tip] != 0 {
+						take(name)
+						got++
+					}
 				case pos[f.tip] == 0:
 					line.addSkipped(name, f.tip, "its tip is not on the line of "+branch)
 				case backup(name, sweep):
@@ -188,6 +201,34 @@ func (l *Line) addSkipped(name, tip, why string) {
 		}
 	}
 	l.Skipped = append(l.Skipped, SkippedBranch{Branch: name, Tip: tip, Why: why})
+}
+
+// CheckLayerPatterns refuses a --layer pattern that matches no local branch,
+// with no line to read: what a run can say before it synchronizes trunk. A
+// pattern whose matches are all off the line is judged where the line is
+// read, as a name is.
+func CheckLayerPatterns(dir string, layers []string) error {
+	var patterns []string
+	for _, v := range layers {
+		if IsLayerPattern(v) {
+			patterns = append(patterns, v)
+		}
+	}
+	if len(patterns) == 0 {
+		return nil
+	}
+	out, err := gitEnv(dir, nil, nil, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	if err != nil {
+		return err
+	}
+	names := strings.Fields(out)
+	for _, p := range patterns {
+		compiled := config.CompileRefPatterns([]string{p})
+		if !slices.ContainsFunc(names, func(n string) bool { return backup(n, compiled) }) {
+			return fmt.Errorf("--layer %s takes no layer: no local branch matches it; nothing is moved", p)
+		}
+	}
+	return nil
 }
 
 // backup is whether name matches one of the patterns the way wt refs sweep

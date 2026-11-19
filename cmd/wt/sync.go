@@ -268,7 +268,7 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&adopt, "adopt", false, "with --resume: take over a rebase finished by hand with commits made on top (see wt sync resume --help)")
 	sync.Flags().BoolVar(&allowDropped, "allow-dropped", false, "with --resume: go on past a resolution that drops lines of a fixup moved ahead of its context")
 	sync.Flags().BoolVar(&stack, "stack", false, "list the layer branches on the line of the worktree named, and what holds each")
-	sync.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
+	sync.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer, or every branch a pattern with * or ? matches (quote it); repeatable; none takes every branch on the line")
 	sync.Flags().BoolVar(&alone, "alone", false, "rebase, or look at, the one worktree named without the rest of its stack; the others are left as they are")
 	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: name the fixups a fold moves ahead of their context; with --rebase, fold them")
 	sync.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave out the branches that fork from the line or sit above its top; a run then never moves them")
@@ -914,7 +914,13 @@ func newSyncRebaseCmd() *cobra.Command {
 			"itself), and the line is every commit from where it leaves trunk to its\n" +
 			"tip. The layers are the local branches whose tips are on the line, bottom\n" +
 			"first, or the ones --layer names (repeatable); a branch with a backup\n" +
-			"name (wt refs sweep's patterns) is listed and taken only by --layer. wt\n" +
+			"name (wt refs sweep's patterns) is listed and taken only by --layer\n" +
+			"naming it. --layer takes a pattern too: a value with * or ? takes every\n" +
+			"local branch it matches whose tip is on the line, matched as the backup\n" +
+			"patterns are (* crosses a slash, no [...]); quote it so the shell does\n" +
+			"not expand it. A pattern lists, and does not take, a backup name or a\n" +
+			"branch off the line; one that takes no layer is refused. Several layers\n" +
+			"are repeated flags, not one string. wt\n" +
 			"sync <work> --stack lists them first, with what holds each worktree,\n" +
 			"and moves nothing. The line is rebased once, with everything a run does:\n" +
 			"the safety ref, the strategies, the checks, the deferred steps, the\n" +
@@ -1001,6 +1007,8 @@ func newSyncRebaseCmd() *cobra.Command {
 			"  wt sync rebase tmp/ref --alone --stack --autosquash  # fold a copy; no layer moves\n" +
 			"  wt sync rebase tmp/stack --stack --each-commit=tips  # check each layer's tip only\n" +
 			"  wt sync rebase tmp/stack --stack   # the whole line once, then every layer\n" +
+			"  wt sync rebase tmp/stack --stack --layer 'tmp/layer/*'   # the pattern selects the layers; side branches still ride along (--no-side-branches stops that)\n" +
+			"  wt sync rebase tmp/stack --stack --layer ui --layer api   # two layers, as repeated flags\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash  # fold review fixes in place\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash --onto main  # fold and move\n" +
 			"  wt sync rebase tmp/stack --stack --no-side-branches  # move the line, leave branches cut from it\n" +
@@ -1047,7 +1055,7 @@ func newSyncRebaseCmd() *cobra.Command {
 	rebase.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the progress on stderr")
 	rebase.Flags().StringVar(&expect, "expect", "", "refuse unless the overview still matches this token from wt sync --json")
 	rebase.Flags().BoolVar(&stack, "stack", false, "rebase the line of the worktree named once, and move every layer branch on it")
-	rebase.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
+	rebase.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer, or every branch a pattern with * or ? matches (quote it); repeatable; none takes every branch on the line")
 	rebase.Flags().BoolVar(&alone, "alone", false, "rebase the one worktree named without the rest of its stack: the others are not refused on, moved or touched")
 	rebase.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: fold the line's fixups, in place; with --onto <ref>, as the line moves onto it")
 	rebase.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave the branches that fork from the line or sit above its top where they are, unread")
@@ -1216,7 +1224,7 @@ func newSyncStepsCmd() *cobra.Command {
 	steps.Flags().BoolVarP(&yes, "yes", "y", false, "do not ask first; push too, unless --no-push")
 	steps.Flags().BoolVar(&all, "all", false, "run every declared step, not only what the last run left owed")
 	steps.Flags().BoolVar(&stack, "stack", false, "run them at every layer tip of the line of <work>, and move the layers")
-	steps.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer (repeatable); none takes every branch on the line")
+	steps.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer, or every branch a pattern with * or ? matches (quote it); repeatable; none takes every branch on the line")
 	steps.Flags().BoolVar(&allowOwed, "allow-owed", false, "run even when a step's need does not answer; that step stays owed")
 	steps.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
 	return steps
