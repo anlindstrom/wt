@@ -46,6 +46,10 @@ type SideBranch struct {
 	// one branch below it, or the branch it is on being left. "" for a
 	// branch a run carries.
 	Left string
+	// SameTip is the other branches at its very tip, by name, and With the
+	// one of them it moves with: "" for the one that stands for them.
+	SameTip []string
+	With    string
 }
 
 // SideGuard is what is never a side branch of a line: a branch Protected

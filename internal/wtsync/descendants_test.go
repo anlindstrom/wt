@@ -32,7 +32,8 @@ func sidesByName(sides []SideBranch) map[string]SideBranch {
 }
 
 // What hangs off a line: a branch forked mid-line, one stacked on it, one
-// at the same tip, one above the line's top, and a backup. Layers, the
+// at the same tip (a sibling, not stacked on it), one above the line's top,
+// and a backup. Layers, the
 // line's own branch and trunk are none of them.
 func TestReadSidesFindsWhatHangsOffTheLine(t *testing.T) {
 	t.Parallel()
@@ -55,7 +56,7 @@ func TestReadSidesFindsWhatHangsOffTheLine(t *testing.T) {
 	for _, x := range sides {
 		order = append(order, x.Branch)
 	}
-	if got := strings.Join(order, " "); got != "side backup/2026-11-01/huge-redo side2 twin above" {
+	if got := strings.Join(order, " "); got != "side twin backup/2026-11-01/huge-redo side2 above" {
 		t.Errorf("order %q", got)
 	}
 	by := sidesByName(sides)
@@ -66,7 +67,7 @@ func TestReadSidesFindsWhatHangsOffTheLine(t *testing.T) {
 	}{
 		"side":  {SideForked, fork, "", 4, 1},
 		"side2": {SideForked, fork, "side", 4, 1},
-		"twin":  {SideForked, fork, "side", 4, 0},
+		"twin":  {SideForked, fork, "", 4, 1},
 		"above": {SideAbove, line.Head, "", 12, 1},
 	} {
 		got, ok := by[name]
@@ -77,6 +78,9 @@ func TestReadSidesFindsWhatHangsOffTheLine(t *testing.T) {
 			t.Errorf("%s: %+v, want %+v", name, got, want)
 		}
 	}
+	if tw, sd := by["twin"], by["side"]; tw.With != "side" || sd.With != "" || strings.Join(tw.SameTip, " ") != "side" || strings.Join(sd.SameTip, " ") != "twin" {
+		t.Errorf("twin %+v, side %+v: want siblings, twin moving with side", tw, sd)
+	}
 	backup := by["backup/2026-11-01/huge-redo"]
 	if !backup.Backup || backup.Left == "" || backup.On != "side" {
 		t.Errorf("backup: %+v, want a backup left where it is, on side", backup)
@@ -85,6 +89,46 @@ func TestReadSidesFindsWhatHangsOffTheLine(t *testing.T) {
 		if _, ok := by[name]; ok {
 			t.Errorf("%s is listed as a side branch", name)
 		}
+	}
+}
+
+// Two branches at one commit are siblings: neither is on the other, each
+// names the other, and what is stacked above them is on the one with an
+// upstream, never the first by name.
+func TestReadSidesTakesTheBranchWithAnUpstreamForTwins(t *testing.T) {
+	t.Parallel()
+	s := stackLine(t, "")
+	sideCommit(t, s.Dir, "ui-check", s.Tips["s2"], "x1.txt")
+	pass2Tip := sideCommit(t, s.Dir, "ui-pass2", "ui-check", "x2.txt")
+	gitIn(t, s.Dir, "branch", "chore/live", pass2Tip)
+	gitIn(t, s.Dir, "config", "branch.ui-pass2.remote", "origin")
+	gitIn(t, s.Dir, "config", "branch.ui-pass2.merge", "refs/heads/ui-pass2")
+	sideCommit(t, s.Dir, "pass3", pass2Tip, "x3.txt")
+	line, err := ReadLine(s.Dir, gittest.StackTmp, "origin/main", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sides, err := ReadSides(s.Dir, line, nil, SideGuard{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := sidesByName(sides)
+	pass2, live, pass3 := by["ui-pass2"], by["chore/live"], by["pass3"]
+	if pass2.On != "ui-check" || live.On != "ui-check" || pass2.Commits != 1 || live.Commits != 1 || pass2.Left != "" || live.Left != "" {
+		t.Errorf("ui-pass2 %+v, chore/live %+v: want both on ui-check with its one commit", pass2, live)
+	}
+	if pass2.With != "" || live.With != "ui-pass2" || strings.Join(pass2.SameTip, " ") != "chore/live" || strings.Join(live.SameTip, " ") != "ui-pass2" {
+		t.Errorf("ui-pass2 %+v, chore/live %+v: want ui-pass2, which has an upstream, to stand for both", pass2, live)
+	}
+	if pass3.On != "ui-pass2" || pass3.Base != pass2Tip || pass3.Commits != 1 {
+		t.Errorf("pass3 %+v, want on ui-pass2", pass3)
+	}
+	var order []string
+	for _, x := range sides {
+		order = append(order, x.Branch)
+	}
+	if got := strings.Join(order, " "); got != "ui-check ui-pass2 chore/live pass3" {
+		t.Errorf("order %q, want the twins together, the one that stands for them first", got)
 	}
 }
 

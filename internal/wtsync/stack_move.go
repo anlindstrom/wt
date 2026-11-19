@@ -34,7 +34,16 @@ type LayerHolder struct {
 	Branch, Path string
 	State        string
 	Detail       string // who or what holds it, or why it could not be read
+	// Proc and PID are the first process working in it, More how many more.
+	Proc      string
+	PID, More int
 }
+
+// HolderWhy is what holds h, said short.
+func HolderWhy(h LayerHolder) string { return "" }
+
+// HolderFrees is what frees h.
+func HolderFrees(h LayerHolder) string { return "" }
 
 // Forcible is whether --force moves a layer held this way: an idle session
 // or a process, never tracked changes, a rebase or a busy session.

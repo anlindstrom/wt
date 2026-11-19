@@ -83,12 +83,22 @@ type StackSide struct {
 	Left  *string `json:"left"`
 	// The run's: where it was put, its new tip, the move, and for a held
 	// one why and the command that moves it.
-	NewBase     *string `json:"newBase"`
-	NewTip      *string `json:"newTip"`
-	Result      *string `json:"result"`
-	How         *string `json:"how"`
-	Held        *string `json:"held"`
-	MoveCommand *string `json:"moveCommand"`
+	NewBase     *string  `json:"newBase"`
+	NewTip      *string  `json:"newTip"`
+	Result      *string  `json:"result"`
+	How         *string  `json:"how"`
+	Held        *string  `json:"held"`
+	MoveCommand *string  `json:"moveCommand"`
+	SameTip     []string `json:"sameTip"`
+}
+
+// StackTop is the line's own branch, the top of the stack.
+type StackTop struct {
+	Branch   string  `json:"branch"`
+	OldTip   string  `json:"oldTip"`
+	Commits  int     `json:"commits"`
+	Subject  string  `json:"subject"`
+	Worktree *string `json:"worktree"`
 }
 
 // StackSkipped is a branch on the line the run does not take as a layer.
@@ -106,6 +116,7 @@ type Stack struct {
 	Autosquash bool           `json:"autosquash"`
 	Layers     []StackLayer   `json:"layers"`
 	Skipped    []StackSkipped `json:"skipped"`
+	Top        *StackTop      `json:"top"`
 	// SideBranches is the branches that hang off the line, parents first:
 	// forked from a commit of it, or above its top. Empty with
 	// --no-side-branches.
@@ -198,7 +209,7 @@ func SetSides(s *Stack, sides []wtsync.SideBranch, holders []wtsync.LayerHolder,
 	carried := map[string]bool{}
 	for i, x := range sides {
 		side := StackSide{Branch: x.Branch, Kind: x.Kind, OldTip: x.Tip, Fork: x.Fork, ForkSubject: x.ForkSubject,
-			Base: x.Base, Commits: x.Commits, Backup: x.Backup, State: wtsync.HolderNone}
+			Base: x.Base, Commits: x.Commits, Backup: x.Backup, State: wtsync.HolderNone, SameTip: []string{}}
 		if x.On != "" {
 			side.On = jsonout.Strp(x.On)
 		}
