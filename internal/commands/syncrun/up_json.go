@@ -169,6 +169,9 @@ type SyncParticipant struct {
 	// Adopted is the rebase finished by hand that wt sync resume --adopt
 	// took over; null for anything else.
 	Adopted *AdoptedJSON `json:"adopted"`
+	// Timings is how long the run's each_commit checks and per-layer steps
+	// took; empty lists when none ran.
+	Timings TimingsJSON `json:"timings"`
 }
 
 // AdoptedJSON is what wt sync resume --adopt took over: the ref that keeps

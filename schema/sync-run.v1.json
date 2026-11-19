@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.19.0",
+  "x-version": "1.20.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync [<work>...] --rebase --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -73,7 +73,7 @@
     },
     "participant": {
       "type": "object",
-      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "layers", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "fold", "layerSteps", "emptied", "testsOnly", "adopted"],
+      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "layers", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "fold", "layerSteps", "emptied", "testsOnly", "adopted", "timings"],
       "properties": {
         "work": { "type": "string" },
         "branch": { "type": "string" },
@@ -137,7 +137,8 @@
         "adopted": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/adopted" }],
           "description": "Since 1.12.0: for wt sync resume --adopt, the rebase finished by hand that it took over. Null for every other run, and for a resume --adopt that refused."
-        }
+        },
+        "timings": { "$ref": "#/$defs/timings", "description": "Since 1.20.0: how long the run's each_commit checks and per-layer steps took. A resume's covers what that resume ran. Empty lists when none ran; wt sync undo, which runs none, says 0 and empty." }
       }
     },
     "adopted": {
@@ -315,7 +316,7 @@
     },
     "layerStep": {
       "type": "object",
-      "required": ["layer", "layers", "branch", "step", "ran", "result", "reason", "owner", "ownerSubject", "commit", "proof"],
+      "required": ["layer", "layers", "branch", "step", "ran", "result", "reason", "owner", "ownerSubject", "commit", "proof", "elapsedMs"],
       "additionalProperties": false,
       "properties": {
         "layer": { "type": "integer", "minimum": 1, "description": "The layer, from 1 at the bottom. In a --stack run the line's own commits above its top layer are one more layer; a rebase of one branch is one layer." },
@@ -331,7 +332,47 @@
         "owner": { "$ref": "#/$defs/shaOrNull", "description": "For folded, the commit its output was folded into, as rewritten: the last commit of the layer that changed one of its paths." },
         "ownerSubject": { "type": ["string", "null"], "description": "The owner's subject." },
         "commit": { "$ref": "#/$defs/shaOrNull", "description": "For committed, the step's commit." },
-        "proof": { "type": ["string", "null"], "description": "For a fold: held when the rewritten tip's tree is the step's output and every rewritten commit is unchanged outside the step's paths; otherwise what did not hold. Null when nothing was folded." }
+        "proof": { "type": ["string", "null"], "description": "For a fold: held when the rewritten tip's tree is the step's output and every rewritten commit is unchanged outside the step's paths; otherwise what did not hold. Null when nothing was folded." },
+        "elapsedMs": { "type": "integer", "minimum": 0, "description": "Since 1.20.0: how long the step took at this layer, in milliseconds. 0 when it did not run." }
+      }
+    },
+    "timings": {
+      "type": "object",
+      "required": ["wallMs", "runs", "slowest"],
+      "additionalProperties": false,
+      "properties": {
+        "wallMs": { "type": "integer", "minimum": 0, "description": "The wall time of the run, or of the resume, in milliseconds." },
+        "runs": {
+          "type": "array",
+          "description": "One row per each_commit step and per per-layer step that ran, in the order each first ran.",
+          "items": {
+            "type": "object",
+            "required": ["kind", "run", "count", "totalMs"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "enum": ["check", "step"], "description": "check: an each_commit step, at every commit, tip or recheck it ran at. step: a per-layer step." },
+              "run": { "type": "string", "description": "The step's run line from .wt-sync.yaml." },
+              "count": { "type": "integer", "minimum": 1, "description": "How many times it ran. A check that failed and was retried is one run, its retry's time in it." },
+              "totalMs": { "type": "integer", "minimum": 0, "description": "The time of all of them, in milliseconds." }
+            }
+          }
+        },
+        "slowest": {
+          "type": "array",
+          "maxItems": 3,
+          "description": "The slowest runs of any check or step, slowest first; at most three.",
+          "items": {
+            "type": "object",
+            "required": ["kind", "run", "at", "ms"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "enum": ["check", "step"] },
+              "run": { "type": "string" },
+              "at": { "type": "string", "description": "Where it ran: a commit's short id and subject for a check, a layer and its branch for a step." },
+              "ms": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
       }
     },
     "stackSide": {

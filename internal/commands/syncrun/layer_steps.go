@@ -24,6 +24,9 @@ type LayerStepJSON struct {
 	OwnerSubject *string `json:"ownerSubject"`
 	Commit       *string `json:"commit"`
 	Proof        *string `json:"proof"`
+	// ElapsedMs is how long the step took, in milliseconds; 0 when it did
+	// not run.
+	ElapsedMs int64 `json:"elapsedMs"`
 }
 
 // LayerStepsOf is steps for --json; never nil.
