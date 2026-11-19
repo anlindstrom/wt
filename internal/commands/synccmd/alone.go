@@ -122,3 +122,20 @@ func (r *RunPlan) layersLeftAlone(b string, line wtsync.Line) error {
 	r.opts.Journal.SetLeftAlone(left)
 	return nil
 }
+
+// looseLeftAlone names the branches in no worktree that sit on the line a run
+// given --alone replays, and so would have moved with it, as left alone.
+func (r *RunPlan) looseLeftAlone(worktrees repo.Worktrees, line wtsync.LooseLine) {
+	var branches []string
+	for _, l := range line.Layers {
+		if l.Left == "" {
+			branches = append(branches, l.Branch)
+		}
+	}
+	if len(branches) == 0 {
+		return
+	}
+	left := leftAloneOf(r.ctx, worktrees, branches)
+	printLeftAlone(r.w, left)
+	r.opts.Journal.AddLeftAlone(left)
+}

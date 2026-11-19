@@ -4,6 +4,13 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-19 10:20 — --alone no longer moves branches in no worktree
+
+`wt sync rebase <work> --alone` promised that only the named branch moves, but
+a branch in no worktree that sat on one of the replayed commits was moved
+along with it. It now stays where it was and is listed as left alone, in the
+output and in `leftAlone` of `--json`.
+
 ## 2026-11-19 09:47 — --stack carries the branches cut from the line
 
 `wt sync rebase <top> --stack` now also moves what hangs off the line: a branch

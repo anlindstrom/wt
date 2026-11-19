@@ -1641,7 +1641,7 @@ value for results saved before that), and:
 | `target` | object \| null | since 1.8.0: [what `onto` is](#target--trunk-or---onto); for resume, what the handed-over run rebased onto; null for undo |
 | `trunkSync` | object \| null | as for `wt up`; always null for resume and undo, which do not fetch |
 | `error` | string \| null | as for `wt up`; also a question answered no (or nobody there to answer it), and for undo, why it stopped after putting some back |
-| `leftAlone` | array | since 1.13.0: for `wt sync rebase <work> --alone`, each worktree stacked on the same history that the run left as it was (not rebased, not refused on, not touched, on the old commits), or with `--stack` each layer branch of the line (none is moved, held or reset), as `work`, `branch` and `path`, the first and last null for a layer in no worktree; `[]` for every other run, and for an `--alone` run with nothing stacked on its worktree |
+| `leftAlone` | array | since 1.13.0: for `wt sync rebase <work> --alone`, each worktree stacked on the same history that the run left as it was (not rebased, not refused on, not touched, on the old commits), and each branch in no worktree on the line it replayed (it is not moved), or with `--stack` each layer branch of the line (none is moved, held or reset), as `work`, `branch` and `path`, the first and last null for a branch in no worktree; `[]` for every other run, and for an `--alone` run with nothing stacked on its worktree |
 
 Each participant has `wt up`'s fields, and:
 

@@ -411,6 +411,16 @@ func (j *RunJournal) SetLeftAlone(left []LeftAlone) {
 	j.Res.LeftAlone = left
 }
 
+// AddLeftAlone appends to what the run left alone.
+func (j *RunJournal) AddLeftAlone(left []LeftAlone) {
+	if j == nil {
+		return
+	}
+	j.Lock()
+	defer j.Unlock()
+	j.Res.LeftAlone = append(j.Res.LeftAlone, left...)
+}
+
 // OnSignal has a signal ask changed which participants still recorded as
 // not run it caught changed; those are interrupted.
 func (j *RunJournal) OnSignal(changed func(p *SyncParticipant) bool) {
