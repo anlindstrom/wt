@@ -602,6 +602,9 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 			if d.res.Layers, rerr = planLayers(req.Path, req.Epoch, req.Stack.Line, string(todo)); rerr != nil {
 				return d.fail(rerr)
 			}
+			if d.res.Forks, rerr = planForks(req.Path, req.Epoch, req.Stack.Line, req.Stack.Forks, string(todo)); rerr != nil {
+				return d.fail(rerr)
+			}
 			// Read only for the report: a failure is noted and leaves the
 			// plan unknown, and never changes what the rebase does.
 			planReplay := replayPlanOf
@@ -629,8 +632,25 @@ func stackMarksFor(req Request) (stackMarks, error) {
 		return stackMarks{}, err
 	}
 	line := req.Stack.Line
-	return stackMarks{prefix: StackMapPrefix + strconv.FormatInt(req.Epoch, 10) + "/", top: len(line.Layers),
-		layerOf: line.layerOf(), copy: copyPath}, nil
+	marks := stackMarks{prefix: StackMapPrefix + strconv.FormatInt(req.Epoch, 10) + "/", top: len(line.Layers),
+		layerOf: line.layerOf(), copy: copyPath}
+	if forks := req.Stack.Forks; len(forks) > 0 {
+		pos := map[string]int{}
+		for i, c := range line.Commits {
+			pos[c] = i + 1
+		}
+		marks.forkPrefix = ForkMapPrefix + strconv.FormatInt(req.Epoch, 10) + "/"
+		marks.forks = len(forks)
+		marks.forksBelow = map[string]int{}
+		for i, c := range line.Commits {
+			for _, f := range forks {
+				if pos[f] < i+1 {
+					marks.forksBelow[c]++
+				}
+			}
+		}
+	}
+	return marks, nil
 }
 
 // liftPlan is what the run does to the sequencer's list: marks is the picks

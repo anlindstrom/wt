@@ -49,6 +49,14 @@ type stackMarks struct {
 	// copy is where the editor leaves a copy of the list it wrote, for the
 	// run to read the plan from; empty leaves none.
 	copy string
+	// forkPrefix and forksBelow put a marker for each fork commit of the
+	// line's side branches, forkPrefix plus its number, before the first
+	// pick above it (after that pick's layer markers), or at the end of the
+	// list before its last stops: forksBelow numbers every commit of the
+	// line by how many forks lie below it, and forks is how many there are.
+	forkPrefix string
+	forksBelow map[string]int
+	forks      int
 }
 
 func (p todoPlan) edits() bool {
@@ -82,6 +90,13 @@ func todoEditor(w io.Writer, p todoPlan) {
 		layers = append(layers, fmt.Sprintf("%s=%d", sha, n))
 	}
 	sort.Strings(layers)
+	var below []string
+	for sha, n := range p.stack.forksBelow {
+		if n > 0 {
+			below = append(below, fmt.Sprintf("%s=%d", sha, n))
+		}
+	}
+	sort.Strings(below)
 	fmt.Fprintln(w, "#!/bin/sh")
 	fmt.Fprintln(w, "# wt sync: stop before and after the picks that may need a version lift,")
 	fmt.Fprintln(w, "# leave out the picks trunk already carries, stop after the picks to check,")
@@ -92,6 +107,9 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "layers='%s'\n", strings.Join(layers, " "))
 	fmt.Fprintf(w, "top=%d\n", p.stack.top)
 	fmt.Fprintf(w, "mapref=%s\n", shellQuote(p.stack.prefix))
+	fmt.Fprintf(w, "forkat='%s'\n", strings.Join(below, " "))
+	fmt.Fprintf(w, "forks=%d\n", p.stack.forks)
+	fmt.Fprintf(w, "forkref=%s\n", shellQuote(p.stack.forkPrefix))
 	fmt.Fprintf(w, "copy=%s\n", shellQuote(p.stack.copy))
 	fmt.Fprintf(w, "stops=%s\n", map[bool]string{true: "1"}[p.stops])
 	fmt.Fprintf(w, "tail=%s\n", map[bool]string{true: "1"}[p.stops && p.tail])
@@ -99,11 +117,12 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "final=%s\n", map[bool]string{true: "1"}[p.final])
 	fmt.Fprintf(w, "tips=%s\n", map[bool]string{true: "1"}[p.tips])
 	fmt.Fprintf(w, "due=%s\n", map[bool]string{true: "1"}[p.tips && p.carry])
-	fmt.Fprintf(w, "pend=%s; open=%s; marked=0; brk=\n", map[bool]string{true: "1"}[p.open && p.due], map[bool]string{true: "1"}[p.open])
+	fmt.Fprintf(w, "pend=%s; open=%s; marked=0; forked=0; brk=\n", map[bool]string{true: "1"}[p.open && p.due], map[bool]string{true: "1"}[p.open])
 	fmt.Fprintf(w, "%s\n", `close_group() { if [ -n "$pend" ]; then printf 'break\n'; pend=; brk=1; fi; }`)
 	fmt.Fprintf(w, "%s\n", `tipbreak() { if [ -n "$tips" ] && [ -n "$due" ]; then printf 'break\n'; due=; brk=1; fi; }`)
 	fmt.Fprintf(w, "%s\n", `stop() { [ -z "$stops" ] || [ -n "$brk" ] || printf 'break\n'; brk=; }`)
 	fmt.Fprintf(w, "%s\n", `flush() { while [ "$marked" -lt "$1" ]; do marked=$((marked+1)); tipbreak; stop; printf 'update-ref %s%s\n' "$mapref" "$marked"; done; }`)
+	fmt.Fprintf(w, "%s\n", `fflush() { while [ "$forked" -lt "$1" ]; do forked=$((forked+1)); printf 'update-ref %s%s\n' "$forkref" "$forked"; brk=; done; }`)
 	fmt.Fprintln(w, `{`)
 	fmt.Fprintln(w, `while IFS= read -r line || [ -n "$line" ]; do`)
 	fmt.Fprintln(w, `  case "$line" in`)
@@ -116,7 +135,8 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintln(w, `      if [ -n "$out" ]; then`)
 	fmt.Fprintln(w, `        layer=$((top+1))`)
 	fmt.Fprintln(w, `        for l in $layers; do case "${l%%=*}" in "$id"*) layer=${l#*=}; break ;; esac; done`)
-	fmt.Fprintln(w, `        close_group; flush $((layer-1))`)
+	fmt.Fprintln(w, `        fb=0; for l in $forkat; do case "${l%%=*}" in "$id"*) fb=${l#*=}; break ;; esac; done`)
+	fmt.Fprintln(w, `        close_group; flush $((layer-1)); fflush "$fb"`)
 	fmt.Fprintf(w, "%s\n", `        [ -z "$pre" ] || printf 'break\n'`)
 	fmt.Fprintln(w, `        [ -z "$tips" ] || { [ -z "$check" ] || due=1; check=; }`)
 	fmt.Fprintf(w, "%s\n", `        printf '%s\n' "$out"; pend=$check; open=1; brk=`)
@@ -125,13 +145,14 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintln(w, `      id=${line#* }; case "$id" in -[Cc]\ *) id=${id#* } ;; esac; id=${id%% *}`)
 	fmt.Fprintln(w, `      for m in $checks; do case "$m" in "$id"*) if [ -n "$open" ]; then if [ -n "$tips" ]; then due=1; else pend=1; fi; fi; break ;; esac; done`)
 	fmt.Fprintf(w, "%s\n", `      printf '%s\n' "$line"; brk= ;;`)
+	fmt.Fprintf(w, "%s\n", `    "update-ref `+ForkMapPrefix+`"*) close_group; printf '%s\n' "$line"; brk= ;;`)
 	fmt.Fprintf(w, "%s\n", `    "update-ref "*) close_group; tipbreak; stop; printf '%s\n' "$line" ;;`)
 	fmt.Fprintf(w, "%s\n", `    "break"|"break "*) close_group; printf '%s\n' "$line"; brk=1 ;;`)
 	fmt.Fprintf(w, "%s\n", `    ""|"#"*) printf '%s\n' "$line" ;;`)
 	fmt.Fprintf(w, "%s\n", `    *) printf '%s\n' "$line"; brk= ;;`)
 	fmt.Fprintln(w, `  esac`)
 	fmt.Fprintln(w, `done < "$1"`)
-	fmt.Fprintln(w, `close_group; flush "$top"; tipbreak`)
+	fmt.Fprintln(w, `close_group; flush "$top"; fflush "$forks"; tipbreak`)
 	fmt.Fprintln(w, `if { [ -n "$tail" ] || [ -n "$final" ]; } && [ -z "$brk" ]; then printf 'break\n'; fi`)
 	fmt.Fprintln(w, `} > "$1.wt" && mv "$1.wt" "$1" && { [ -z "$copy" ] || cp "$1" "$copy"; } &&`)
 	fmt.Fprintf(w, "%s\n", `{ [ -z "$edit" ] || printf '%s\n' "$edit" > "$(dirname "$1")/wt-sync-edit"; }`)
