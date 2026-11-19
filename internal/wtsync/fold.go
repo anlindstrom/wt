@@ -591,7 +591,8 @@ func (d *driver) foldInto(r *LayerStep, run, files []string, head string) error 
 	if _, err := d.git("reset", "-q", "--hard", tip); err != nil {
 		return err
 	}
-	if d.req.EachCommit == EachTargets {
+	d.foldTargets = nil
+	if d.req.EachCommit == EachTargets && !d.resumed {
 		if d.foldTargets, err = d.targetsAmong(run); err != nil {
 			return err
 		}
@@ -605,7 +606,7 @@ func (d *driver) foldInto(r *LayerStep, run, files []string, head string) error 
 	if err != nil {
 		return err
 	}
-	if d.req.EachCommit == EachTargets {
+	if d.req.EachCommit == EachTargets && d.foldTargets != nil {
 		// The fold recommitted run: the targets and the owner, which is one
 		// too, are known by their new ids to the folds that come after.
 		if d.targetShas == nil {

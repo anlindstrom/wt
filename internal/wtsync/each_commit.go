@@ -536,7 +536,7 @@ func (d *driver) targetsAmong(run []string) ([]bool, error) {
 // targetsOf is the commits of rewritten a run under --each-commit=targets
 // checks after a step folded into them: the owner the output went into (the
 // first), every commit a fixup had been folded into, and the tip. Without a
-// record of the targets every commit is kept.
+// record of the targets (a resumed run has none) every commit is kept.
 func (d *driver) targetsOf(rewritten []string) []string {
 	if len(d.foldTargets) != len(rewritten) {
 		return rewritten

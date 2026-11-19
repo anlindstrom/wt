@@ -355,6 +355,10 @@ type driver struct {
 	// sequencer recorded for a target no longer names it, and the next fold
 	// that reaches it takes it from here. Set only under targets.
 	targetShas map[string]bool
+	// resumed is a driver made by Resume: it has no record of the targets
+	// the run before it found, so under targets a fold's rechecks cover
+	// every rewritten commit, the safe side.
+	resumed bool
 	// tipStop is whether the check stop checkAt found ends a layer, as
 	// opposed to closing a fold target.
 	tipStop bool
@@ -744,7 +748,7 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		return Result{Branch: req.Branch}, err
 	}
 	req.EachCommit = mode
-	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true,
+	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true, resumed: true,
 		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, Edit: req.Edit, EachCommit: mode, Layered: req.Stack != nil || req.ReportLine != nil}, stepFailed: map[string]int{}, made: map[string]bool{}}
 	d.restoreLayers(req.Resumed)
 	d.res.Unchecked = slices.Clone(req.UncheckedBefore)

@@ -550,6 +550,9 @@ func (r *resume) complete(res wtsync.Result) error {
 	if note := wtsync.EachCommitNote(res.EachCommit, res.Layered); note != "" {
 		fmt.Fprintf(r.w, "    %s\n", note)
 	}
+	if res.EachCommit == wtsync.EachTargets {
+		fmt.Fprintf(r.w, "    after a fold the checks cover every rewritten commit: a resumed run does not know the fold targets of the run before it\n")
+	}
 	if a := res.Adopted; a != nil {
 		for _, c := range a.Commits {
 			fmt.Fprintf(r.w, "  + %s %s  adopted: made after the rebase\n", git.ShortID(c.SHA, 7), c.Subject)
