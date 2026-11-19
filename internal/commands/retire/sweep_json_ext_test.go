@@ -400,3 +400,20 @@ func TestSweepPlanShowsTheConfigFingerprint(t *testing.T) {
 		t.Errorf("an edited file is another fingerprint and token: %+v %+v", p, q)
 	}
 }
+
+// A deliberate backup is an inUse item kept as deliberateBackup, and the plan
+// still validates against the schema.
+func TestSweepPlanJSONKeepsADeliberateBackup(t *testing.T) {
+	t.Parallel()
+	ctx, main, _ := testkit.SweepRepo(t)
+	testkit.BranchWithWork(t, main, "backup/2026-11-01/huge-redo", 1)
+	testkit.LandOnMain(t, main, "backup/2026-11-01/huge-redo")
+	p, err := retiretest.SweepPlanJSON(t, ctx, retire.SweepOptions{NoFetch: true, Agents: []agents.Agent{}, PRs: map[string]github.PR{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	it := planItem(t, p, "backup/2026-11-01/huge-redo")
+	if it.Category != retire.SweepInUse || !slices.Equal(it.Kept, []string{retire.KeptDeliberateBackup}) {
+		t.Errorf("item = %+v", it)
+	}
+}

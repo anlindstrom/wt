@@ -206,7 +206,8 @@ The file does not have to exist. No file means the built-in defaults, and
 | `branch_suffix` | `_wt` | what your branches carry, where a repository does not say |
 | `type_names` | empty | what your branches call each type, as `feat=feature` pairs |
 | `ff_trunk` | `true` | whether `wt up` and `wt sync rebase` fast-forward local trunk after fetching it, when that is safe |
-| `ref_sweep_patterns` | `backup/* safe/* safety/* backup-* safe-* safety-* *-backup *-safe *-safety` | the branch and tag names `wt refs sweep` treats as backups (globs) |
+| `ref_sweep_patterns` | `safe/* safety/* safe-* safety-* *-safe *-safety prefold/*` | the transient safety copies `wt refs sweep` may sweep (globs). A name `ref_keep_patterns` also matches is kept, whatever this says |
+| `ref_keep_patterns` | `backup/* backup-* *-backup` | the deliberate backups (globs): `wt refs sweep` lists them and never selects them, `wt sweep` never deletes them, `wt sync --stack` layer discovery and `wt up` never move them (`--layer` naming one is the exception). Keep wins over `ref_sweep_patterns` |
 | `ref_sweep_age` | `14d` | how old a backup no other ref contains must be before `wt refs sweep` takes it |
 | `root.<name>` | none | a directory of repositories, or one repository, for `--roots <name>` |
 | `profile.<name>` | none | a list of repositories for `--profile <name>` |
@@ -241,7 +242,8 @@ user config:   /Users/you/.config/wt/config.toml (no file yet)
   branch_suffix: "_wt" (default)
   type_names:    [] (default)
   ff_trunk:      true (default)
-  ref_sweep_patterns: ["backup/*", "safe/*", …] (default)
+  ref_sweep_patterns: ["safe/*", "safety/*", …] (default)
+  ref_keep_patterns: ["backup/*", "backup-*", "*-backup"] (default)
   ref_sweep_age: "14d" (default)
 superset mode: off (user config)
 ```

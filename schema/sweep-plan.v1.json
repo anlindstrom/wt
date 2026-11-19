@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json",
-  "x-version": "1.6.0",
+  "x-version": "1.7.0",
   "title": "wt sweep --dry-run --json",
   "description": "What wt sweep would do, and what it would keep and why. Printed by `wt sweep --dry-run --json` (or `wt sweep --json` without --yes) as the only thing on stdout; nothing is deleted. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -42,7 +42,7 @@
       "properties": {
         "category": {
           "enum": ["remove", "delete", "inUse", "upstreamGone"],
-          "description": "remove: the worktree goes, and its branch with it. delete: a branch in no worktree goes. inUse: merged, but its worktree is kept (kept says why). upstreamGone: its upstream is gone but trunk lacks its commits, kept."
+          "description": "remove: the worktree goes, and its branch with it. delete: a branch in no worktree goes. inUse: merged, but kept (kept says why): its worktree is kept, or (deliberateBackup, since 1.7.0) its name is a deliberate backup. upstreamGone: its upstream is gone but trunk lacks its commits, kept."
         },
         "branch": { "type": ["string", "null"], "description": "Null for a detached worktree." },
         "tip": { "$ref": "#/$defs/sha", "description": "The branch's commit, or a detached worktree's HEAD." },
@@ -58,12 +58,12 @@
         },
         "kept": {
           "type": "array",
-          "description": "Why it is kept, every reason that applies; empty for remove and delete. processes (since 1.6.0): without --reap, processes still run in its worktree (listed in processes). processesUnknown (since 1.6.0): the processes in it could not be found, or told apart from agent sessions.",
+          "description": "Why it is kept, every reason that applies; empty for remove and delete. processes (since 1.6.0): without --reap, processes still run in its worktree (listed in processes). processesUnknown (since 1.6.0): the processes in it could not be found, or told apart from agent sessions. deliberateBackup (since 1.7.0): the branch name matches ref_keep_patterns, so the branch is not deleted and its worktree, if any, is not removed.",
           "items": {
             "enum": ["dirty", "statusUnknown", "detached", "session", "sessionsUnknown", "lockHeld", "directoryMissing",
               "heldByRebase", "heldByBisect", "mainCheckout", "branchNotDeletable", "notMerged",
               "operation", "hiddenChanges", "headUnreachable", "reachUnknown", "submoduleUnreachable",
-              "nestedWorktree", "processes", "processesUnknown"]
+              "nestedWorktree", "processes", "processesUnknown", "deliberateBackup"]
           }
         },
         "reason": { "type": "string", "description": "The row as wt sweep prints it: why it goes, or why it stays and what to do." },

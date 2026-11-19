@@ -50,6 +50,9 @@ const (
 	KeptPullRequestOpen    = "pullRequestOpen"
 	KeptPullRequestUnknown = "pullRequestUnknown"
 	KeptNotContained       = "notContained"
+	// KeptDeliberate is a name ref_keep_patterns matches: a backup someone
+	// made on purpose, never swept.
+	KeptDeliberate = "deliberateBackup"
 )
 
 // keptWords is the codes as the Kept table prints them: as they are, but
@@ -57,8 +60,11 @@ const (
 func keptWords(codes []string) string {
 	words := slices.Clone(codes)
 	for i, c := range words {
-		if c == KeptQuarantine {
+		switch c {
+		case KeptQuarantine:
 			words[i] = "a worktree moved aside"
+		case KeptDeliberate:
+			words[i] = "a deliberate backup"
 		}
 	}
 	return strings.Join(words, ", ")
@@ -132,8 +138,11 @@ type Plan struct {
 	TrunkSource     *string
 	Fetched, Remote bool
 	Patterns        []string
-	Age             string
-	Now             int64
+	// KeepPatterns is ref_keep_patterns: a ref matching one is listed and
+	// never selected, whatever Patterns says.
+	KeepPatterns []string
+	Age          string
+	Now          int64
 	// Endpoint is origin as --remote resolved it; nil without --remote.
 	Endpoint *refpins.Endpoint
 	Problems []RefProblem
@@ -206,7 +215,8 @@ type container struct {
 func planRefs(ctx *kit.Context, opts Options, progress io.Writer) (Plan, error) {
 	u := ctx.UserConfig()
 	p := Plan{Repo: ctx.Repo.MainRoot, Trunk: ctx.Config.MainBranch, TrunkSource: ctx.TrunkSource(),
-		Remote: opts.Remote, Patterns: append([]string{}, u.RefSweepPatterns...), Age: u.RefSweepAge,
+		Remote: opts.Remote, Patterns: append([]string{}, u.RefSweepPatterns...), KeepPatterns: append([]string{}, u.RefKeepPatterns...),
+		Age: u.RefSweepAge,
 		Now: opts.now().Unix()}
 	if err := ctx.NoTrunk(); err != nil {
 		return p, err
@@ -235,7 +245,10 @@ func planRefs(ctx *kit.Context, opts Options, progress io.Writer) (Plan, error) 
 		return p, err
 	}
 	p.Fetched = !opts.NoFetch && ctx.Repo.HasRemote("origin")
-	patterns := config.CompileRefPatterns(p.Patterns)
+	// Every name either list matches is listed; keep patterns mark the rows
+	// that are never selected.
+	patterns := config.CompileRefPatterns(append(slices.Clone(p.Patterns), p.KeepPatterns...))
+	keep := config.CompileRefPatterns(p.KeepPatterns)
 	root := ctx.Repo.MainRoot
 
 	local, containers, err := readLocalRefs(ctx, patterns)
@@ -321,6 +334,9 @@ func planRefs(ctx *kit.Context, opts Options, progress io.Writer) (Plan, error) 
 	}
 	for i := range rows {
 		r := &rows[i]
+		if _, ok := config.MatchRefPattern(keep, r.Name); ok {
+			r.Kept = append([]string{KeptDeliberate}, r.Kept...)
+		}
 		switch {
 		case len(r.Kept) > 0:
 			r.Category = RefKept
@@ -776,7 +792,7 @@ func refsTokenOf(p Plan) *jsonout.Token {
 		return nil
 	}
 	t := jsonout.NewToken("rs1-", "wt-refs-sweep").Str("Repo", p.Repo).Str("Trunk", p.Trunk).Bool("Remote", p.Remote).
-		List("Patterns", p.Patterns...).Str("Age", p.Age)
+		List("Patterns", p.Patterns...).List("KeepPatterns", p.KeepPatterns...).Str("Age", p.Age)
 	if p.Endpoint != nil {
 		t.Str("Endpoint", p.Endpoint.Digest)
 	}
@@ -1043,7 +1059,11 @@ func sweepRemoteRef(root, url string, r RefRow, pin string) refState {
 func (p Plan) Render(w io.Writer) {
 	fmt.Fprintf(w, "backups are the branches and tags named\n  %s\n"+
 		"one another ref contains goes; one holding commits of its own goes\n"+
-		"once it is older than %s\n\n", strings.Join(p.Patterns, " "), p.Age)
+		"once it is older than %s\n", strings.Join(p.Patterns, " "), p.Age)
+	if len(p.KeepPatterns) > 0 {
+		fmt.Fprintf(w, "deliberate backups, named\n  %s\nare listed and never swept\n", strings.Join(p.KeepPatterns, " "))
+	}
+	fmt.Fprintln(w)
 	var sel, young, kept [][]string
 	for _, r := range p.Rows {
 		why := ""

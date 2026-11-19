@@ -843,7 +843,7 @@ Each item:
 |---|---|---|
 | `remove` | Will be removed with its branch | merged, and its worktree is safe to remove: the worktree goes the way `wt remove` takes it, then the branch |
 | `delete` | Will be deleted | merged, and in no worktree: the branch goes |
-| `inUse` | Merged, but in use in a worktree, so kept | merged, but its worktree is kept; `kept` says why |
+| `inUse` | Merged, but kept | merged, but kept: its worktree is kept, or its name is a deliberate backup; `kept` says why |
 | `upstreamGone` | Upstream gone, but not merged, so kept | its upstream is gone, but trunk lacks its commits |
 
 `kept`, exhaustively. A worktree is never removed with any of these:
@@ -861,6 +861,7 @@ Each item:
 | `mainCheckout` | the main checkout is on the branch |
 | `branchNotDeletable` | `wt remove` would not delete the branch with the worktree |
 | `notMerged` | for `upstreamGone`: trunk lacks its commits |
+| `deliberateBackup` | since 1.7.0: the branch name matches `ref_keep_patterns` (default `backup/*` `backup-*` `*-backup`), so the branch is not deleted and its worktree, if any, is not removed |
 | `operation` | a rebase, merge, cherry-pick, revert or bisect is in progress there |
 | `hiddenChanges` | files `git status` is told not to look at (assume-unchanged, skip-worktree) |
 | `headUnreachable` | its HEAD holds commits that no ref or other worktree would |
@@ -1224,9 +1225,10 @@ without `--yes` prints the same plan. It runs from any worktree of the
 repository.
 
 A **backup** is a ref whose short name matches one of `ref_sweep_patterns`
-(user config; the default is the nine `backup/*` `safe/*` `safety/*` `backup-*`
-`safe-*` `safety-*` `*-backup` `*-safe` `*-safety`, where `*` matches any run of
-characters, slashes included). Every other ref under `refs/heads/`,
+(user config; the default is the seven transient `safe/*` `safety/*` `safe-*`
+`safety-*` `*-safe` `*-safety` `prefold/*`) or one of `ref_keep_patterns` (the
+deliberate backups: `backup/*` `backup-*` `*-backup`), where `*` matches any run of
+characters, slashes included. Every other ref under `refs/heads/`,
 `refs/tags/` and `refs/remotes/origin/` is a **container** — trunk, protected
 and checked-out branches included. For a remote backup only origin's own
 branches and tags count. Nothing under `refs/wt-swept/`, `refs/wt-quarantine/`,
@@ -1264,6 +1266,7 @@ are there, the token is null.
 | `fetched` | bool | origin was fetched first |
 | `remote` | bool | `--remote` was given |
 | `patterns` | array of string | `ref_sweep_patterns`, in the order they are tried |
+| `keepPatterns` | array of string | `ref_keep_patterns`: a ref matching one is `kept` as a `deliberateBackup` and never selected, even when `patterns` matches it too |
 | `age` | string \| null | `ref_sweep_age`, e.g. `14d` |
 | `now` | int | unix seconds the plan was made at; age is measured from it |
 | `endpoint` | object \| null | with `--remote`: `{url, digest}` — the one URL with its userinfo removed, and `sha256:` with the lowercase hex SHA-256 of the full effective URL. The token covers the digest. Null without `--remote` |
@@ -1299,7 +1302,7 @@ The categories:
 - `backupOld` — it holds commits no container has, and `date` is older than
   `age`. Selected. Here only: a remote backup is never swept unless contained.
 - `backupYoung` — the same, younger. Not selected unless `--only` names it.
-  A `git branch backup/x` taken this morning of a three-week-old branch is
+  A `git branch safe/x` taken this morning of a three-week-old branch is
   young: its date is the branch's reflog, not its commits.
 - `kept` — something holds it; `kept` says what:
 
@@ -1313,6 +1316,7 @@ The categories:
 | `pullRequestOpen` | a remote branch with an open pull request: deleting it would close the pull request |
 | `pullRequestUnknown` | a remote branch, and GitHub is off, unreachable or not logged in |
 | `notContained` | a remote ref no ref on origin contains |
+| `deliberateBackup` | its name matches `ref_keep_patterns`: a backup someone made on purpose. Listed, never selected, and `--only` refuses it; the plan wt prints says `a deliberate backup` |
 
 ## `wt refs sweep --yes --json` — the ref sweep
 
@@ -2307,6 +2311,8 @@ change made it.
 | `session-stop` 1.0.0 | `wt session stop --json`, the outcome of a stop |
 | `remove-plan` 1.5.0, `remove` 1.5.0 | [`--reap`](#processes--what-still-runs-in-a-worktree): `processes` and `processesError` in the plan, `reaped` in the result, the problem `processesUnknown` |
 | `sweep-plan` 1.6.0, `sweep` 1.5.0 | [`--reap`](#processes--what-still-runs-in-a-worktree): `reap` on the plan and `processes` on each item, the `kept` codes `processes` and `processesUnknown`, `reaped` on each item of the result |
+| `refs-sweep-plan` 1.1.0 | `keepPatterns`, and the `kept` code `deliberateBackup`: a ref matching `ref_keep_patterns` (default `backup/*` `backup-*` `*-backup`) is listed and never selected. `ref_sweep_patterns` now defaults to the transient names (`safe/*` `safety/*` `safe-*` `safety-*` `*-safe` `*-safety` `prefold/*`). `refs-sweep` changes in wording only: its `reason` for such an item is `deliberateBackup` |
+| `sweep-plan` 1.7.0 | the `kept` code `deliberateBackup`: a merged branch whose name matches `ref_keep_patterns` is no longer deleted by `wt sweep`; it is an `inUse` item, and its worktree is not removed. `sweep` changes in wording only |
 | `session-send` 1.1.0 | `errorCode` `notExact`: `<work>` only matched a worktree and is not its name, and no `--expect-session` was given; 1.0.0 said `noSession` |
 | `config` 1.0.0 | `wt config --json`: resolved repository configuration, including developer config entries, main checkout and user naming overrides |
 | `sync` 1.6.0, `sync-run` 1.5.0, `status` 1.10.0 | [`each_commit` checks and `needs`](#needs--what-a-step-cannot-run-without): `eachCommitDeclared`, `needs`, and `checks` and `checkCommits` on each worktree of `sync`; `needs` on every declared step of `sync` and `status`; `checked` and `checkFailed` on each participant of `sync-run`, and the `deferred` result `owed` |

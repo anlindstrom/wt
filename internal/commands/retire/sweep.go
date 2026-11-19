@@ -14,6 +14,7 @@ import (
 
 	"github.com/anlindstrom/wt/internal/agents"
 	"github.com/anlindstrom/wt/internal/commands/kit"
+	"github.com/anlindstrom/wt/internal/config"
 	"github.com/anlindstrom/wt/internal/git"
 	"github.com/anlindstrom/wt/internal/github"
 	"github.com/anlindstrom/wt/internal/jsonout"
@@ -170,6 +171,7 @@ func PlanSweep(ctx *kit.Context, bases []repo.TrunkBase, list func() ([]agents.A
 	trunkNames := kit.Trunks(ctx)
 
 	p := SweepPlan{Bases: bases, MainRoot: ctx.Repo.MainRoot, Reap: reap}
+	keep := config.CompileRefPatterns(ctx.UserConfig().RefKeepPatterns)
 	var candidates []SweepBranch
 	for _, b := range branches {
 		if ProtectedBranch(b.Name, ctx.Config.MainBranch, originHead) {
@@ -191,7 +193,16 @@ func PlanSweep(ctx *kit.Context, bases []repo.TrunkBase, list func() ([]agents.A
 		if !sb.done() && (b.Gone || use.Path != "") {
 			sb.AppliedTo = appliedTo(ctx, b.Tip, bases)
 		}
+		_, deliberate := config.MatchRefPattern(keep, b.Name)
 		switch {
+		case sb.done() && deliberate:
+			// The branch marks a moment that matters, though trunk has its
+			// commits: kept, with its worktree if it has one.
+			if sb.Worktree != "" {
+				sb.Work = kit.WorktreeName(ctx, b.Name, sb.Worktree)
+			}
+			sb.KeptCodes = []string{KeptDeliberateBackup}
+			p.CheckedOut = append(p.CheckedOut, sb)
 		case sb.done() && sb.Worktree != "":
 			sb.Work = kit.WorktreeName(ctx, b.Name, sb.Worktree)
 			if sb.HeldBy != "" || repo.SamePath(sb.Worktree, p.MainRoot) {
@@ -396,7 +407,7 @@ func (p SweepPlan) Render(w io.Writer, width int) {
 		fmt.Fprintln(w, "No merged branches or worktrees to sweep.")
 	}
 	if len(p.CheckedOut) > 0 {
-		fmt.Fprintln(w, "\nMerged, but in use in a worktree, so kept:")
+		fmt.Fprintln(w, "\nMerged, but kept:")
 		var rows [][]string
 		for _, b := range p.CheckedOut {
 			rows = append(rows, []string{"  " + b.Name, p.checkedOutAdvice(b)})
@@ -441,6 +452,11 @@ func (p SweepPlan) keptBecause(b SweepBranch) string {
 		target = b.Worktree
 	}
 	switch {
+	case slices.Contains(b.KeptCodes, KeptDeliberateBackup):
+		if b.Worktree != "" {
+			return "a deliberate backup (ref_keep_patterns); wt remove " + target + " to take it by hand"
+		}
+		return "a deliberate backup (ref_keep_patterns); git branch -d " + b.Name + " to take it by hand"
 	case b.HeldBy != "":
 		return "held by the " + b.HeldBy + " in " + b.Worktree + "; finish or abort it there, then sweep again"
 	case repo.SamePath(b.Worktree, p.MainRoot):
@@ -491,6 +507,9 @@ func (p SweepPlan) changedFrom(ctx *kit.Context, was SweepBranch) string {
 		if b.Name != was.Name {
 			continue
 		}
+		if slices.Contains(b.KeptCodes, KeptDeliberateBackup) {
+			return "it became a deliberate backup (ref_keep_patterns) after the plan was made"
+		}
 		if b.HeldBy != "" {
 			return fmt.Sprintf("the %s in %s took hold of it after the plan was made", b.HeldBy, b.Worktree)
 		}
@@ -540,6 +559,8 @@ func (p SweepPlan) worktreeChangedFrom(ctx *kit.Context, was SweepWorktree) (Pla
 			continue
 		}
 		switch {
+		case slices.Contains(b.KeptCodes, KeptDeliberateBackup):
+			return Plan{}, "it became a deliberate backup (ref_keep_patterns) after the plan was made"
 		case b.Kept != "":
 			return Plan{}, b.Kept
 		case b.HeldBy != "":

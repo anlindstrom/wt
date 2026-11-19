@@ -50,7 +50,7 @@ func TestRefsSweptAndPurge(t *testing.T) {
 	pp = refs.PurgePlanOutput{}
 	_ = json.Unmarshal(plan.Bytes(), &pp)
 	if len(pp.Runs) != 1 || len(pp.Runs[0].Refs) != 3 || pp.Token == nil ||
-		!slices.Equal(pp.Runs[0].Unreachable, []refs.RefLost{{ID: "refs/heads/backup/old", Count: 1}}) {
+		!slices.Equal(pp.Runs[0].Unreachable, []refs.RefLost{{ID: "refs/heads/safe/old", Count: 1}}) {
 		t.Fatalf("purge plan = %+v", pp)
 	}
 

@@ -42,15 +42,21 @@ const (
 	// UserKeyRefSweepPatterns is the names wt refs sweep treats as backups:
 	// globs matched against a branch's or tag's short name.
 	UserKeyRefSweepPatterns = "ref_sweep_patterns"
+	// UserKeyRefKeepPatterns is the names wt never moves and wt refs sweep
+	// never selects: deliberate backups. Keep wins over ref_sweep_patterns.
+	UserKeyRefKeepPatterns = "ref_keep_patterns"
 	// UserKeyRefSweepAge is how old a backup no other ref contains has to be
 	// before wt refs sweep selects it.
 	UserKeyRefSweepAge = "ref_sweep_age"
 )
 
-// DefaultRefSweepPatterns are the backup names wt refs sweep looks for when
-// the user file names none.
-var DefaultRefSweepPatterns = []string{"backup/*", "safe/*", "safety/*", "backup-*", "safe-*", "safety-*",
-	"*-backup", "*-safe", "*-safety"}
+// DefaultRefSweepPatterns are the transient safety copies wt refs sweep looks
+// for when the user file names none. The deliberate backups are
+// DefaultRefKeepPatterns, and keep wins.
+var DefaultRefSweepPatterns = []string{"safe/*", "safety/*", "safe-*", "safety-*", "*-safe", "*-safety", "prefold/*"}
+
+// DefaultRefKeepPatterns are the deliberate-backup names, kept by default.
+var DefaultRefKeepPatterns = []string{"backup/*", "backup-*", "*-backup"}
 
 // DefaultRefSweepAge is ref_sweep_age when the user file does not set it.
 const DefaultRefSweepAge = "14d"
@@ -113,8 +119,12 @@ var userKeys = []userKey{
 		Doc:    "fast-forward local trunk when wt up and wt sync rebase fetch it",
 		boolAt: func(u *User) *bool { return &u.FFTrunk }},
 	{Name: UserKeyRefSweepPatterns, Kind: userList, Default: strings.Join(DefaultRefSweepPatterns, " "),
-		Doc:      "the branch and tag names wt refs sweep treats as backups (globs)",
+		Doc:      "the transient safety copies wt refs sweep may sweep (globs); a name ref_keep_patterns also matches is kept, whatever this says",
 		listAt:   func(u *User) *[]string { return &u.RefSweepPatterns },
+		validate: validRefPatterns},
+	{Name: UserKeyRefKeepPatterns, Kind: userList, Default: strings.Join(DefaultRefKeepPatterns, " "),
+		Doc:      "the deliberate backups (globs): wt refs sweep and wt sweep keep them, --stack and wt up leave them, unless --layer names one; keep wins over ref_sweep_patterns",
+		listAt:   func(u *User) *[]string { return &u.RefKeepPatterns },
 		validate: validRefPatterns},
 	{Name: UserKeyRefSweepAge, Kind: userString, Default: DefaultRefSweepAge,
 		Doc:      "how old an uncontained backup must be for wt refs sweep (e.g. 14d)",
@@ -181,6 +191,9 @@ type User struct {
 	// and how old one no other ref contains must be to be selected.
 	RefSweepPatterns []string
 	RefSweepAge      string
+	// RefKeepPatterns are the deliberate backups; a name matching one is
+	// kept even when RefSweepPatterns matches it too.
+	RefKeepPatterns []string
 	// Roots and Profiles are the [roots] and [profiles] tables, in the order
 	// the file writes them; nil when it has none.
 	Roots    []NamedRoot
@@ -200,6 +213,12 @@ type User struct {
 	// fromFile records which keys the file set, so `wt config` can say where
 	// a value came from.
 	fromFile map[string]bool
+}
+
+// BackupPatterns is every name wt treats as a backup: the sweep patterns and
+// the keep patterns.
+func (u *User) BackupPatterns() []string {
+	return append(slices.Clone(u.RefSweepPatterns), u.RefKeepPatterns...)
 }
 
 // DefaultUser is the configuration a machine with no user file has.

@@ -1822,7 +1822,7 @@ func (r *RunPlan) readLoose(b string, p *participant, req wtsync.Request) error 
 		return err
 	}
 	users := worktrees.Users()
-	line, err := wtsync.ReadLoose(r.ctx.Repo.MainRoot, b, base, r.ctx.Config.MainBranch, r.ctx.UserConfig().RefSweepPatterns, func(name string) bool { _, ok := users[name]; return ok })
+	line, err := wtsync.ReadLoose(r.ctx.Repo.MainRoot, b, base, r.ctx.Config.MainBranch, r.ctx.UserConfig().BackupPatterns(), func(name string) bool { _, ok := users[name]; return ok })
 	if err != nil {
 		return err
 	}
