@@ -39,11 +39,41 @@ type LayerHolder struct {
 	PID, More int
 }
 
-// HolderWhy is what holds h, said short.
-func HolderWhy(h LayerHolder) string { return "" }
+// HolderWhy is what holds h, said short and once: the program and pid of
+// a process working in it, not its whole command line.
+func HolderWhy(h LayerHolder) string {
+	switch {
+	case h.State == HolderProcess && h.Proc != "":
+		why := fmt.Sprintf("a process in its worktree: %s (pid %d)", h.Proc, h.PID)
+		if h.More > 0 {
+			why += fmt.Sprintf(", +%d more", h.More)
+		}
+		return why
+	case h.State == HolderDirty && h.Detail == "":
+		return "dirty: tracked changes in its worktree"
+	case h.Detail != "":
+		return h.State + ": " + h.Detail
+	}
+	return h.State
+}
 
-// HolderFrees is what frees h.
-func HolderFrees(h LayerHolder) string { return "" }
+// HolderFrees is what frees a branch h holds, so that a run carries it; ""
+// when there is nothing to say.
+func HolderFrees(h LayerHolder) string {
+	switch h.State {
+	case HolderProcess, HolderIdle:
+		return "stop it, and a run carries it"
+	case HolderDirty:
+		return "commit or stash its changes, and a run carries it"
+	case HolderBusy:
+		return "once the session is done, a run carries it"
+	case HolderRebasing:
+		return "finish or abort the rebase, and a run carries it"
+	case HolderBisecting:
+		return "end the bisect, and a run carries it"
+	}
+	return ""
+}
 
 // Forcible is whether --force moves a layer held this way: an idle session
 // or a process, never tracked changes, a rebase or a busy session.
@@ -111,6 +141,10 @@ func holderAt(h LayerHolder, gitDir string, listed []agents.Agent, scan *agents.
 	case len(scan.In(h.Path)) > 0:
 		procs := scan.In(h.Path)
 		h.State, h.Detail = HolderProcess, fmt.Sprintf("pid %d %s", procs[0].PID, procs[0].Short(40))
+		h.Proc, h.PID, h.More = procs[0].Short(40), procs[0].PID, len(procs)-1
+		if len(procs[0].Argv) > 0 {
+			h.Proc = filepath.Base(procs[0].Argv[0])
+		}
 		if len(procs) > 1 {
 			h.Detail += fmt.Sprintf(" +%d", len(procs)-1)
 		}
@@ -409,10 +443,7 @@ func moveLayer(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions, sav
 	}
 	h := holderAt(LayerHolder{Branch: m.Branch, Path: m.Path}, gitDir, opts.Listed, opts.Scan, opts.ScanErr)
 	if h.Holds() && (!opts.Force || !h.Forcible()) {
-		why := h.State
-		if h.Detail != "" {
-			why += ": " + h.Detail
-		}
+		why := HolderWhy(h)
 		if h.Forcible() {
 			why += " (--force moves it)"
 		}

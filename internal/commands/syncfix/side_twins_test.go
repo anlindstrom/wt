@@ -255,3 +255,36 @@ func TestStackHoldsTwinsTogetherWithTheCommandThatMovesEach(t *testing.T) {
 	}
 }
 
+// A twin that turns dirty after the branch it moves with has moved is held
+// with a command onto that branch from its own tip: nothing of it replayed
+// twice, nothing of it dropped. Its change and its commit are untouched.
+func TestStackHoldsATwinThatTurnsDirtyWithACommandOntoItsSibling(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	l := newTwinLine(t)
+	main := l.ctx.Repo.MainRoot
+	opts := synccmdtest.NoAgents()
+	opts.Stack = &synccmd.StackOptions{AfterMove: func(m wtsync.LayerMove) error {
+		if m.Branch == "ui-pass2" {
+			gittest.WriteFile(t, filepath.Join(l.livePath, "y3.txt"), "work in progress\n")
+		}
+		return nil
+	}}
+	res, human, _ := synccmdtest.StackRun(t, l.ctx, gittest.StackTmp, opts)
+	sides := sidesOf(synccmdtest.Participant(t, res, gittest.StackTmp).Stack)
+	if x := sides["ui-pass2"]; deref(x.Result) != wtsync.MoveMoved {
+		t.Fatalf("ui-pass2: %+v (%s)\n%s", x, deref(x.Held), human)
+	}
+	want := "wt sync rebase 'chore/live' --onto 'ui-pass2' --upstream " + l.twin
+	if x := sides["chore/live"]; deref(x.Result) != wtsync.MoveHeld || deref(x.MoveCommand) != want {
+		t.Errorf("chore/live: %+v (%s), want held with %q\n%s", x, deref(x.Held), want, human)
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", "chore/live"); got != l.twin {
+		t.Errorf("chore/live moved to %s", got)
+	}
+	if st := strings.TrimSpace(testkit.GitOut(t, l.livePath, "status", "--porcelain")); st != "M y3.txt" {
+		t.Errorf("chore/live's change: %q", st)
+	}
+}
