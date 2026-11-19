@@ -51,6 +51,46 @@ type StackLayer struct {
 	Note *string `json:"note"`
 }
 
+// How a side branch hangs off the line, for --json.
+const (
+	SideForked = wtsync.SideForked
+	SideAbove  = wtsync.SideAbove
+)
+
+// StackSide is one branch that hangs off the line, as --json reports it:
+// what the look sees, and, from a run, what came of it. The run's fields are
+// null in the look.
+type StackSide struct {
+	Branch string `json:"branch"`
+	// Kind is forked (from a commit of the line below its top) or above
+	// (from the top itself).
+	Kind   string `json:"kind"`
+	OldTip string `json:"oldTip"`
+	// Fork is the commit of the line it leaves the line at.
+	Fork        string `json:"fork"`
+	ForkSubject string `json:"forkSubject"`
+	// On is the side branch it is stacked on; null when it sits on the line.
+	On *string `json:"on"`
+	// Base is where its own commits start, Commits how many there are.
+	Base        string  `json:"base"`
+	Commits     int     `json:"commits"`
+	Backup      bool    `json:"backup"`
+	Worktree    *string `json:"worktree"`
+	State       string  `json:"state"`
+	StateDetail *string `json:"stateDetail"`
+	// Carry says the run carries it; Left says why not, null when it does.
+	Carry bool    `json:"carry"`
+	Left  *string `json:"left"`
+	// The run's: where it was put, its new tip, the move, and for a held
+	// one why and the command that moves it.
+	NewBase     *string `json:"newBase"`
+	NewTip      *string `json:"newTip"`
+	Result      *string `json:"result"`
+	How         *string `json:"how"`
+	Held        *string `json:"held"`
+	MoveCommand *string `json:"moveCommand"`
+}
+
 // StackSkipped is a branch on the line the run does not take as a layer.
 type StackSkipped struct {
 	Branch string `json:"branch"`
@@ -66,6 +106,10 @@ type Stack struct {
 	Autosquash bool           `json:"autosquash"`
 	Layers     []StackLayer   `json:"layers"`
 	Skipped    []StackSkipped `json:"skipped"`
+	// SideBranches is the branches that hang off the line, parents first:
+	// forked from a commit of it, or above its top. Empty with
+	// --no-side-branches.
+	SideBranches []StackSide `json:"sideBranches"`
 	// Refusal is why the run moved no layer: a check of the new tips, or a
 	// fold that changed the line's content. Null in the look, and when the
 	// layers were moved or held one by one.
@@ -119,7 +163,7 @@ type StackCommit struct {
 // StackOf is the look's report of a line: its layers and what holds each.
 func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *Stack {
 	s := &Stack{Branch: line.Branch, Base: line.Base, Head: line.Head, Autosquash: autosquash,
-		Layers: []StackLayer{}, Skipped: []StackSkipped{}, ContextGaps: []StackContextGap{}, ContextUnchecked: []string{}}
+		Layers: []StackLayer{}, Skipped: []StackSkipped{}, SideBranches: []StackSide{}, ContextGaps: []StackContextGap{}, ContextUnchecked: []string{}}
 	for i, l := range line.Layers {
 		found := LayerFoundTip
 		if l.Named {

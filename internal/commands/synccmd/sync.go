@@ -60,6 +60,9 @@ type StackLook struct {
 	// Autosquash looks at the line as a fold of its fixups would take it
 	// (--autosquash): the fixups that lack their context are named.
 	Autosquash bool
+	// NoSideBranches looks at the line without the branches that hang off
+	// it (--no-side-branches).
+	NoSideBranches bool
 }
 
 // shownFiles is how many files a stop names in the overview before it counts

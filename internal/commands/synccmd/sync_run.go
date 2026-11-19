@@ -103,6 +103,10 @@ type StackOptions struct {
 	// Edit is the commit of the line the run stops at for a person to
 	// amend (--edit), as given; empty for none.
 	Edit string
+	// NoSideBranches leaves the branches that hang off the line alone, as
+	// they were before wt carried them (--no-side-branches): none is read,
+	// listed, marked or moved.
+	NoSideBranches bool
 	// AfterMove is a test's hook into the layer moves: an error stops them
 	// there, as an interrupt would. Nil in a real run.
 	AfterMove func(wtsync.LayerMove) error
