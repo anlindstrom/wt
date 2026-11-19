@@ -1,6 +1,7 @@
 package wtsync
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/anlindstrom/wt/internal/config"
 	"github.com/anlindstrom/wt/internal/git"
+	"github.com/anlindstrom/wt/internal/repo"
 )
 
 // The kinds of side branch, as SideBranch.Kind says it.
@@ -37,10 +39,24 @@ type SideBranch struct {
 	Commits int
 	// Backup says its name is a backup (wt refs sweep's patterns).
 	Backup bool
+	// Merges says it has a merge commit of its own, which a replay drops:
+	// it is left, with no command, to be moved by hand.
+	Merges bool
 	// Left is why a run never moves it: a backup, a merge commit, more than
 	// one branch below it, or the branch it is on being left. "" for a
 	// branch a run carries.
 	Left string
+}
+
+// SideGuard is what is never a side branch of a line: a branch Protected
+// names (trunk, the long-lived branches beside it, the branch --onto names),
+// and any branch that leaves the line at a commit one of History (trunk,
+// its remote-tracking ref, the --onto target) already has. With --upstream
+// below where trunk leaves, the line holds trunk's own commits, and a branch
+// cut from them is trunk's history, not the line's.
+type SideGuard struct {
+	Protected func(name string) bool
+	History   []string
 }
 
 // ReadSides reads the branches that hang off line, every one a local branch
@@ -51,7 +67,7 @@ type SideBranch struct {
 // (wt refs sweep's patterns, matched by backup(), as ReadLine matches them)
 // is listed and left: a backup marks a point in time, and moving it would
 // lose what it records.
-func ReadSides(dir string, line Line, backups []string) ([]SideBranch, error) {
+func ReadSides(dir string, line Line, backups []string, guard SideGuard) ([]SideBranch, error) {
 	if len(line.Commits) == 0 {
 		return nil, nil
 	}
@@ -74,7 +90,7 @@ func ReadSides(dir string, line Line, backups []string) ([]SideBranch, error) {
 	var sides []SideBranch
 	for _, r := range strings.Split(refs, "\n") {
 		name, tip, _ := strings.Cut(r, " ")
-		if name == "" || taken[name] || pos[tip] > 0 {
+		if name == "" || taken[name] || pos[tip] > 0 || (guard.Protected != nil && guard.Protected(name)) {
 			continue
 		}
 		fork, err := gitEnv(dir, nil, nil, "merge-base", tip, line.Head)
@@ -82,6 +98,11 @@ func ReadSides(dir string, line Line, backups []string) ([]SideBranch, error) {
 			return nil, err
 		}
 		if pos[fork] == 0 {
+			continue
+		}
+		if shared, err := inHistory(dir, fork, guard.History); err != nil {
+			return nil, err
+		} else if shared {
 			continue
 		}
 		s := SideBranch{Branch: name, Tip: tip, Kind: SideForked, Fork: fork, Count: pos[fork], Backup: backup(name, sweep)}
@@ -171,7 +192,8 @@ func ReadSides(dir string, line Line, backups []string) ([]SideBranch, error) {
 		case s.Backup:
 			s.Left = "a backup name: a backup marks a point in time, and wt never moves it"
 		case merge != "":
-			s.Left = fmt.Sprintf("it has a merge commit (%s), which a replay would drop", merge)
+			s.Merges = true
+			s.Left = fmt.Sprintf("it has a merge commit (%s), which a replay would drop: move it by hand", merge)
 		}
 	}
 	sides = orderSides(sides)
@@ -187,6 +209,27 @@ func ReadSides(dir string, line Line, backups []string) ([]SideBranch, error) {
 		}
 	}
 	return sides, nil
+}
+
+// inHistory is whether commit is one of history's, or below one of them;
+// a ref that does not resolve has none.
+func inHistory(dir, commit string, history []string) (bool, error) {
+	for _, h := range history {
+		if h == "" {
+			continue
+		}
+		if _, err := gitEnv(dir, nil, nil, "rev-parse", "--verify", "--quiet", h+"^{commit}"); err != nil {
+			continue
+		}
+		_, code, err := gitEnvAllow(dir, nil, nil, 1, "merge-base", "--is-ancestor", commit, h)
+		if err != nil {
+			return false, err
+		}
+		if code == 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func tipOf(sides []SideBranch, name string) string {
@@ -389,4 +432,176 @@ func replayCommit(dir, c, tree, parent string) (string, error) {
 	}
 	env := []string{"GIT_AUTHOR_NAME=" + f[0], "GIT_AUTHOR_EMAIL=" + f[1], "GIT_AUTHOR_DATE=" + f[2]}
 	return gitEnv(dir, env, strings.NewReader(message+"\n"), "commit-tree", "--no-gpg-sign", tree, "-p", parent, "-F", "-")
+}
+
+// SideCarry is what a run came to for one side branch: where it goes, its
+// replayed tip, and its move, which Result says (a backup is always held,
+// with no command).
+type SideCarry struct {
+	Side    SideBranch
+	NewBase string
+	New     string
+	Move    LayerMove
+}
+
+// CarryOptions is what CarrySides needs besides the record.
+type CarryOptions struct {
+	MoveOptions
+	// Head and Onto are the rebased line's tip as the rebase left it and
+	// where the line was put: each fork's marker is checked against them as
+	// a layer's is. Forks is the fork plans, brought in line with what the
+	// rebase dropped as the layers' are.
+	Head, Onto string
+	Forks      []LayerPlan
+	// Top is where a branch above the line's top goes: the line's tip now.
+	// Empty with TopWhy, why it is not known.
+	Top, TopWhy string
+	// Leave is why no side branch moves at all (--alone); each is held with
+	// the command that moves it. Empty carries them.
+	Leave string
+}
+
+// CarrySides carries each of rec.Sides, parents first, once the layers have
+// moved: a branch forked mid-line onto where the rebase put its fork
+// commit, read from the run's own marker and checked; one above the top
+// onto the line's tip; one stacked on another side branch onto that
+// branch's new tip. Its own commits are replayed in the object store
+// (ReplaySide) and the branch moves as a layer does (moveLayer): guarded by
+// its old tip, in its worktree only while that is clean and idle, pinned
+// under the run's epoch so wt sync undo puts it back, and recorded in
+// rec.Moves before it moves and once it has. A backup never moves. Any
+// branch that does not move is held, with the command that moves it later
+// where its new base is known. An error is the record that could not be
+// written, or the moves stopped by a test's hook; rec says what moved.
+func CarrySides(mainRoot string, rec *StackRecord, opts CarryOptions) ([]SideCarry, error) {
+	if len(rec.Sides) == 0 {
+		return nil, nil
+	}
+	forkNew, forkWhy := map[string]string{}, map[string]string{}
+	for _, p := range opts.Forks {
+		tip, why, err := CheckMarker(mainRoot, opts.Head, opts.Onto, p)
+		if err != nil {
+			return nil, err
+		}
+		if why != "" {
+			forkWhy[p.Old] = "where its fork " + git.ShortID(p.Old, 7) + " went cannot be told: " + why
+			continue
+		}
+		forkNew[p.Old] = tip
+	}
+	worktrees, err := (&repo.Repo{MainRoot: mainRoot}).Worktrees()
+	if err != nil {
+		return nil, err
+	}
+	users := worktrees.Users()
+	save := func() error { return WriteStackRecord(mainRoot, rec) }
+	out := make([]SideCarry, 0, len(rec.Sides))
+	byName := map[string]SideCarry{}
+	for _, s := range rec.Sides {
+		c := SideCarry{Side: s}
+		m := LayerMove{Branch: s.Branch, Old: s.Tip, Result: MovePlanned}
+		use, inWorktree := users[s.Branch]
+		inMain := inWorktree && slices.ContainsFunc(worktrees, func(w repo.Worktree) bool { return w.IsMain && samePath(w.Path, use.Path) })
+		command := func(onto string) string {
+			if onto == "" || s.Merges {
+				return ""
+			}
+			if onto == s.On {
+				onto = shellQuote(onto)
+			}
+			switch {
+			case inMain:
+				// wt sync rebase takes no main checkout: git there, with no
+				// other branch dragged along.
+				return fmt.Sprintf("git -C %s rebase --no-update-refs --onto %s %s %s", shellQuote(use.Path), onto, s.Base, shellQuote(s.Branch))
+			case inWorktree:
+				return fmt.Sprintf("wt sync rebase %s --onto %s --upstream %s", shellQuote(s.Branch), onto, s.Base)
+			}
+			return fmt.Sprintf("git rebase --no-update-refs --onto %s %s %s", onto, s.Base, shellQuote(s.Branch))
+		}
+		why, onto := "", ""
+		switch {
+		case s.On != "":
+			parent := byName[s.On]
+			switch parent.Move.Result {
+			case MoveMoved, MoveUnchanged:
+				c.NewBase = parent.New
+			default:
+				why, onto = "it is stacked on "+s.On+", which did not move: move "+s.On+" first", s.On
+			}
+		case s.Kind == SideAbove:
+			c.NewBase, why = opts.Top, opts.TopWhy
+		default:
+			c.NewBase, why = forkNew[s.Fork], forkWhy[s.Fork]
+			if c.NewBase == "" && why == "" {
+				why = "the rebase planned no marker for its fork " + git.ShortID(s.Fork, 7)
+			}
+		}
+		if onto == "" {
+			onto = c.NewBase
+		}
+		hold := func(why, cmd string) { m.Result, m.Held, m.Command = MoveHeld, why, cmd }
+		switch {
+		case s.Backup:
+			hold(s.Left, "")
+		case why != "":
+			hold(why, command(onto))
+		case s.Left != "":
+			hold(s.Left, command(onto))
+		case opts.Leave != "":
+			hold(opts.Leave, command(onto))
+		case c.NewBase == s.Base:
+			c.New, m.New, m.Result = s.Tip, s.Tip, MoveUnchanged
+		case s.Commits == 0 && s.On != "":
+			c.New = c.NewBase
+		default:
+			tip, conflict, err := ReplaySide(mainRoot, s.Base, s.Tip, c.NewBase)
+			if err != nil {
+				return out, err
+			}
+			if conflict != "" {
+				hold("its commits do not replay cleanly where it goes: "+conflict, command(onto))
+			}
+			c.New = tip
+		}
+		if m.Result == MovePlanned && c.New == s.Tip {
+			m.New, m.Result = c.New, MoveUnchanged
+		}
+		rec.Moves = append(rec.Moves, m)
+		k := len(rec.Moves) - 1
+		if m.Result == MovePlanned {
+			rec.Moves[k].New = c.New
+			if err := save(); err != nil {
+				return out, err
+			}
+			merr := moveLayer(mainRoot, rec.Epoch, &rec.Moves[k], opts.MoveOptions, save)
+			var stop stopped
+			if errors.As(merr, &stop) {
+				c.Move = rec.Moves[k]
+				return append(out, c), stop.error
+			}
+			if rec.Moves[k].Result == MoveHeld {
+				rec.Moves[k].Command = command(onto)
+			}
+			if err := save(); err != nil {
+				return out, err
+			}
+			if merr != nil {
+				c.Move = rec.Moves[k]
+				return append(out, c), merr
+			}
+			if opts.AfterMove != nil {
+				if err := opts.AfterMove(rec.Moves[k]); err != nil {
+					c.Move = rec.Moves[k]
+					return append(out, c), err
+				}
+			}
+		} else if err := save(); err != nil {
+			return out, err
+		}
+		c.Move = rec.Moves[k]
+		out = append(out, c)
+		byName[s.Branch] = c
+	}
+	return out, nil
 }

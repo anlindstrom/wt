@@ -63,6 +63,8 @@ type StackLook struct {
 	// NoSideBranches looks at the line without the branches that hang off
 	// it (--no-side-branches).
 	NoSideBranches bool
+	// Alone looks at the line as --alone runs it: no side branch would move.
+	Alone bool
 }
 
 // shownFiles is how many files a stop names in the overview before it counts
@@ -221,7 +223,8 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		printAloneLook(w, leftAloneOf(ctx, all, strandedBy(stacked, ambiguous, wt.Branch)))
 	}
 	if opts.Stack != nil {
-		s, err := stackLookAt(ctx, base, onto, target, &StackLook{Work: arg, Layers: opts.Stack.Layers, Autosquash: opts.Stack.Autosquash}, listed)
+		s, err := stackLookAt(ctx, base, onto, target, &StackLook{Work: arg, Layers: opts.Stack.Layers, Autosquash: opts.Stack.Autosquash,
+			NoSideBranches: opts.Stack.NoSideBranches, Alone: opts.Alone || opts.Stack.Alone}, listed)
 		if err != nil {
 			return err
 		}

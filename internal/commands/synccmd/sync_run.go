@@ -225,6 +225,9 @@ type RunPlan struct {
 	notReady []string
 	// line is the stack held on the named worktree's line, for --stack.
 	line wtsync.Line
+	// sides is the branches that hang off that line, for --stack; none with
+	// --no-side-branches.
+	sides []wtsync.SideBranch
 	// edit is the commit of the line --edit names, resolved; nil without.
 	edit *wtsync.EditStop
 	// gaps is, for a fold, the hunks of its fixups that lack their context
@@ -1227,6 +1230,16 @@ func (r *RunPlan) readStack() error {
 		return err
 	}
 	s := syncrun.StackOf(line, r.opts.Stack.Autosquash, holders)
+	if !r.opts.Stack.NoSideBranches {
+		if r.sides, err = readSides(r.ctx, line, r.trunkSHA, r.target); err != nil {
+			return fmt.Errorf("the branches off the line of %s could not be read: %w; --no-side-branches leaves them out", r.parts[b].work, err)
+		}
+		sideHolders, err := syncrun.ReadSideHolders(r.ctx, r.sides, listed)
+		if err != nil {
+			return err
+		}
+		syncrun.SetSides(s, r.sides, sideHolders, aloneSides(r.opts.Alone))
+	}
 	if r.opts.Stack.Autosquash {
 		// Named before anything replays; a warning, so the run goes ahead.
 		r.gaps = syncrun.ContextGaps(r.ctx.Repo.MainRoot, line, s)
@@ -1305,7 +1318,7 @@ func (r *RunPlan) stackRecord(b string, p *participant, req wtsync.Request) (*wt
 		return nil, nil
 	}
 	rec := &wtsync.StackRecord{Epoch: r.epoch, Work: p.work, Branch: b, Path: p.wt.Path, Onto: req.Onto, OntoRef: r.ontoRef(), Upstream: req.Upstream,
-		Autosquash: st.Autosquash, InPlace: r.opts.Steps != nil, Force: r.opts.Force, Line: r.line, Edit: r.edit}
+		Autosquash: st.Autosquash, InPlace: r.opts.Steps != nil, Force: r.opts.Force, Line: r.line, Edit: r.edit, Sides: r.sides}
 	if err := wtsync.WriteStackRecord(r.ctx.Repo.MainRoot, rec); err != nil {
 		return rec, err
 	}
@@ -1415,7 +1428,7 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 		ontoLabel = r.target.Ref
 	}
 	if st := r.opts.Stack; st != nil {
-		req.Stack = &wtsync.StackRequest{Line: r.line, Autosquash: st.Autosquash}
+		req.Stack = &wtsync.StackRequest{Line: r.line, Autosquash: st.Autosquash, Forks: wtsync.ForkPoints(r.sides)}
 		req.Gaps = r.gaps
 		// A fold is in place unless --onto names where the line goes; an
 		// edit always is.

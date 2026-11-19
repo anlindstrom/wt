@@ -176,7 +176,13 @@ type StackRecord struct {
 	// Replay is what the rebase planned for the line's commits, for the
 	// report of what it emptied; nil in a record that predates it.
 	Replay *ReplayPlan `json:"replay,omitempty"`
-	Moves  []LayerMove `json:"moves"`
+	// Sides is the branches that hang off the line, as read before the
+	// rebase, and Forks what the rebase planned for the commits they fork
+	// from (ForkPoints of Sides, in order). A side branch's move follows
+	// the layers' in Moves.
+	Sides []SideBranch `json:"sides,omitempty"`
+	Forks []LayerPlan  `json:"forks,omitempty"`
+	Moves []LayerMove  `json:"moves"`
 }
 
 func stackRecordPath(mainRoot string, epoch int64) (string, error) {
@@ -244,7 +250,13 @@ func ForgetStack(mainRoot string, epoch int64) error {
 			plans = append(plans, LayerPlan{Branch: rec.Line.Layers[n].Branch, Ref: StackMapRef(epoch, n+1)})
 		}
 	}
-	if err := DropStackMap(mainRoot, plans); err != nil {
+	forks := rec.Forks
+	if len(forks) == 0 {
+		for n := range ForkPoints(rec.Sides) {
+			forks = append(forks, LayerPlan{Ref: ForkMapRef(epoch, n+1)})
+		}
+	}
+	if err := DropStackMap(mainRoot, append(plans, forks...)); err != nil {
 		return err
 	}
 	path, err := stackRecordPath(mainRoot, epoch)

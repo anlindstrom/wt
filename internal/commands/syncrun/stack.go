@@ -189,6 +189,73 @@ func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *S
 	return s
 }
 
+// SetSides lists sides on s as the look sees them, with what holds each
+// (holders, in the same order) and whether the run would carry it: not a
+// backup, a branch with a merge commit or on more than one branch, one a
+// worktree holds, one on a branch that is not carried, and none with leave
+// (why the run moves no side branch, such as --alone).
+func SetSides(s *Stack, sides []wtsync.SideBranch, holders []wtsync.LayerHolder, leave string) {
+	carried := map[string]bool{}
+	for i, x := range sides {
+		side := StackSide{Branch: x.Branch, Kind: x.Kind, OldTip: x.Tip, Fork: x.Fork, ForkSubject: x.ForkSubject,
+			Base: x.Base, Commits: x.Commits, Backup: x.Backup, State: wtsync.HolderNone}
+		if x.On != "" {
+			side.On = jsonout.Strp(x.On)
+		}
+		if i < len(holders) {
+			h := holders[i]
+			side.State = h.State
+			if h.Path != "" {
+				side.Worktree = jsonout.Strp(h.Path)
+			}
+			if h.Detail != "" {
+				side.StateDetail = jsonout.Strp(h.Detail)
+			}
+		}
+		why := x.Left
+		switch {
+		case why != "":
+		case leave != "":
+			why = leave
+		case i < len(holders) && holders[i].Holds():
+			why = holders[i].State
+			if holders[i].Detail != "" {
+				why += ": " + holders[i].Detail
+			}
+		case x.On != "" && !carried[x.On]:
+			why = "it is stacked on " + x.On + ", which is not carried"
+		}
+		if why != "" {
+			side.Left = jsonout.Strp(why)
+		} else {
+			side.Carry, carried[x.Branch] = true, true
+		}
+		s.SideBranches = append(s.SideBranches, side)
+	}
+}
+
+// ReadSideHolders reads what holds each of sides, as ReadHolders does for
+// the layers.
+func ReadSideHolders(ctx *kit.Context, sides []wtsync.SideBranch, listed []agents.Agent) ([]wtsync.LayerHolder, error) {
+	worktrees, err := ctx.Repo.Worktrees()
+	if err != nil {
+		return nil, err
+	}
+	var scan *agents.ProcessScan
+	var scanErr error
+	for _, x := range sides {
+		if _, ok := worktrees.ByBranch(x.Branch); ok {
+			scan, scanErr = agents.ScanHolders(listed)
+			break
+		}
+	}
+	holders := make([]wtsync.LayerHolder, len(sides))
+	for i, x := range sides {
+		holders[i] = wtsync.ReadHolder(x.Branch, worktrees, listed, scan, scanErr)
+	}
+	return holders, nil
+}
+
 // ContextGaps is, for a fold of line, the hunks of its fixups that lack
 // their context behind their targets, set on s as --json reports them, with
 // what could not be analysed, and returned for the rebase. An analysis that
@@ -256,6 +323,12 @@ func PrintLayers(w io.Writer, s *Stack) {
 	for _, k := range s.Skipped {
 		fmt.Fprintf(w, "    %-24s %s  not taken: %s\n", k.Branch, git.ShortID(k.Tip, 7), k.Reason)
 	}
+	if len(s.SideBranches) > 0 {
+		fmt.Fprintf(w, "  %s off the line:\n", countSides(len(s.SideBranches)))
+	}
+	for _, x := range s.SideBranches {
+		fmt.Fprintf(w, "    %-24s %s  %s\n", x.Branch, git.ShortID(x.OldTip, 7), sideWhere(x))
+	}
 	for _, g := range s.ContextGaps {
 		fmt.Fprintf(w, "  ⚠ %s %q: %s\n", git.ShortID(g.Fixup, 7), g.FixupSubject, g.Message)
 	}
@@ -265,6 +338,32 @@ func PrintLayers(w io.Writer, s *Stack) {
 	for _, n := range s.ContextUnchecked {
 		fmt.Fprintf(w, "  note: %s\n", n)
 	}
+}
+
+// sideWhere is the look's line for a side branch: where it hangs off the
+// line, its own commits, its worktree, and whether the run carries it.
+func sideWhere(x StackSide) string {
+	where := "forks at " + git.ShortID(x.Fork, 7) + " " + x.ForkSubject
+	switch {
+	case x.On != nil:
+		where = "on " + *x.On
+	case x.Kind == SideAbove:
+		where = "above the top"
+	}
+	where += ", " + kit.Count(x.Commits, "commit")
+	if x.Worktree != nil {
+		where += ", " + x.State
+		if x.StateDetail != nil {
+			where += ": " + *x.StateDetail
+		}
+	}
+	switch {
+	case x.Backup:
+		return where + "; a backup: stays where it is"
+	case x.Left != nil:
+		return where + "; held: " + *x.Left
+	}
+	return where + "; carried"
 }
 
 // StackFinish is what FinishStack needs: the run's record, the rebase's
@@ -320,6 +419,7 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		holders[i] = wtsync.LayerHolder{Branch: l.Branch, State: wtsync.HolderNone}
 	}
 	s = StackOf(rec.Line, rec.Autosquash, holders)
+	SetSides(s, rec.Sides, nil, "")
 	s.ContextGaps = GapsJSON(in.Gaps)
 	s.ContextUnchecked = append(s.ContextUnchecked, in.Unchecked...)
 	refuse := func(why string) (*Stack, string, error) {
@@ -330,6 +430,7 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		}
 		fmt.Fprintf(w, "  ✗ no layer moved: %s\n", why)
 		s.Refusal = jsonout.Strp(why)
+		sidesNotMoved(w, s, "no layer moved, and no side branch")
 		if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
 			fmt.Fprintf(w, "  ✗ the stack's record could not be removed (%v): wt sync undo %s removes it\n", ferr, rec.Work)
 		}
@@ -362,10 +463,28 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", why, rec.Work))
 		}
 	}
+	// The fork plans follow what the rebase dropped, as the layers' do below,
+	// for the commands --alone prints as much as for the carry.
+	forks := rec.Forks
+	if rec.Edit != nil {
+		if got, rerr := wtsync.ReconcileEdit(main, in.Onto, forks, *rec.Edit); rerr == nil {
+			forks = got
+		} else {
+			forks = nil
+		}
+	} else if got, rerr := wtsync.ApplyDrops(main, in.Onto, forks, in.Dropped, in.Confirmed); rerr == nil {
+		forks = got
+	} else {
+		forks = nil
+	}
 	if IsAlone(main, rec.Epoch) {
 		// --alone: the line is rebased, and no layer is checked, moved or
 		// held. Each was named when the run began.
 		defer ClearAlone(main, rec.Epoch)
+		leave := "--alone leaves every side branch on the old commits"
+		if _, serr := carrySides(main, w, s, rec, in, forks, leave); serr != nil {
+			fmt.Fprintf(w, "  note: the side branches could not be read against the rebase: %v\n", serr)
+		}
 		if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
 			fmt.Fprintf(w, "  ✗ the stack's record could not be removed (%v): wt sync undo %s removes it\n", ferr, rec.Work)
 		}
@@ -513,18 +632,32 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	}
 	if merr != nil {
 		// The record stays: it says what moved, and undo reads it.
+		sidesNotMoved(w, s, "the layer moves stopped before it")
 		return s, "", merr
+	}
+	sides, serr := carrySides(main, w, s, rec, in, forks, "")
+	if serr != nil {
+		// The record stays: it says what moved, and undo reads it.
+		return s, "", serr
 	}
 	if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
 		fmt.Fprintf(w, "  ✗ the stack's record could not be removed (%v): wt sync undo %s removes it\n", ferr, rec.Work)
 	}
-	if moved > 0 {
+	switch {
+	case sides.moved > 0:
+		fmt.Fprintf(w, "  ↩ wt sync undo %s puts back the line, the %s and the %s it moved\n", rec.Work,
+			kit.Count(moved, "layer"), countSides(sides.moved))
+	case moved > 0:
 		fmt.Fprintf(w, "  ↩ wt sync undo %s puts back the line and the %s it moved\n", rec.Work, kit.Count(moved, "layer"))
 	}
+	var failures []string
 	if held > 0 {
-		return s, kit.Count(held, "layer") + " held", nil
+		failures = append(failures, kit.Count(held, "layer")+" held")
 	}
-	return s, "", nil
+	if sides.held > 0 {
+		failures = append(failures, countSides(sides.held)+" held")
+	}
+	return s, strings.Join(failures, ", "), nil
 }
 
 // foldChanged is how a fold changed the line's content, outside the
@@ -662,7 +795,7 @@ func StackAfterRebase(ctx *kit.Context, rec *wtsync.StackRecord, res wtsync.Resu
 	if rec == nil {
 		return nil
 	}
-	rec.Plans, rec.Replay = res.Layers, res.Replay
+	rec.Plans, rec.Replay, rec.Forks = res.Layers, res.Replay, res.Forks
 	return wtsync.WriteStackRecord(ctx.Repo.MainRoot, rec)
 }
 

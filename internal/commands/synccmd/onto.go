@@ -336,9 +336,10 @@ func (r *RunPlan) printFollowUps() {
 	if r.target == nil {
 		return
 	}
+	stacked := r.stackedApart()
 	for _, b := range r.branches {
 		p := r.parts[b]
-		if len(wtsync.Descendants(r.stacked, b)) == 0 {
+		if len(wtsync.Descendants(stacked, b)) == 0 {
 			continue
 		}
 		switch {
@@ -356,17 +357,33 @@ func (r *RunPlan) printFollowUps() {
 // b is rebased, b's old tip being the one its safety ref pins; nil without
 // --onto or with nothing stacked on b.
 func (r *RunPlan) followUpLines(b string, p *participant, res wtsync.Result) []string {
-	if r.target == nil || len(wtsync.Descendants(r.stacked, b)) == 0 {
+	stacked := r.stackedApart()
+	if r.target == nil || len(wtsync.Descendants(stacked, b)) == 0 {
 		return nil
 	}
 	main := r.ctx.Repo.MainRoot
-	return followUps(r.ctx, r.stacked, b, func(x string) string {
+	return followUps(r.ctx, stacked, b, func(x string) string {
 		if x == b {
 			return p.foundTip(res)
 		}
 		tip, _ := git.Run(main, "rev-parse", "--verify", "refs/heads/"+x)
 		return tip
 	})
+}
+
+// stackedApart is r.stacked without the side branches of a --stack run's
+// line: the run carries those, or holds each with its own command.
+func (r *RunPlan) stackedApart() map[string]string {
+	if len(r.sides) == 0 {
+		return r.stacked
+	}
+	out := map[string]string{}
+	for c, p := range r.stacked {
+		if !slices.ContainsFunc(r.sides, func(s wtsync.SideBranch) bool { return s.Branch == c }) {
+			out[c] = p
+		}
+	}
+	return out
 }
 
 // ontoRef is the target's ref as given, "" for trunk.

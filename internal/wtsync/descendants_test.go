@@ -47,7 +47,7 @@ func TestReadSidesFindsWhatHangsOffTheLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sides, err := ReadSides(s.Dir, line, config.DefaultUser().BackupPatterns())
+	sides, err := ReadSides(s.Dir, line, config.DefaultUser().BackupPatterns(), SideGuard{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestReadSidesNeverStacksABranchOnABackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sides, err := ReadSides(s.Dir, line, config.DefaultUser().BackupPatterns())
+	sides, err := ReadSides(s.Dir, line, config.DefaultUser().BackupPatterns(), SideGuard{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestReadSidesLeavesABranchWithAMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sides, err := ReadSides(s.Dir, line, nil)
+	sides, err := ReadSides(s.Dir, line, nil, SideGuard{})
 	if err != nil {
 		t.Fatal(err)
 	}
