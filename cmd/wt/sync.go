@@ -633,6 +633,8 @@ func (f syncVerbFlags) check() error {
 		return usagef("--layer needs --stack")
 	case f.autosquash && !f.stack:
 		return usagef("--autosquash needs --stack")
+	case f.noSides && !f.stack:
+		return usagef("--no-side-branches needs --stack")
 	case f.edit != "" && !f.stack:
 		return usagef("--edit needs --stack")
 	case f.edit != "" && verb != "rebase":
@@ -941,7 +943,10 @@ func newSyncRebaseCmd() *cobra.Command {
 			"is stacked on), and it moves as a layer does, worktree rules, undo and\n" +
 			"all. A fork commit the rebase dropped or folded is where git's list put\n" +
 			"its place: after the last commit below it that is left. A branch with a\n" +
-			"backup name is listed and never moved. A held branch, or one whose\n" +
+			"backup name is listed and never moved, and trunk, the branches wt\n" +
+			"refs sweep protects, the --onto branch and anything cut from trunk's own\n" +
+			"history are never side branches. One with a merge commit of its own is\n" +
+			"held, to be moved by hand: a rebase would drop the merge. A held branch, or one whose\n" +
 			"commits conflict where it goes, is named with the command that moves it\n" +
 			"later (wt sync rebase <b> --onto <new> --upstream <old>), real commits\n" +
 			"in it. --no-side-branches leaves them all alone, unread.\n\n" +
@@ -997,7 +1002,8 @@ func newSyncRebaseCmd() *cobra.Command {
 			"  wt sync rebase tmp/stack --stack --each-commit=tips  # check each layer's tip only\n" +
 			"  wt sync rebase tmp/stack --stack   # the whole line once, then every layer\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash  # fold review fixes in place\n" +
-			"  wt sync rebase tmp/stack --stack --autosquash --onto main  # fold and move\n" +			"  wt sync rebase tmp/stack --stack --no-side-branches  # move the line, leave branches cut from it\n" +
+			"  wt sync rebase tmp/stack --stack --autosquash --onto main  # fold and move\n" +
+			"  wt sync rebase tmp/stack --stack --no-side-branches  # move the line, leave branches cut from it\n" +
 			"  wt sync rebase tmp/stack --stack --edit 1a2b3c4  # stop there to amend\n" +
 			"  wt sync rebase login-crash --force --allow-diverged  # past session, origin\n" +
 			"  wt sync rebase login-crash --onto test_wt/integration  # onto that branch\n" +

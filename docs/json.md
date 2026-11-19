@@ -1705,6 +1705,7 @@ what it sees; a run (`wt sync rebase <work> --stack --json`) fills the rest.
 | `autosquash` | bool | a fold of the line's fixups (`--autosquash`): onto its own base, or, with `--onto`, as the line moves onto the target |
 | `layers` | array | the layer branches, bottom first (below) |
 | `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name; `--layer` takes it) |
+| `sideBranches` | array | since `sync` 1.12.0 and `sync-run` 1.16.0: the [side branches](#side-branches--what-hangs-off-the-line) that hang off the line, parents first; `[]` with `--no-side-branches` |
 | `refusal` | string \| null | the run's: why no layer moved, a new tip that failed its check, or a fold that changed the line's content; the line itself is left rebased, and `wt sync undo` puts it back. Null in the look, and when each layer was moved or held |
 | `edit` | object \| null | since 1.9.0: what a run with `--edit <rev>` did to that commit (below); null in the look and for any other run |
 | `contextGaps` | array | since `sync` 1.11.0 and `sync-run` 1.14.0: for a fold (`--autosquash`), in the look and in the run, every hunk of a fixup that does not apply where autosquash puts it, behind its target, because only a later commit of the line carries its context (below); line order. Empty for any other look or run. A warning: the run goes ahead |
@@ -1736,6 +1737,55 @@ Each layer:
 A moved layer has a safety ref and a result ref under the run's epoch, so
 `wt sync undo <line>` puts it back with the line; a held one has none and is no
 part of that undo.
+
+#### Side branches — what hangs off the line
+
+Since `sync` 1.12.0 and `sync-run` 1.16.0. A side branch is a local branch
+whose tip is no commit of the line but which contains its first commit and
+leaves it (its merge base with the line's tip) at a commit of the line that
+trunk (local and remote-tracking) and the `--onto` target do not have; trunk
+itself, the long-lived branches wt refs sweep protects and the branch `--onto`
+names never are:
+`forked` from a commit below the top, or `above` the top itself. A branch
+whose tip contains another side branch's is `on` that one, the nearest; one
+at the very same tip is on the first by name, with no commit of its own. A
+backup (wt refs sweep's names) is never what a branch is on. They come
+parents first: the roots by where they fork, then by name, each followed by
+what is on it.
+
+The rebase marks where git's list puts each fork commit, after the last
+commit at or below it that is left, and checks that marker as it checks a
+layer's. Once the layers have moved, a side branch's own commits (`base` to
+its tip) are replayed in the object store onto `newBase`, and it moves as a
+layer does: `update-ref` guarded by its old tip, in its worktree only while
+that is clean and idle, with a safety and a result ref under the run's epoch,
+so `wt sync undo <line>` puts it back with the line. A backup is listed and
+never moved. A branch that is not moved is `held`, with `moveCommand` when
+where it goes is known.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `branch` | string | |
+| `kind` | `forked` \| `above` | it leaves the line below its top; it carries the top |
+| `oldTip` | string | its tip before the run |
+| `fork`, `forkSubject` | string | the commit of the line it leaves the line at |
+| `on` | string \| null | the side branch it is stacked on, which moves first; null when it sits on the line |
+| `base` | string | where its own commits start: the tip of the branch it is on, or `fork` |
+| `commits` | int | its own commits, `base` to its tip; 0 for a branch at the tip of the one it is on |
+| `backup` | bool | its name is a backup: listed, never moved |
+| `worktree`, `state`, `stateDetail` | | where it is checked out and what holds it, as for a layer |
+| `carry` | bool | the look's: the run would carry it; in a run, it was moved or is unchanged |
+| `left` | string \| null | why not: a backup, a merge commit of its own (a replay drops it), on more than one branch, what holds its worktree, stacked on a branch that is not carried, `--alone`; null when it is carried |
+| `newBase` | string \| null | the run's: where it goes: the commit the rebase made of `fork` (for a fork the rebase dropped or folded, the last commit below it that is left), the line's new tip for one `above`, the new tip of the branch it is `on`; null when that is not known |
+| `newTip` | string \| null | the run's: its commits replayed onto `newBase`; null when not replayed |
+| `result`, `how` | | the run's, as for a layer; a backup is always `held` |
+| `held` | string \| null | the run's: why it was held: what holds its worktree, a conflict of its own commits where it goes (the commit and paths), the branch it is on being held, the fork's marker failing its check, `--alone` |
+| `moveCommand` | string \| null | the run's: what moves a held branch later, with real commits and every branch name shell-quoted: `wt sync rebase '<branch>' --onto <newBase> --upstream <base>` for a branch in a worktree, which is a run of its own with stops, resume and undo; `git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>'` for one checked out in the main checkout, which wt sync rebase does not take; `git rebase --no-update-refs --onto <newBase> <base> '<branch>'` for one in no worktree; `--onto '<branch>'` for one on a held side branch, to run once that has moved. Null for a backup, for a branch with a merge commit of its own (a rebase would drop the merge: move it by hand), and when `newBase` is not known |
+
+A side branch's commits are replayed by merging each onto the new parent
+(`git merge-tree`), as a rebase picks them; the declaration's conflict rules
+and checks do not run on them, so a conflict holds the branch with its
+command, which runs them.
 
 `contextGaps`, since `sync` 1.11.0 and `sync-run` 1.14.0, for
 `wt sync <work> --stack --autosquash` and `wt sync rebase <work> --stack
@@ -2327,3 +2377,4 @@ change made it.
 | `sync` 1.10.0, `status` 1.11.0 | `needs` takes `env:<NAME>` as well as `docker`: a step that needs an environment variable that must be set and not empty; the probe never carries the value |
 | `sync` 1.11.0, `sync-run` 1.14.0 | `contextGaps` and `contextUnchecked` on [`stack`](#stack--a-stack-held-on-one-line): for a fold, the hunks of fixups that lack their context behind their target, each with the later commit that carries it; a `wt sync resume` refused for a resolution that drops such a hunk is `refused` with the lines in `reason` |
 | `up` 1.7.0, `sync-run` 1.15.0, `status` 1.12.0 | [`layers`](#layers--branches-in-no-worktree) on each participant of `up` and `sync-run`: the branches in no worktree on its line that the run moved with its rebase or left, and why; `layers` on each `stack` member of `status`, which its token covers |
+| `sync` 1.12.0, `sync-run` 1.16.0 | [`sideBranches`](#side-branches--what-hangs-off-the-line) on `stack`: the branches forked from the line or above its top, which a `--stack` run carries with it, and what came of each |
