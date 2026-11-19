@@ -291,6 +291,9 @@ type Result struct {
 	// Layers is what the rebase planned for each layer of a stack held on
 	// the line, read from the list as git started it; nil for any other.
 	Layers []LayerPlan
+	// Forks is what the rebase planned for each fork commit of
+	// StackRequest.Forks, read from the list as Layers is.
+	Forks []LayerPlan
 	// LayerSteps is what each per-layer step came to at each layer's end,
 	// bottom first.
 	LayerSteps []LayerStep

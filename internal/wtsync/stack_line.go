@@ -148,6 +148,9 @@ func backup(name string, patterns []config.RefPattern) bool {
 type StackRequest struct {
 	Line       Line
 	Autosquash bool
+	// Forks is the commits of the line side branches fork from, bottom
+	// first: each gets a marker of its own where its rewrite lands.
+	Forks []string
 }
 
 // StackMapPrefix is where a rebase of a stack held on one line has git
