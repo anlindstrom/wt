@@ -77,6 +77,17 @@ type PlanStack struct {
 	PlanStackMember
 	OwnRemote        syncrun.OwnRemote `json:"ownRemote"`
 	DeferredDeclared []DeclaredStep    `json:"deferredDeclared"`
+	// Layers is the branches in no worktree on this member's line that wt up
+	// moves with it, or leaves with the reason, bottom first.
+	Layers []PlanLayer `json:"layers"`
+}
+
+// PlanLayer is a branch in no worktree on a member's line: Left is why wt up
+// leaves it where it is, null when it moves it.
+type PlanLayer struct {
+	Branch string  `json:"branch"`
+	Tip    string  `json:"tip"`
+	Left   *string `json:"left"`
 }
 
 // UpPlan is the one object wt status <work> --json prints: what wt up would
@@ -147,8 +158,12 @@ func UpPlanJSON(ctx *kit.Context, arg string, w io.Writer) error {
 func upPlanToken(ctx *kit.Context, p UpPlan) string {
 	stack := make([]string, 0, len(p.Stack))
 	diverged := map[string]string{}
+	layers := map[string][]string{}
 	for _, m := range p.Stack {
 		stack = append(stack, m.Branch)
+		for _, l := range m.Layers {
+			layers[m.Branch] = append(layers[m.Branch], l.Branch)
+		}
 		if o := m.OwnRemote; o.Blocks != nil && *o.Blocks == wtsync.OwnBlockDiverged && o.Commit != nil {
 			diverged[m.Branch] = *o.Commit
 		}
@@ -157,7 +172,7 @@ func upPlanToken(ctx *kit.Context, p UpPlan) string {
 	if p.Trunk != nil {
 		trunk = *p.Trunk
 	}
-	return syncrun.PlanToken(ctx, trunk, stack, diverged)
+	return syncrun.PlanToken(ctx, trunk, stack, diverged, layers)
 }
 
 // upPlanner is wt status <work> --json as it is worked out: the plan so
@@ -311,12 +326,17 @@ func (pl *upPlanner) readStack() {
 	for _, o := range all {
 		byBranch[o.Branch] = o
 	}
+	var parents map[string]string
+	if err == nil && pl.base != "" {
+		parents, _, _ = wtsync.Parents(ctx.Repo.MainRoot, pl.base, all)
+	}
 	for _, b := range stack {
 		o := byBranch[b]
 		pl.p.Stack = append(pl.p.Stack, PlanStack{
 			PlanStackMember:  PlanStackMember{Work: kit.WorktreeName(ctx, b, o.Path), Branch: b, Path: o.Path},
 			OwnRemote:        syncrun.OwnRemoteOf(pl.ownOf(b, o.Path)),
 			DeferredDeclared: declared,
+			Layers:           planLayers(looseOf(ctx, all, pl.base, parents, b)),
 		})
 	}
 }
@@ -455,4 +475,17 @@ func mainWorktree(ctx *kit.Context) (repo.Worktree, error) {
 		}
 	}
 	return repo.Worktree{}, kit.ErrMainCheckout
+}
+
+// planLayers is the layers of a member as the plan lists them.
+func planLayers(line wtsync.LooseLine) []PlanLayer {
+	out := []PlanLayer{}
+	for _, l := range line.Layers {
+		pl := PlanLayer{Branch: l.Branch, Tip: l.Old}
+		if l.Left != "" {
+			pl.Left = jsonout.Strp(l.Left)
+		}
+		out = append(out, pl)
+	}
+	return out
 }

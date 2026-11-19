@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json",
-  "x-version": "1.6.0",
+  "x-version": "1.7.0",
   "title": "wt up --json",
   "description": "What a wt up run did. Printed by `wt up [<work>] --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends the run. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -56,7 +56,7 @@
     "shaOrNull": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$" },
     "participant": {
       "type": "object",
-      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "ownRemoteSync"],
+      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "ownRemoteSync", "layers"],
       "properties": {
         "work": { "type": "string" },
         "branch": { "type": "string" },
@@ -77,7 +77,21 @@
         "pushed": { "type": "boolean" },
         "noPushReason": { "type": ["string", "null"], "description": "Since 1.5.0: for rebased with a null pushCommand, why wt made and offered no push for the branch, in words, whatever the reason: among them that it tracks a remote branch of another name with nothing recorded for it, and that the branch of another name it is recorded as pushing to holds commits that cannot be shown to be old versions of its own. Null otherwise." },
         "fixCommand": { "oneOf": [{ "type": "null" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }], "description": "Since 1.5.0: the command that settles noPushReason, as an argv, when one does: wt sync push-to <branch> <remote>/<branch>, which records the branch it tracks as where it pushes. The same command with the branch's own name on the remote records that instead. It names no directory: run it in the repository. Null otherwise." },
+        "layers": { "type": "array", "items": { "$ref": "#/$defs/layerBranch" }, "description": "Since up 1.7.0: the branches in no worktree on this participant's line, bottom first, that the run moved with its rebase or left, and why. Empty when there are none, and for a participant the run did not rebase." },
         "ownRemoteSync": { "$ref": "#/$defs/ownRemoteSync" }
+      }
+    },
+    "layerBranch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "before", "after", "result", "reason"],
+      "description": "Since up 1.7.0 and sync-run 1.15.0: a branch in no worktree whose tip is a commit of the participant's line, above its stack parent's tip, or above trunk (the target) without a parent. The run moves it with the rebase, or leaves it.",
+      "properties": {
+        "branch": { "type": "string" },
+        "before": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Its tip when the run read the line." },
+        "after": { "$ref": "#/$defs/shaOrNull", "description": "Where the run moved it: the replay of its commit. Null for a branch left." },
+        "result": { "enum": ["moved", "left"], "description": "moved: the branch is at after, pinned with the run's safety and result refs, so wt sync undo puts it back with the worktrees. left: it stays at before; reason says why." },
+        "reason": { "type": ["string", "null"], "description": "Why it was left: it is trunk, a backup name (also by a prefix at a slash), a tip that is a fixup!, squash! or amend! commit, a merge commit on the line, a rebase that dropped, folded or changed commits, one that stopped or failed, a branch checked out meanwhile. Null for a branch moved." }
       }
     },
     "ownRemoteSync": {

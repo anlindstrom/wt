@@ -1,6 +1,6 @@
 export default {
   "schema": 1,
-  "schemaVersion": "1.6.0",
+  "schemaVersion": "1.7.0",
   "command": "up",
   "trunk": "main",
   "trunkSource": "config",
@@ -42,6 +42,7 @@ export default {
       "pushed": false,
       "noPushReason": null,
       "fixCommand": null,
+      "layers": [],
       "ownRemoteSync": {
         "ref": "origin/feat_wt/login",
         "state": "inSync",

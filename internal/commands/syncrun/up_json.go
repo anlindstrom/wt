@@ -82,6 +82,46 @@ type UpParticipant struct {
 	FixCommand   []string `json:"fixCommand"`
 	// OwnRemoteSync is nil from wt sync resume and undo, which do not check.
 	OwnRemoteSync *OwnRemoteSync `json:"ownRemoteSync"`
+	// Layers is the branches in no worktree that sit on this worktree's
+	// commits and were moved along with it, or were left and why; empty when
+	// there are none.
+	Layers []LayerBranch `json:"layers"`
+}
+
+// The results of a layer branch.
+const (
+	LayerMoved = "moved"
+	LayerLeft  = "left"
+)
+
+// LayerBranch is a branch in no worktree on a participant's line: moved with
+// the rebase, or left where it was.
+type LayerBranch struct {
+	Branch string `json:"branch"`
+	Before string `json:"before"`
+	// After is the commit it was moved to; null for a branch left.
+	After  *string `json:"after"`
+	Result string  `json:"result"`
+	// Reason is why it was left; null for a branch moved.
+	Reason *string `json:"reason"`
+}
+
+// LayerBranchesOf reports the layers of a line that were moved or left;
+// a layer that stayed because its commits did not change is not one.
+func LayerBranchesOf(l *wtsync.LooseLine) []LayerBranch {
+	out := []LayerBranch{}
+	if l == nil {
+		return out
+	}
+	for _, x := range l.Layers {
+		switch {
+		case x.New != "":
+			out = append(out, LayerBranch{Branch: x.Branch, Before: x.Old, After: jsonout.Strp(x.New), Result: LayerMoved})
+		case x.Left != "":
+			out = append(out, LayerBranch{Branch: x.Branch, Before: x.Old, Result: LayerLeft, Reason: jsonout.Strp(x.Left)})
+		}
+	}
+	return out
 }
 
 // DeferredStep is one deferred step of a finished rebase.
@@ -356,7 +396,7 @@ func (j *RunJournal) Join(work, branch, path, before string, own *OwnRemoteSync)
 	j.Lock()
 	defer j.Unlock()
 	p := &SyncParticipant{UpParticipant: UpParticipant{Work: work, Branch: branch, Path: path, Result: ResultNotRun,
-		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}, EachCommit: j.eachCommit, Emptied: []DroppedJSON{}, TestsOnly: []DroppedJSON{}}
+		Before: jsonout.Strp(before), After: jsonout.Strp(before), FailedSteps: []string{}, OwnRemoteSync: own, Layers: []LayerBranch{}}, Deferred: []DeferredStep{}, LayerSteps: []LayerStepJSON{}, EachCommit: j.eachCommit, Emptied: []DroppedJSON{}, TestsOnly: []DroppedJSON{}}
 	j.Res.Worktrees = append(j.Res.Worktrees, p)
 	j.byBr[branch] = p
 }
@@ -541,7 +581,11 @@ func OutcomeOf(ps []*SyncParticipant, failedEarly bool) string {
 // shown is refused over one that moved since. With nothing diverged the
 // token is what it was before wt looked at the remotes, which docs/json.md
 // promises: so it is built by hand, not with jsonout.Token.
-func PlanToken(ctx *kit.Context, trunk string, stack []string, diverged map[string]string) string {
+//
+// layers maps each member to the branches in no worktree on its line that wt
+// up would move with it, in the order wt status lists them. They are in the
+// token only where there are some, so a stack with none keeps its token.
+func PlanToken(ctx *kit.Context, trunk string, stack []string, diverged map[string]string, layers map[string][]string) string {
 	h := sha256.New()
 	h.Write([]byte("wt-plan-1\x00" + trunk + "\x00"))
 	h.Write(kit.ConfigFingerprint(ctx))
@@ -549,6 +593,9 @@ func PlanToken(ctx *kit.Context, trunk string, stack []string, diverged map[stri
 	for _, b := range stack {
 		if commit, ok := diverged[b]; ok {
 			h.Write([]byte("\x00diverged\x01" + b + "\x01" + commit))
+		}
+		if l := layers[b]; len(l) > 0 {
+			h.Write([]byte("\x00layers\x01" + b + "\x01" + strings.Join(l, "\x01")))
 		}
 	}
 	return "1:" + hex.EncodeToString(h.Sum(nil))[:32]

@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-19 01:35 — wt up moves the branches between a stack's worktrees
+
+In a stack where only some branches have a worktree, `wt up` (and `wt sync
+rebase`) used to rebase the worktrees and leave the branches between them on the
+old commits, without a word. They now move with the rebase, are pinned for `wt
+sync undo`, and show in `--json` as `layers`. One it cannot move safely is left
+and named; `wt status --json` lists them too.
+
 ## 2026-11-18 23:31 — --stack leaves every backup branch alone
 
 `wt sync --stack` now recognises a backup branch the way `wt refs sweep` does,

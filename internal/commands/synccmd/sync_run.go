@@ -148,6 +148,11 @@ type participant struct {
 	// unavailable is the needs of its steps that did not answer, in a run
 	// told to go on with --allow-owed: those steps are owed.
 	unavailable map[string]string
+	// loose is the branches in no worktree on this worktree's line, read
+	// before its rebase and moved after it; nil where the run moves none.
+	loose *wtsync.LooseLine
+	// looseOnto is what the line was rebased onto.
+	looseOnto string
 }
 
 // RunPlan is one wt sync rebase: the trunk it rebases onto, the worktrees the
@@ -331,7 +336,7 @@ func (r *RunPlan) run(works []string) error {
 	}
 	r.fetchMissed()
 	if opts.Expect != "" && opts.planExpect {
-		if now := syncrun.PlanToken(r.ctx, r.trunk, r.branches, r.diverged()); now != opts.Expect {
+		if now := syncrun.PlanToken(r.ctx, r.trunk, r.branches, r.diverged(), r.layerNames()); now != opts.Expect {
 			return fmt.Errorf("the plan changed since it was read (trunk %s, the configuration, the stack %s "+
 				"or a remote the stack has diverged from is not what wt status --json saw); nothing is "+
 				"rebased: read the plan again", r.trunk, strings.Join(r.branches, ", "))
@@ -1079,6 +1084,11 @@ func (r *RunPlan) rebaseOne(b string) {
 	if !ok {
 		return
 	}
+	if err := r.readLoose(b, p, req); err != nil {
+		p.refused = p.work + ": its layer branches could not be read: " + err.Error()
+		r.passOver(b, p)
+		return
+	}
 	rec, rerr := r.stackRecord(b, p, req)
 	if r.opts.Stack != nil {
 		if hook := r.opts.Stack.BeforeRebase; hook != nil {
@@ -1129,8 +1139,10 @@ func (r *RunPlan) rebaseOne(b string) {
 	}
 	switch {
 	case rerr != nil:
+		r.leaveLoose(b, p, "the rebase did not finish")
 		r.rebaseFailed(b, p, res, rerr)
 	case res.Left != nil:
+		r.leaveLoose(b, p, "the rebase stopped for you: wt sync resume finishes it, and does not move them")
 		r.handOver(b, p, req, res)
 		if rec != nil {
 			fmt.Fprintf(r.w, "  the layers move once wt sync resume %s finishes the rebase\n", p.work)
@@ -1580,6 +1592,7 @@ func (r *RunPlan) finishRebase(b string, p *participant, res wtsync.Result, onto
 		fmt.Fprintf(w, "  note: what is owed could not be recorded for wt sync steps: %v\n", err)
 	}
 	restored := r.finishStack(b, p, res)
+	r.moveLoose(b, p, res)
 	// What the rebase did to its commits is told once the layers are
 	// settled, and not at all when the line was put back: the result it
 	// describes is gone.
@@ -1794,4 +1807,77 @@ func (r *RunPlan) recordFailed(b string, p *participant, why, oldTip, safety str
 		jp.Recovery = jsonout.Strp(wtsync.WayOut(wtsync.Way{Work: p.work, Path: p.wt.Path, Rebasing: busy,
 			Safety: wtsync.SafetyRef(b, r.epoch)}))
 	})
+}
+
+// readLoose reads, before the rebase, the branches in no worktree on the
+// line it replays: what wt up moves with it. A run of a stack held on one
+// line, in place or onto a target already reads its own layers.
+func (r *RunPlan) readLoose(b string, p *participant, req wtsync.Request) error {
+	if r.opts.Stack != nil || r.opts.Steps != nil {
+		return nil
+	}
+	base := cmp.Or(req.Upstream, req.Onto)
+	worktrees, err := r.ctx.Repo.Worktrees()
+	if err != nil {
+		return err
+	}
+	users := worktrees.Users()
+	line, err := wtsync.ReadLoose(r.ctx.Repo.MainRoot, b, base, r.ctx.Config.MainBranch, r.ctx.UserConfig().RefSweepPatterns, func(name string) bool { _, ok := users[name]; return ok })
+	if err != nil {
+		return err
+	}
+	if len(line.Layers) > 0 {
+		p.loose, p.looseOnto = &line, req.Onto
+	}
+	return nil
+}
+
+// moveLoose moves the branches readLoose found to the replay of their
+// commits, tells what moved and what stayed, and records both.
+func (r *RunPlan) moveLoose(b string, p *participant, res wtsync.Result) {
+	if p.loose == nil {
+		return
+	}
+	if err := p.loose.Move(r.ctx.Repo.MainRoot, r.epoch, p.looseOnto, res.NewTip); err != nil {
+		p.loose.LeaveAll("it could not be moved: " + err.Error())
+	}
+	r.reportLoose(b, p)
+}
+
+// leaveLoose names the branches readLoose found as left, for why.
+func (r *RunPlan) leaveLoose(b string, p *participant, why string) {
+	if p.loose == nil {
+		return
+	}
+	p.loose.LeaveAll(why)
+	r.reportLoose(b, p)
+}
+
+func (r *RunPlan) reportLoose(b string, p *participant) {
+	for _, x := range p.loose.Layers {
+		switch {
+		case x.New != "":
+			fmt.Fprintf(r.w, "  ↳ moved %s  %s → %s\n", x.Branch, git.ShortID(x.Old, 7), git.ShortID(x.New, 7))
+		case x.Left != "":
+			fmt.Fprintf(r.w, "  ⚠ left %s at %s: %s\n", x.Branch, git.ShortID(x.Old, 7), x.Left)
+		}
+	}
+	layers := syncrun.LayerBranchesOf(p.loose)
+	r.opts.Journal.Set(b, func(jp *syncrun.UpParticipant) { jp.Layers = layers })
+}
+
+// layerNames is, for each branch of the run, the names of the branches in no
+// worktree on its line: what wt status lists for it, which its token covers.
+func (r *RunPlan) layerNames() map[string][]string {
+	out := map[string][]string{}
+	all, err := r.ctx.Repo.Worktrees()
+	if err != nil {
+		return out
+	}
+	for _, b := range r.branches {
+		for _, l := range looseOf(r.ctx, all, r.trunkSHA, r.parents, b).Layers {
+			out[b] = append(out[b], l.Branch)
+		}
+	}
+	return out
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json",
-  "x-version": "1.11.0",
+  "x-version": "1.12.0",
   "title": "wt status --json",
   "description": "What wt up would start on, from local state alone. Printed by `wt status [<work>] --json`, which writes nothing to any repository. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -75,13 +75,25 @@
     },
     "stackMember": {
       "type": "object",
-      "required": ["work", "branch", "path", "ownRemote", "deferredDeclared"],
+      "required": ["work", "branch", "path", "ownRemote", "deferredDeclared", "layers"],
       "properties": {
         "work": { "type": "string" },
         "branch": { "type": "string" },
         "path": { "type": "string" },
         "ownRemote": { "$ref": "#/$defs/ownRemote" },
+        "layers": { "type": "array", "items": { "$ref": "#/$defs/layer" }, "description": "Since 1.12.0: the branches in no worktree whose tips are commits of this member's line, above its stack parent's tip or above trunkRef without one, bottom first: what wt up moves with the member's rebase, or leaves where they are (left says why). The token covers their names. Empty when there are none." },
         "deferredDeclared": { "type": "array", "items": { "$ref": "#/$defs/declaredStep" }, "description": "Since 1.7.0. The deferred steps .wt-sync.yaml declares on trunkTip, trunk as last fetched, in the declared order: what wt up goes through once it has rebased this member. Declared, not predicted: each may run. A step with no paths does, after every finished rebase; one with paths only when the rebase changed one of them; none after a step that failed. wt up fetches first and reads the declaration from the trunk it then rebases onto, which may be newer, and the token does not cover it. The same list on every member. Empty when trunk declares none or has no .wt-sync.yaml, when trunkRefExists is false, and when the declaration there cannot be read." }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "tip", "left"],
+      "description": "A branch in no worktree on a stack member's line, as wt up would find it now.",
+      "properties": {
+        "branch": { "type": "string" },
+        "tip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "left": { "type": ["string", "null"], "description": "Why wt up would leave it where it is: it is trunk, a backup name (also by a prefix at a slash), a tip that is a fixup!, squash! or amend! commit, or a merge commit on the line. Null when it would move it; a rebase that drops, folds or changes commits leaves it too, which only the run finds out." }
       }
     },
     "declaredStep": {
