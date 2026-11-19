@@ -1705,7 +1705,7 @@ what it sees; a run (`wt sync rebase <work> --stack --json`) fills the rest.
 | `autosquash` | bool | a fold of the line's fixups (`--autosquash`): onto its own base, or, with `--onto`, as the line moves onto the target |
 | `layers` | array | the layer branches, bottom first (below): what a run moves once its rebase has finished. The line's own branch is never one of them |
 | `top` | object | since `sync` 1.13.0 and `sync-run` 1.17.0: the line's own branch, the top of the stack, which the rebase itself moves: `branch`, `oldTip` (`head`), `commits` (from the line's base, its tip included; 0 for a branch with nothing ahead of trunk), `subject` (its tip's), `worktree` (where it is checked out). The look's text lists it as the last row of the layer table |
-| `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name; `--layer` takes it) |
+| `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name, `--layer` naming it takes it; or, matched by a `--layer` pattern, a tip not on the line) |
 | `sideBranches` | array | since `sync` 1.12.0 and `sync-run` 1.16.0: the [side branches](#side-branches--what-hangs-off-the-line) that hang off the line, parents first; `[]` with `--no-side-branches` |
 | `refusal` | string \| null | the run's: why no layer moved, a new tip that failed its check, or a fold that changed the line's content; the line itself is left rebased, and `wt sync undo` puts it back. Null in the look, and when each layer was moved or held |
 | `edit` | object \| null | since 1.9.0: what a run with `--edit <rev>` did to that commit (below); null in the look and for any other run |

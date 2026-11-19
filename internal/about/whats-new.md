@@ -12,6 +12,15 @@ in `.wt-sync.yaml`: trunk's items stay, then the branch's new items follow, each
 once, nested lines moving with their bullet. A removed or reworded item is still
 yours to decide. See `docs/sync-declaration.md`.
 
+## 2026-11-19 16:10 — --layer takes a pattern
+
+`wt sync --stack --layer 'tmp/layer/*'` takes every local branch the pattern
+matches whose tip is on the line, so a stack of nineteen layers is one flag
+and a stray branch on the line's tip stays out. `*` crosses a slash, as in
+the backup patterns; quote it. A pattern never takes a backup name and lists
+a match off the line as not taken; one that takes no layer is refused before
+anything moves. Several layers are repeated `--layer` flags.
+
 ## 2026-11-19 12:45 — the --stack look shows the top, and twins move together
 
 `wt sync <top> --stack` now lists the top itself as the last layer, with its

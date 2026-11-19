@@ -51,8 +51,11 @@ func isFold(subject string) bool {
 // ReadLine reads the line of branch against trunk. Without named, the layers
 // are the local branches other than branch whose tips lie on the line; a
 // branch matching one of backups (wt refs sweep's backup patterns) is listed
-// under Skipped instead. With named, the layers are exactly those branches,
-// and one whose tip is not on the line is refused. A line with a merge
+// under Skipped instead. With named, the layers are the branches it names,
+// and a name whose tip is not on the line is refused. A named value with *
+// or ? is a glob, matched as the backup patterns are (* crosses a slash): it
+// takes every matching branch with its tip on the line, lists a backup name
+// or a branch off the line under Skipped, and is refused when it takes none. A line with a merge
 // commit is refused: a rebase replays it without its merge. A layer whose
 // tip is a fixup!, squash! or amend! commit is taken like any other: it ends
 // at the rewrite of its last commit that stands on its own (planLayers).
@@ -102,15 +105,63 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 		line.Layers = append(line.Layers, LineLayer{Branch: name, Tip: f.tip, Count: pos[f.tip], Subject: f.subject, Named: isNamed})
 	}
 	if len(named) > 0 {
-		for _, name := range named {
-			f, ok := branches[name]
-			if !ok {
-				return line, fmt.Errorf("--layer %s: no such local branch", name)
+		names := make([]string, 0, len(branches))
+		for name := range branches {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		taken := map[string]bool{}
+		take := func(name string) {
+			if !taken[name] {
+				taken[name] = true
+				add(name, branches[name], true)
 			}
-			if pos[f.tip] == 0 {
-				return line, fmt.Errorf("--layer %s: its tip %s is not on the line of %s", name, git.ShortID(f.tip, 7), branch)
+		}
+		literal := map[string]bool{}
+		for _, value := range named {
+			if !IsLayerPattern(value) {
+				literal[value] = true
 			}
-			add(name, f, true)
+		}
+		for _, value := range named {
+			if !IsLayerPattern(value) {
+				f, ok := branches[value]
+				if !ok {
+					return line, fmt.Errorf("--layer %s: no such local branch", value)
+				}
+				if pos[f.tip] == 0 {
+					return line, fmt.Errorf("--layer %s: its tip %s is not on the line of %s", value, git.ShortID(f.tip, 7), branch)
+				}
+				take(value)
+				continue
+			}
+			pattern := config.CompileRefPatterns([]string{value})
+			got := 0
+			for _, name := range names {
+				if !backup(name, pattern) {
+					continue
+				}
+				f := branches[name]
+				switch {
+				case literal[name]:
+					// Named on its own, it is a layer and never listed as
+					// not taken; off the line, its own name refuses it.
+					if pos[f.tip] != 0 {
+						take(name)
+						got++
+					}
+				case pos[f.tip] == 0:
+					line.addSkipped(name, f.tip, "its tip is not on the line of "+branch)
+				case backup(name, sweep):
+					line.addSkipped(name, f.tip, "a backup name; name it with --layer to move it")
+				default:
+					take(name)
+					got++
+				}
+			}
+			if got == 0 {
+				return line, fmt.Errorf("--layer %s takes no layer: no local branch it matches has its tip on the line of %s; nothing is moved", value, branch)
+			}
 		}
 	} else {
 		names := make([]string, 0, len(branches))
@@ -137,6 +188,47 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 		return strings.Compare(a.Branch, b.Branch)
 	})
 	return line, nil
+}
+
+// IsLayerPattern is whether a --layer value is a glob: it has a * or a ?.
+// Anything else is a branch name.
+func IsLayerPattern(value string) bool { return strings.ContainsAny(value, "*?") }
+
+func (l *Line) addSkipped(name, tip, why string) {
+	for _, k := range l.Skipped {
+		if k.Branch == name {
+			return
+		}
+	}
+	l.Skipped = append(l.Skipped, SkippedBranch{Branch: name, Tip: tip, Why: why})
+}
+
+// CheckLayerPatterns refuses a --layer pattern that matches no local branch,
+// with no line to read: what a run can say before it synchronizes trunk. A
+// pattern whose matches are all off the line is judged where the line is
+// read, as a name is.
+func CheckLayerPatterns(dir string, layers []string) error {
+	var patterns []string
+	for _, v := range layers {
+		if IsLayerPattern(v) {
+			patterns = append(patterns, v)
+		}
+	}
+	if len(patterns) == 0 {
+		return nil
+	}
+	out, err := gitEnv(dir, nil, nil, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	if err != nil {
+		return err
+	}
+	names := strings.Fields(out)
+	for _, p := range patterns {
+		compiled := config.CompileRefPatterns([]string{p})
+		if !slices.ContainsFunc(names, func(n string) bool { return backup(n, compiled) }) {
+			return fmt.Errorf("--layer %s takes no layer: no local branch matches it; nothing is moved", p)
+		}
+	}
+	return nil
 }
 
 // backup is whether name matches one of the patterns the way wt refs sweep
