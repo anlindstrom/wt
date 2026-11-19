@@ -60,6 +60,9 @@ const (
 	KeptReachUnknown         = "reachUnknown"
 	KeptSubmoduleUnreachable = "submoduleUnreachable"
 	KeptNestedWorktree       = "nestedWorktree"
+	// KeptDeliberateBackup is a branch whose name ref_keep_patterns matches:
+	// a backup made on purpose, never deleted by a sweep.
+	KeptDeliberateBackup = "deliberateBackup"
 	// KeptProcesses is processes running in the worktree, which a sweep
 	// without --reap leaves alone; KeptProcessesUnknown is not being able
 	// to tell, which keeps it with --reap too.
