@@ -81,15 +81,21 @@ func TestReadLineRefusesAMergeCommitOnTheLine(t *testing.T) {
 	}
 }
 
-func TestReadLineRefusesALayerWhoseTipIsAFixup(t *testing.T) {
+// A layer whose tip is a fixup! is a layer like any other: a fold ends it at
+// the rewrite of its last commit that stands on its own.
+func TestReadLineTakesALayerWhoseTipIsAFixup(t *testing.T) {
 	t.Parallel()
 	s := stackLine(t, "")
 	tmp := s.Paths[gittest.StackTmp]
 	gittest.WriteFile(t, filepath.Join(tmp, "a1.txt"), "fixed\n")
 	gitIn(t, tmp, "commit", "-q", "-am", "fixup! feat(s1): a1.txt")
 	gitIn(t, s.Dir, "branch", "s6", gittest.StackTmp)
-	_, err := ReadLine(s.Dir, gittest.StackTmp, "origin/main", nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "s6") || !strings.Contains(err.Error(), "fixup!") {
-		t.Fatalf("err %v, want s6 refused for its fixup tip", err)
+	line, err := ReadLine(s.Dir, gittest.StackTmp, "origin/main", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top := line.Layers[len(line.Layers)-1]
+	if top.Branch != "s6" || top.Subject != "fixup! feat(s1): a1.txt" {
+		t.Errorf("top layer %+v, want s6 on its fixup", top)
 	}
 }

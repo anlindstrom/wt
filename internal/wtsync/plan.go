@@ -66,8 +66,19 @@ type State struct {
 	// fast-forwarded the branch to its own remote before the rebase, so the
 	// rebase started from OldTip and undo goes back to Found. Empty when the
 	// two are the same.
-	Found    string            `json:"found,omitempty"`
-	Stop     int               `json:"stop"`
+	Found string `json:"found,omitempty"`
+	Stop  int    `json:"stop"`
+	// StoppedCommit is the commit of the old line the rebase stopped at: a
+	// resume is a rebase wt drove from start to end only while the sequencer
+	// is still at it (AtHandoverStop).
+	StoppedCommit string `json:"stopped_commit,omitempty"`
+	// TodoHash is a hash of the sequencer's list of what is still to replay
+	// at the handover (TodoHash): a resume is wt's own only while the list is
+	// the one wt left.
+	TodoHash string `json:"todo_hash,omitempty"`
+	// ByHand says an earlier leg of the run was advanced past its handover
+	// stop by hand: the replay is not one wt drove, whatever the later stops.
+	ByHand   bool              `json:"by_hand,omitempty"`
 	Total    int               `json:"total"`
 	Resolved map[string]string `json:"resolved"`
 	Strategy map[string]string `json:"strategy"`

@@ -4,6 +4,22 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-18 23:31 — --stack leaves every backup branch alone
+
+`wt sync --stack` now recognises a backup branch the way `wt refs sweep` does,
+where `*` crosses a `/`: `backup/2026-11-11/door-ux` and `feat/x-backup` are
+listed as backups and never moved, and are taken as layers only with `--layer`.
+
+## 2026-11-18 23:30 — a layer's end follows a dropped or folded last commit
+
+In a `--stack` run, a layer whose last commit the rebase drops as empty (a
+`take-trunk` lockfile commit, say) now ends at its last commit that stays, or
+where the layer below ends when none does; the layers above are not affected,
+and the layer's line names the dropped commit and where the layer ends. A layer
+ending on a `fixup!`, `squash!` or `amend!` commit, the line's top one included,
+is no longer refused: autosquash folds it and the layer ends at its last commit
+of its own. A layer whose new tip disagrees still moves nothing.
+
 ## 2026-11-18 23:09 — needs: env:<NAME> refuses a step that lacks its token
 
 A step can now declare `needs: [env:GH_PACKAGES_TOKEN]`. The run checks that the

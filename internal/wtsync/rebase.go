@@ -2,6 +2,8 @@ package wtsync
 
 import (
 	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -1584,4 +1586,67 @@ func StopPaths(stops []StopResult) []string {
 		}
 	}
 	return paths
+}
+
+// AtHandoverStop is whether the rebase in wtPath is still where the handover
+// st left it: the same stopped commit, the same number of commands done, and
+// HEAD on the recorded head, or one commit above it (the person's resolution
+// of the stopped commit), or, at a check stop or an edit, an amend of it.
+// Only then has wt driven every pick of the replay: a rebase finished by
+// hand, a partial --continue, or a skip past the stop has not, and what its
+// result lacks may have been reworded rather than dropped.
+func AtHandoverStop(wtPath string, st State) bool {
+	if st.Head == "" {
+		return false
+	}
+	if busy, err := RebaseInProgress(wtPath); err != nil || !busy {
+		return false
+	}
+	p, err := RebaseProgress(wtPath)
+	if err != nil || p.Index != st.Stop {
+		return false
+	}
+	if st.TodoHash == "" || TodoHash(wtPath) != st.TodoHash {
+		// A list edited by hand (a marker moved, an exec added, a pick
+		// reordered, reworded or dropped) is not the replay wt planned.
+		return false
+	}
+	if st.StoppedCommit != "" && p.Commit != "" &&
+		!strings.HasPrefix(st.StoppedCommit, p.Commit) && !strings.HasPrefix(p.Commit, st.StoppedCommit) {
+		return false
+	}
+	head, err := gitEnv(wtPath, nil, nil, "rev-parse", "HEAD")
+	if err != nil {
+		return false
+	}
+	if head == st.Head {
+		return true
+	}
+	parent, err := gitEnv(wtPath, nil, nil, "rev-parse", "HEAD^")
+	if err != nil {
+		return false
+	}
+	if parent == st.Head {
+		return true
+	}
+	if st.Check != nil || st.AtEdit {
+		was, err := gitEnv(wtPath, nil, nil, "rev-parse", st.Head+"^")
+		return err == nil && parent == was
+	}
+	return false
+}
+
+// TodoHash is a hash of the sequencer's list of what is still to replay in
+// the rebase in wtPath, "" when it cannot be read.
+func TodoHash(wtPath string) string {
+	file, err := sequencerDir(wtPath, "rebase-merge/git-rebase-todo")
+	if err != nil {
+		return ""
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

@@ -119,6 +119,9 @@ type resume struct {
 	st     wtsync.State
 	// name is the work as the run recorded it.
 	name string
+	// confirmed is whether this resume began with the rebase still at the
+	// handover's stop, on a run no earlier leg of which was advanced by hand.
+	confirmed bool
 	// restored is set once the layers are settled when an edit run's line
 	// was put back at the tip the run found.
 	restored bool
@@ -450,6 +453,7 @@ func (r *resume) rebase() (wtsync.Result, error) {
 			req.Stack = &wtsync.StackRequest{Line: rec.Line, Autosquash: rec.Autosquash}
 		}
 	}
+	r.confirmed = r.adopt == nil && !st.ByHand && wtsync.AtHandoverStop(r.target.Path, st)
 	safety := wtsync.Safety{Branch: st.Branch, Epoch: st.Epoch, Ref: st.Safety, Tip: r.pinned}
 	if r.busy {
 		fmt.Fprintf(r.w, "%s  %s  resuming at %d/%d\n", name, st.Branch, st.Stop, st.Total)
@@ -496,7 +500,7 @@ func (r *resume) handOverAgain(res wtsync.Result) error {
 	herr := syncrun.HandOver(r.ctx, w, syncrun.HandoverInput{
 		Work: name, Branch: st.Branch, Path: r.target.Path, TrunkRef: st.TrunkRef, TrunkSHA: st.Trunk, OntoRef: st.OntoRef,
 		Onto: st.Onto, Upstream: st.Upstream, Epoch: st.Epoch, Cfg: r.cfg, Res: res, Lock: r.lock,
-		Found: st.Found, Earlier: st.Stopped, Tracker: r.tracker, FollowUps: st.FollowUps,
+		Found: st.Found, Earlier: st.Stopped, Tracker: r.tracker, FollowUps: st.FollowUps, ByHand: st.ByHand || !r.confirmed,
 	})
 	if herr != nil {
 		fmt.Fprintf(w, "  ✗ failed: %v\n", herr)
@@ -653,11 +657,8 @@ func (r *resume) proveAdopt() (wtsync.Adoption, []wtsync.LayerTip, error) {
 	if st.Layers != nil && st.Layers.Plans != nil {
 		plans = st.Layers.Plans
 	}
-	if rec.Upstream != "" {
-		if plans, err = wtsync.ReconcileDropped(main, rec.Onto, plans); err != nil {
-			return wtsync.Adoption{}, nil, err
-		}
-	}
+	// No reconcile: wt did not drive this rebase from start to end, so no
+	// commit can be proved dropped; a layer that counts differently is refused.
 	tips, err := wtsync.CheckLayers(main, a.Finish, rec.Onto, plans)
 	if err != nil {
 		return wtsync.Adoption{}, nil, err
@@ -845,10 +846,14 @@ func (r *resume) finishStack(res wtsync.Result) string {
 		rec.Edit = res.Edit
 	}
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
+	// Confirmed only for a replay wt drove from start to end: the sequencer
+	// was still at the handover's stop when this resume began (what the
+	// person did there was to resolve it), and no earlier leg was advanced by
+	// hand. Anything else leaves the plan strict.
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: r.st.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch), Listed: listed, ListErr: lerr,
 		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg), Stopped: append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...),
-		Gaps: r.gaps, Unchecked: r.unchecked})
+		Dropped: res.Emptied, Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked})
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s })
 	r.restored = s != nil && s.Restored
 	if ferr != nil {

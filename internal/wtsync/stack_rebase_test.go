@@ -215,3 +215,76 @@ func TestFoldChecksAGroupByItsFixupsPathsToo(t *testing.T) {
 		t.Errorf("checked %d commits, want the s1 group with its fixup\n%s", res.Checked, log.String())
 	}
 }
+
+// Once a rebase has dropped a commit as empty, the plan follows it, and a
+// marker anywhere but at the rule's end of its layer still fails the check:
+// the drops are the rebase's own report, never read from the marker, so a
+// marker moved down cannot make the commits above it look dropped.
+func TestCheckLayersAfterADropRefusesAMarkerMovedOffTheRulesEnd(t *testing.T) {
+	t.Parallel()
+	s := stackLine(t, keepTrunkYAML)
+	_, res := stackRebase(t, s, 13)
+	plans, err := ApplyDrops(s.Dir, "origin/main", res.Layers, res.Emptied, res.Replay != nil && res.Replay.Confirmed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CheckLayers(s.Dir, res.NewTip, "origin/main", plans); err != nil {
+		t.Fatalf("the untouched markers are refused: %v", err)
+	}
+	s3 := plans[2]
+	if s3.Mapped != MappedTipDropped || len(s3.Emptied) != 1 {
+		t.Fatalf("s3 plan %+v, want its bump dropped as empty", s3)
+	}
+	for _, where := range []string{"~1", "~2"} {
+		gitIn(t, s.Dir, "update-ref", s3.Ref, s3.Ref+where)
+		if _, err := CheckLayers(s.Dir, res.NewTip, "origin/main", plans); err == nil || !strings.Contains(err.Error(), "s3") || !strings.Contains(err.Error(), "no layer moved") {
+			t.Fatalf("s3's marker at %s: err %v, want it refused", where, err)
+		}
+	}
+	for b, tip := range s.Tips {
+		if b == gittest.StackTmp {
+			continue
+		}
+		if got := gitIn(t, s.Dir, "rev-parse", b); got != tip {
+			t.Errorf("%s moved to %s: a refused check must move nothing", b, got)
+		}
+	}
+	if st := gitIn(t, s.Paths[gittest.StackTmp], "status", "--porcelain"); st != "" {
+		t.Errorf("status %q", st)
+	}
+}
+
+// Drops are taken out of the plan only for a rebase wt drove from start to
+// end, and only the ones ReportReplay is certain of: a commit that may have
+// been reworded, or that shares its author, date and subject with another, is
+// not proof of a drop, and the plan stays as it was.
+func TestApplyDropsTakesOnlyCertainDropsOfAConfirmedRebase(t *testing.T) {
+	t.Parallel()
+	s := stackLine(t, keepTrunkYAML)
+	_, res := stackRebase(t, s, 14)
+	if len(res.Emptied) == 0 || res.Replay == nil || !res.Replay.Confirmed {
+		t.Fatalf("emptied %+v replay %+v", res.Emptied, res.Replay)
+	}
+	same := func(why string, got []LayerPlan) {
+		t.Helper()
+		for i := range got {
+			if got[i].Expect != res.Layers[i].Expect || got[i].Subject != res.Layers[i].Subject || got[i].Mapped != res.Layers[i].Mapped {
+				t.Errorf("%s: layer %s plan changed: %+v, was %+v", why, got[i].Branch, got[i], res.Layers[i])
+			}
+		}
+	}
+	got, err := ApplyDrops(s.Dir, "origin/main", res.Layers, res.Emptied, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	same("a rebase wt did not drive to its end", got)
+	doubtful := make([]Dropped, len(res.Emptied))
+	for i, d := range res.Emptied {
+		d.Unmatched = true
+		doubtful[i] = d
+	}
+	if got, err = ApplyDrops(s.Dir, "origin/main", res.Layers, doubtful, true); err != nil {
+		t.Fatal(err)
+	}
+	same("drops wt is not certain of", got)
+}

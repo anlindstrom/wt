@@ -340,6 +340,13 @@ func TestSyncResumeAdoptRefusesWhatItCannotProve(t *testing.T) {
 			c.addFixups(t)
 			testkit.GitIn(t, c.tmp, "update-ref", wtsync.StackMapRef(c.st.Epoch, 1), c.head)
 		}},
+		{"a marker moved down a commit", "the plan expects", func(t *testing.T, c *adoptCase) {
+			// No drop is proved for a rebase finished by hand, so the commit
+			// the marker no longer covers is not read as dropped.
+			c.addFixups(t)
+			ref := wtsync.StackMapRef(c.st.Epoch, 2)
+			testkit.GitIn(t, c.tmp, "update-ref", ref, ref+"~1")
+		}},
 		{"a dirty worktree", "not committed", func(t *testing.T, c *adoptCase) {
 			c.addFixups(t)
 			testkit.WriteFile(t, c.tmp, "adapt.txt", "half done\n")

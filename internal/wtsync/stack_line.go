@@ -3,11 +3,11 @@ package wtsync
 import (
 	"errors"
 	"fmt"
-	"path"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/anlindstrom/wt/internal/config"
 	"github.com/anlindstrom/wt/internal/git"
 )
 
@@ -51,11 +51,12 @@ func isFold(subject string) bool {
 // branch matching one of backups (wt refs sweep's backup patterns) is listed
 // under Skipped instead. With named, the layers are exactly those branches,
 // and one whose tip is not on the line is refused. A line with a merge
-// commit is refused: a rebase replays it without its merge. So is a layer
-// whose tip is a fixup!, squash! or amend! commit: where its layer ends once
-// that commit is folded is not defined.
+// commit is refused: a rebase replays it without its merge. A layer whose
+// tip is a fixup!, squash! or amend! commit is taken like any other: it ends
+// at the rewrite of its last commit that stands on its own (planLayers).
 func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) {
 	line := Line{Branch: branch}
+	sweep := config.CompileRefPatterns(backups)
 	var err error
 	if line.Head, err = gitEnv(dir, nil, nil, "rev-parse", "--verify", "refs/heads/"+branch); err != nil {
 		return line, err
@@ -92,12 +93,8 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 			branches[name] = found{tip, subject}
 		}
 	}
-	add := func(name string, f found, isNamed bool) error {
-		if isFold(f.subject) {
-			return fmt.Errorf("layer %s ends at a commit autosquash folds (%s %q): where the layer ends is not defined; move the branch, or leave it out with --layer", name, git.ShortID(f.tip, 7), f.subject)
-		}
+	add := func(name string, f found, isNamed bool) {
 		line.Layers = append(line.Layers, LineLayer{Branch: name, Tip: f.tip, Count: pos[f.tip], Subject: f.subject, Named: isNamed})
-		return nil
 	}
 	if len(named) > 0 {
 		for _, name := range named {
@@ -108,9 +105,7 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 			if pos[f.tip] == 0 {
 				return line, fmt.Errorf("--layer %s: its tip %s is not on the line of %s", name, git.ShortID(f.tip, 7), branch)
 			}
-			if err := add(name, f, true); err != nil {
-				return line, err
-			}
+			add(name, f, true)
 		}
 	} else {
 		names := make([]string, 0, len(branches))
@@ -123,13 +118,11 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 			if pos[f.tip] == 0 {
 				continue
 			}
-			if backup(name, backups) {
+			if backup(name, sweep) {
 				line.Skipped = append(line.Skipped, SkippedBranch{Branch: name, Tip: f.tip, Why: "a backup name; name it with --layer to move it"})
 				continue
 			}
-			if err := add(name, f, false); err != nil {
-				return line, err
-			}
+			add(name, f, false)
 		}
 	}
 	slices.SortStableFunc(line.Layers, func(a, b LineLayer) int {
@@ -141,14 +134,11 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 	return line, nil
 }
 
-// backup is whether name matches one of the backup patterns.
-func backup(name string, patterns []string) bool {
-	for _, p := range patterns {
-		if ok, _ := path.Match(p, name); ok {
-			return true
-		}
-	}
-	return false
+// backup is whether name matches one of the patterns the way wt refs sweep
+// matches them: * crosses a slash.
+func backup(name string, patterns []config.RefPattern) bool {
+	_, ok := config.MatchRefPattern(patterns, name)
+	return ok
 }
 
 // StackRequest is a rebase of a stack held on the line: every layer of Line
@@ -197,6 +187,21 @@ type LayerPlan struct {
 	// Picks is the layer's own picks in the list, in order: what
 	// ReconcileDropped matches the rebased line against.
 	Picks []string `json:",omitempty"`
+	// Amended is, for each of Picks that an amend! commit is folded into,
+	// the subject that pick has once folded.
+	Amended map[string]string `json:",omitempty"`
+	// Emptied is the layer's own picks the rebase dropped as empty (ApplyDrops).
+	Emptied []string `json:",omitempty"`
+	// Stepped is how many of the layer's picks a per-layer step's fold left
+	// empty, which the plan's count already lost.
+	Stepped int `json:",omitempty"`
+	// StepEnd says a per-layer step set where the layer ends and the subject
+	// of its tip (it committed there, or a fold below left the tip empty):
+	// a drop of the layer's own picks then leaves both as they are.
+	StepEnd bool `json:",omitempty"`
+	// TipFolded says the layer's own tip is a fixup!, squash! or amend!
+	// commit that autosquash folds into an earlier commit.
+	TipFolded bool `json:",omitempty"`
 }
 
 // LayerTip is one layer's new tip, read back from its marker and checked.
@@ -276,19 +281,22 @@ func planLayers(dir string, epoch int64, line Line, todo string) ([]LayerPlan, e
 				if pos[e.sha] > prev {
 					own++
 					p.Picks = append(p.Picks, e.sha)
+					if amend := amendIn(entries[j+1:]); amend != "" {
+						subject, err := plannedSubject(dir, e.sha, amend)
+						if err != nil {
+							return nil, err
+						}
+						if p.Amended == nil {
+							p.Amended = map[string]string{}
+						}
+						p.Amended[e.sha] = subject
+					}
 				}
 			}
 		}
 		if last >= 0 {
 			p.After = entries[last].sha
-			for _, e := range entries[last+1:] {
-				if e.start {
-					break
-				}
-				if e.amend {
-					lastAmend = e.sha
-				}
-			}
+			lastAmend = amendIn(entries[last+1:])
 		}
 		for _, c := range line.Commits[prev:l.Count] {
 			if !inTodo[c] {
@@ -307,6 +315,7 @@ func planLayers(dir string, epoch int64, line Line, todo string) ([]LayerPlan, e
 			// At the same commit as the layer below: it ends where that one does.
 		case !isStart(entries, l.Tip):
 			p.Mapped = MappedTipDropped
+			p.TipFolded = inTodo[l.Tip]
 		}
 		if p.After != "" {
 			subject, err := plannedSubject(dir, p.After, lastAmend)
@@ -319,6 +328,21 @@ func planLayers(dir string, epoch int64, line Line, todo string) ([]LayerPlan, e
 		prev = l.Count
 	}
 	return plans, nil
+}
+
+// amendIn is the last amend! commit folded into the group that starts the
+// list rest follows, "" when none is.
+func amendIn(rest []todoEntry) string {
+	amend := ""
+	for _, e := range rest {
+		if e.start {
+			break
+		}
+		if e.amend {
+			amend = e.sha
+		}
+	}
+	return amend
 }
 
 func isStart(entries []todoEntry, sha string) bool {
@@ -458,28 +482,10 @@ func SamePatch(dir, oldBase, old, newBase, tip string) (bool, error) {
 	return was == is, err
 }
 
-// ReconcileDropped brings plans in line with a finished rebase of a stack
-// held on the line above an upstream, where git keeps in its list the picks
-// the target already has and drops each as it comes out empty. It reads
-// what was dropped from the rebase itself: walking each layer's stretch of
-// the rebased line, from the marker of the layer below (or onto) to its
-// own, against the layer's planned picks in order. A rebased commit is its
-// pick's when it carries the pick's author, author date and subject, which a rebase
-// keeps; a commit that is no pick's is one a step or a person added. A pick
-// with no commit was dropped. A layer that lost picks expects the commits
-// its stretch now has, a layer whose planned tip was dropped ends at the
-// last pick left (and its subject is that one's), and one that lost every
-// pick and gained nothing ends where the layer below does, as when trunk
-// carries them. Anything that will not line up so (a marker missing, off
-// the line, or a pick of another layer in a stretch) leaves the plans as
-// they were, for CheckLayers to refuse. With nothing dropped they are
-// returned as they are.
-func ReconcileDropped(dir, onto string, plans []LayerPlan) ([]LayerPlan, error) {
-	return reconcileDropped(dir, onto, plans, nil)
-}
-
-// ReconcileEdit is ReconcileDropped for an in-place rebase with an edit:
-// the commits the amend emptied are the ones dropped. The edited commit is
+// ReconcileEdit brings plans in line with an in-place rebase with an edit:
+// the commits the amend emptied are the ones dropped, read from the rebased
+// line by author, author date and subject (only an edit run, whose
+// commits wt itself changes, may be read so). The edited commit is
 // known on the rebased line as what it was amended to, and a layer whose
 // marker follows it takes that commit's subject.
 func ReconcileEdit(dir, onto string, plans []LayerPlan, edit EditStop) ([]LayerPlan, error) {
@@ -546,6 +552,11 @@ func Emptied(dir, edited, oldTip, base, newTip string) ([]Commit, error) {
 	return out, nil
 }
 
+// reconcileDropped is ReconcileEdit's reading of the rebased line: walking
+// each layer's stretch, from the marker of the layer below (or onto) to its
+// own, against the layer's planned picks in order. A pick with no commit was
+// dropped; anything that will not line up leaves the plans as they were, for
+// CheckLayers to refuse.
 func reconcileDropped(dir, onto string, plans []LayerPlan, edit *EditStop) ([]LayerPlan, error) {
 	var picks []string
 	for _, p := range plans {
@@ -804,4 +815,116 @@ func MergedTree(mainRoot, base, onto, oldTip string) (tree string, conflicted []
 		conflicted = append(conflicted, c.Path)
 	}
 	return tree, conflicted, nil
+}
+
+// ApplyDrops brings plans in line with the picks a finished rebase dropped as
+// empty, as ReportReplay names them: only a rebase wt drove from its start
+// to its end (confirmed) is read, and only the drops it is certain of. A
+// reworded or rewritten commit is no drop, and a commit that shares its
+// author, date and subject with another is told apart from it by nothing, so
+// both stay as the plan had them and CheckLayers refuses a layer that
+// counts differently. A drop a per-layer step already took out of the plan
+// (LayerPlan.Stepped) is taken out once.
+//
+// A layer that lost picks expects fewer commits, and so does every layer
+// above it. One whose planned tip was dropped ends at its last pick left
+// (and its subject is that one's); one that lost every pick ends where the
+// layer below ends. A layer whose end a step set (StepEnd) keeps it, and
+// only its count follows.
+func ApplyDrops(dir, onto string, plans []LayerPlan, dropped []Dropped, confirmed bool) ([]LayerPlan, error) {
+	if !confirmed || len(dropped) == 0 {
+		return plans, nil
+	}
+	certain := map[string]bool{}
+	for _, d := range dropped {
+		if !d.Unmatched {
+			certain[d.Commit] = true
+		}
+	}
+	got := slices.Clone(plans)
+	cumDropped, cumStepped := 0, 0
+	for i, p := range plans {
+		var gone []string
+		last := -1
+		for k, pick := range p.Picks {
+			if certain[pick] {
+				gone = append(gone, pick)
+			} else {
+				last = k
+			}
+		}
+		got[i].Emptied = gone
+		cumDropped += max(len(gone), p.Stepped)
+		cumStepped += p.Stepped
+		if cumDropped > 0 {
+			// Each drop once: the ones a step took out are in the layer's
+			// planned count already.
+			got[i].Expect = p.Expect + cumStepped - cumDropped
+		}
+		if len(gone) == 0 {
+			continue
+		}
+		got[i].LeftOut += len(gone)
+		if p.StepEnd {
+			// A step set where the layer ends: it was read from the tip
+			// after the drop.
+			continue
+		}
+		tipDropped := p.After == p.Picks[len(p.Picks)-1] && certain[p.After]
+		switch {
+		case last < 0:
+			got[i].Mapped = MappedEmptied
+		case tipDropped && p.Mapped == MappedTip:
+			got[i].Mapped = MappedTipDropped
+		}
+		if !tipDropped {
+			continue
+		}
+		switch {
+		case last >= 0:
+			subject, err := plannedSubject(dir, p.Picks[last], "")
+			if err != nil {
+				return nil, err
+			}
+			if s, ok := p.Amended[p.Picks[last]]; ok {
+				subject = s
+			}
+			got[i].Subject = subject
+		case i > 0:
+			got[i].After, got[i].Subject = got[i-1].After, got[i-1].Subject
+		default:
+			subject, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%s", onto)
+			if err != nil {
+				return nil, err
+			}
+			got[i].Subject = subject
+		}
+	}
+	// A layer with no pick of its own ends where the layer below ends, which
+	// may have moved up to its last commit left.
+	for i := 1; i < len(plans); i++ {
+		if len(plans[i].Picks) == 0 && !plans[i].StepEnd && plans[i].After == plans[i-1].After {
+			got[i].After, got[i].Subject = got[i-1].After, got[i-1].Subject
+		}
+	}
+	return got, nil
+}
+
+// UnclearDrops is the commits of plans' picks that a rebase dropped but
+// ReportReplay could not tell from another commit (Dropped.Unmatched): a layer
+// that counts them as left is refused, and this says why.
+func UnclearDrops(plans []LayerPlan, dropped []Dropped) []Dropped {
+	in := map[string]bool{}
+	for _, p := range plans {
+		for _, pick := range p.Picks {
+			in[pick] = true
+		}
+	}
+	var out []Dropped
+	for _, d := range dropped {
+		if d.Unmatched && in[d.Commit] {
+			out = append(out, d)
+		}
+	}
+	return out
 }
