@@ -120,7 +120,7 @@ func (d *driver) layerAt() (int, bool, error) {
 	}
 	for _, line := range strings.Split(string(todo), "\n") {
 		f := strings.Fields(line)
-		if len(f) == 0 || strings.HasPrefix(f[0], "#") {
+		if len(f) == 0 || strings.HasPrefix(f[0], "#") || isForkMark(f) {
 			continue
 		}
 		if f[0] != "update-ref" || len(f) < 2 || d.req.Stack == nil {

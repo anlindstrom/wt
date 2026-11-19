@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-19 09:47 — --stack carries the branches cut from the line
+
+`wt sync rebase <top> --stack` now also moves what hangs off the line: a branch
+cut from a commit in the middle of it goes onto that commit's rewrite, one
+stacked on it follows, and one above the top goes onto the new top, worktrees,
+undo and all. `wt sync <top> --stack` lists them. Backups stay put; a branch
+that cannot move is named with the exact command. `--no-side-branches` opts out.
+
 ## 2026-11-19 09:31 — backups made on purpose are kept, safety copies still swept
 
 `backup/*`, `backup-*` and `*-backup` are deliberate backups now: `wt refs sweep`

@@ -370,7 +370,7 @@ func layerEndsNext(dir string) bool {
 		return true
 	}
 	for _, line := range strings.Split(string(next), "\n") {
-		if f := strings.Fields(line); len(f) > 0 && !strings.HasPrefix(f[0], "#") {
+		if f := strings.Fields(line); len(f) > 0 && !strings.HasPrefix(f[0], "#") && !isForkMark(f) {
 			return f[0] == "update-ref"
 		}
 	}
@@ -385,6 +385,9 @@ func layerSegment(cmds [][]string) (ids []string, pick string, edit bool) {
 		c := cmds[i]
 		switch c[0] {
 		case "update-ref":
+			if isForkMark(c) {
+				continue
+			}
 			return ids, pick, edit
 		case "pick", "edit":
 			if len(c) < 2 {

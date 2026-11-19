@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.15.0",
+  "x-version": "1.16.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync [<work>...] --rebase --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -195,7 +195,7 @@
     "stack": {
       "type": "object",
       "description": "Since 1.6.0: a stack held on one line, for --stack: the line from where it leaves trunk (base) to its tip (head), and its layer branches, bottom first. See docs/json.md.",
-      "required": ["branch", "base", "head", "autosquash", "layers", "skipped", "refusal", "edit", "contextGaps", "contextUnchecked"],
+      "required": ["branch", "base", "head", "autosquash", "layers", "skipped", "sideBranches", "refusal", "edit", "contextGaps", "contextUnchecked"],
       "properties": {
         "branch": { "type": "string", "description": "The line's own branch: the worktree named." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where the line leaves trunk: the merge base." },
@@ -203,6 +203,7 @@
         "autosquash": { "type": "boolean", "description": "A fold of the line's fixups (--autosquash): onto its own base, or, with --onto, as the line moves onto the target." },
         "layers": { "type": "array", "items": { "$ref": "#/$defs/stackLayer" } },
         "skipped": { "type": "array", "items": { "$ref": "#/$defs/stackSkipped" } },
+        "sideBranches": { "type": "array", "items": { "$ref": "#/$defs/stackSide" }, "description": "Since 1.16.0: the local branches that hang off the line, parents first: forked from a commit of it above its base, or above its top. Empty with --no-side-branches." },
         "refusal": { "type": ["string", "null"], "description": "The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held." },
         "edit": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stackEdit" }], "description": "Since 1.9.0: what a run with --edit did to the commit it stopped at. Null in the look and for any other run." },
         "contextGaps": { "type": "array", "items": { "$ref": "#/$defs/stackContextGap" }, "description": "Since 1.14.0: for a fold (--autosquash), in the look and in the run, every hunk of a fixup that does not apply behind its target, where autosquash puts it, because only a later commit of the line carries its context; line order. Empty for any other look or run. A warning: the run goes ahead." },
@@ -303,6 +304,33 @@
         "ownerSubject": { "type": ["string", "null"], "description": "The owner's subject." },
         "commit": { "$ref": "#/$defs/shaOrNull", "description": "For committed, the step's commit." },
         "proof": { "type": ["string", "null"], "description": "For a fold: held when the rewritten tip's tree is the step's output and every rewritten commit is unchanged outside the step's paths; otherwise what did not hold. Null when nothing was folded." }
+      }
+    },
+    "stackSide": {
+      "type": "object",
+      "description": "Since 1.16.0: one branch that hangs off a stack held on one line. The look fills what it sees; a run also fills what came of the branch, and those fields are null in the look.",
+      "required": ["branch", "kind", "oldTip", "fork", "forkSubject", "on", "base", "commits", "backup", "worktree", "state", "stateDetail", "carry", "left", "newBase", "newTip", "result", "how", "held", "moveCommand"],
+      "properties": {
+        "branch": { "type": "string" },
+        "kind": { "enum": ["forked", "above"], "description": "forked: it leaves the line at a commit below its top. above: it carries the line's top." },
+        "oldTip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Its tip before the run." },
+        "fork": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit of the line it leaves the line at: its merge base with the line's tip." },
+        "forkSubject": { "type": "string" },
+        "on": { "type": ["string", "null"], "description": "The side branch it is stacked on, which moves first; null when it sits on the line itself. A backup is never what a branch is on." },
+        "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where its own commits start: the tip of the branch it is on, or fork." },
+        "commits": { "type": "integer", "minimum": 0, "description": "Its own commits, from base to its tip; 0 for a branch at the same tip as the one it is on." },
+        "backup": { "type": "boolean", "description": "Its name is a backup (wt refs sweep's patterns): listed, never moved." },
+        "worktree": { "type": ["string", "null"], "description": "The worktree it is checked out in; null when it is in none." },
+        "state": { "enum": ["none", "clean", "dirty", "rebasing", "bisecting", "busy", "idle", "process", "unknown"], "description": "What holds its worktree, as for a layer." },
+        "stateDetail": { "type": ["string", "null"] },
+        "carry": { "type": "boolean", "description": "The look's: the run would carry it. False for a backup, a branch with a merge commit or on more than one branch, one whose worktree something holds, one stacked on a branch that is not carried, and every one under --alone." },
+        "left": { "type": ["string", "null"], "description": "Why it would not be carried; null when it would." },
+        "newBase": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The run's: where it goes: for a branch forked mid-line, where the rebase put the commit it forks from, read from the run's own marker and checked as a layer's is; above the top, the line's new tip; on another side branch, that branch's new tip. Null when it is not known." },
+        "newTip": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The run's: its own commits replayed onto newBase. Null when it was not replayed." },
+        "result": { "oneOf": [{ "type": "null" }, { "enum": ["moved", "held", "unchanged", "planned", "moving", "needsRecovery"] }], "description": "The run's, as for a layer. A backup is always held, with no moveCommand." },
+        "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }] },
+        "held": { "type": ["string", "null"], "description": "The run's: why it was held." },
+        "moveCommand": { "type": ["string", "null"], "description": "The run's: for a held branch, the command that moves it later, with real commits and branch names shell-quoted: wt sync rebase '<branch>' --onto <newBase> --upstream <base> for a branch in a worktree, git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in the main checkout, git rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in none; for a branch on a held side branch, --onto names that branch, to run once it has moved. Null for a backup, for a branch with a merge commit of its own (move it by hand), and when where it goes is not known." }
       }
     },
     "stackSkipped": {

@@ -148,6 +148,9 @@ func backup(name string, patterns []config.RefPattern) bool {
 type StackRequest struct {
 	Line       Line
 	Autosquash bool
+	// Forks is the commits of the line side branches fork from, bottom
+	// first: each gets a marker of its own where its rewrite lands.
+	Forks []string
 }
 
 // StackMapPrefix is where a rebase of a stack held on one line has git
@@ -257,6 +260,12 @@ func readStackTodo(todo string, commits []string) []todoEntry {
 // planLayers reads, from the list a rebase of the line started with, what
 // each layer's marker will follow and what its new tip must be.
 func planLayers(dir string, epoch int64, line Line, todo string) ([]LayerPlan, error) {
+	return planMarks(dir, line, todo, func(n int) string { return StackMapRef(epoch, n) })
+}
+
+// planMarks is planLayers for any marks set where line's layers end: ref
+// names the marker of the nth, from 1.
+func planMarks(dir string, line Line, todo string, ref func(int) string) ([]LayerPlan, error) {
 	pos := map[string]int{}
 	for i, c := range line.Commits {
 		pos[c] = i + 1
@@ -269,7 +278,7 @@ func planLayers(dir string, epoch int64, line Line, todo string) ([]LayerPlan, e
 	plans := make([]LayerPlan, len(line.Layers))
 	prev := 0
 	for i, l := range line.Layers {
-		p := LayerPlan{Branch: l.Branch, Old: l.Tip, Ref: StackMapRef(epoch, i+1), Mapped: MappedTip}
+		p := LayerPlan{Branch: l.Branch, Old: l.Tip, Ref: ref(i + 1), Mapped: MappedTip}
 		last, lastAmend, own := -1, "", 0
 		for j, e := range entries {
 			if !e.start {
@@ -382,41 +391,12 @@ func plannedSubject(dir, sha, amend string) (string, error) {
 func CheckLayers(dir, head, onto string, plans []LayerPlan) ([]LayerTip, error) {
 	tips := make([]LayerTip, 0, len(plans))
 	for _, p := range plans {
-		bad := func(why string) ([]LayerTip, error) {
+		tip, why, err := CheckMarker(dir, head, onto, p)
+		if err != nil {
+			return nil, err
+		}
+		if why != "" {
 			return nil, fmt.Errorf("layer %s: %s; no layer moved, the line itself is rebased", p.Branch, why)
-		}
-		tip, ok, err := refTip(dir, p.Ref)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return bad("the rebase did not write its marker " + p.Ref)
-		}
-		if _, code, err := gitEnvAllow(dir, nil, nil, 1, "merge-base", "--is-ancestor", tip, head); err != nil {
-			return nil, err
-		} else if code == 1 {
-			return bad(fmt.Sprintf("its marker %s is not on the rebased line", git.ShortID(tip, 7)))
-		}
-		if _, code, err := gitEnvAllow(dir, nil, nil, 1, "merge-base", "--is-ancestor", onto, tip); err != nil {
-			return nil, err
-		} else if code == 1 {
-			return bad(fmt.Sprintf("its new tip %s does not descend from %s, where the line was put", git.ShortID(tip, 7), onto))
-		}
-		out, err := gitEnv(dir, nil, nil, "rev-list", "--count", onto+".."+tip)
-		if err != nil {
-			return nil, err
-		}
-		if n, _ := strconv.Atoi(out); n != p.Expect {
-			return bad(fmt.Sprintf("its new tip %s has %d commits from the new base, and the plan expects %d", git.ShortID(tip, 7), n, p.Expect))
-		}
-		if p.After != "" {
-			subject, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%s", tip)
-			if err != nil {
-				return nil, err
-			}
-			if subject != p.Subject {
-				return bad(fmt.Sprintf("its new tip %s is %q, and the plan expects %q", git.ShortID(tip, 7), subject, p.Subject))
-			}
 		}
 		tips = append(tips, LayerTip{LayerPlan: p, New: tip})
 	}

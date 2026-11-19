@@ -233,7 +233,7 @@ changes nothing.
 | `wt sync undo <work>` | puts back what the run moved, the one branch and its worktree, and only that |
 | `--if-ready` | the worktree named alone is judged: ready or refused; the rest of its stack is not asked about |
 | `--json` | `leftAlone` lists the worktrees left, `work`, `branch` and `path`; `[]` for any other run |
-| `--stack`, `--autosquash` | the line is rebased and folded exactly as a `--stack` run does (layer markers, the checks at layers, `--each-commit=tips`), and only the named branch moves: no layer branch is checked, moved, held, reset or locked, and no layer's worktree is touched. Each layer is named as left on the old commits, and is in `leftAlone`. A reference run of a copy of a stacked line. `wt sync undo <work>` puts back the copy |
+| `--stack`, `--autosquash` | the line is rebased and folded exactly as a `--stack` run does (layer markers, the checks at layers, `--each-commit=tips`), and only the named branch moves: no layer branch is checked, moved, held, reset or locked, and no layer's worktree is touched. Each layer is named as left on the old commits, and is in `leftAlone`; each side branch is held, with the command that moves it. A reference run of a copy of a stacked line. `wt sync undo <work>` puts back the copy |
 | `--edit` | refused: it moves the layers by the amend, and `--alone` moves none |
 | `--onto` | refused: `--onto` already moves exactly the worktrees named |
 | more than one worktree, none, `--all`, `--roots`, `--profile` | refused: it takes one worktree of one repository |
@@ -274,6 +274,16 @@ In `wt sync rebase <work> --stack --autosquash`, which folds a line's
 `fixup!` commits into their targets, a check runs at a target once its
 fixups are folded in. `.wt-sync.yaml` has no key for `--stack`: a stack
 held on one line is rebased with the same declaration as any branch.
+
+A `--stack` run also carries the line's side branches: the local branches cut
+from a commit of the line that are not on it, those stacked on them, and those
+above its top (`--no-side-branches` leaves them alone, unread). Their own
+commits are replayed in the object store onto where the rebase put the commit
+they fork from, and nothing of the declaration runs on them: no conflict rule,
+no check, no deferred step. A side branch whose commits conflict there is held
+with `wt sync rebase <branch> --onto <new> --upstream <old>`, a run of its own
+that does run them, with its stops, `wt sync resume` and `wt sync undo`. A
+branch with a backup name is listed and never moved.
 
 `--autosquash` alone folds in place, onto the line's own base, so the replayed
 trees can predate a script trunk declared since. A step whose `run` starts
