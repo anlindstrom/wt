@@ -50,10 +50,10 @@ const (
 	UserKeyRefSweepAge = "ref_sweep_age"
 )
 
-// DefaultRefSweepPatterns are the backup names wt refs sweep looks for when
-// the user file names none.
-var DefaultRefSweepPatterns = []string{"backup/*", "safe/*", "safety/*", "backup-*", "safe-*", "safety-*",
-	"*-backup", "*-safe", "*-safety"}
+// DefaultRefSweepPatterns are the transient safety copies wt refs sweep looks
+// for when the user file names none. The deliberate backups are
+// DefaultRefKeepPatterns, and keep wins.
+var DefaultRefSweepPatterns = []string{"safe/*", "safety/*", "safe-*", "safety-*", "*-safe", "*-safety", "prefold/*"}
 
 // DefaultRefKeepPatterns are the deliberate-backup names, kept by default.
 var DefaultRefKeepPatterns = []string{"backup/*", "backup-*", "*-backup"}
@@ -119,11 +119,11 @@ var userKeys = []userKey{
 		Doc:    "fast-forward local trunk when wt up and wt sync rebase fetch it",
 		boolAt: func(u *User) *bool { return &u.FFTrunk }},
 	{Name: UserKeyRefSweepPatterns, Kind: userList, Default: strings.Join(DefaultRefSweepPatterns, " "),
-		Doc:      "the branch and tag names wt refs sweep treats as backups (globs)",
+		Doc:      "the transient safety copies wt refs sweep may sweep (globs); a name ref_keep_patterns also matches is kept, whatever this says",
 		listAt:   func(u *User) *[]string { return &u.RefSweepPatterns },
 		validate: validRefPatterns},
 	{Name: UserKeyRefKeepPatterns, Kind: userList, Default: strings.Join(DefaultRefKeepPatterns, " "),
-		Doc:      "the branch and tag names that are deliberate backups: wt never moves them and refs sweep never selects them",
+		Doc:      "the deliberate backups (globs): wt never moves them, refs sweep lists and never selects them; keep wins over ref_sweep_patterns",
 		listAt:   func(u *User) *[]string { return &u.RefKeepPatterns },
 		validate: validRefPatterns},
 	{Name: UserKeyRefSweepAge, Kind: userString, Default: DefaultRefSweepAge,

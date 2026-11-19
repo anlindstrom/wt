@@ -155,7 +155,7 @@
               "backupYoung",
               "kept"
             ],
-            "description": "backupContained: another ref contains it (selected). backupOld: it holds commits no other ref has and is older than age (selected). backupYoung: the same, younger (not selected unless --only names it). kept: something holds it; kept says what."
+            "description": "backupContained: another ref contains it (selected). backupOld: it holds commits no other ref has and is older than age (selected). backupYoung: the same, younger (not selected unless --only names it). kept: something holds it, or it is a deliberate backup (ref_keep_patterns); a kept row is never selected."
           },
           "selected": {
             "type": "boolean"

@@ -43,6 +43,7 @@ type PlanOutput struct {
 	Fetched       bool              `json:"fetched"`
 	Remote        bool              `json:"remote"`
 	Patterns      []string          `json:"patterns"`
+	KeepPatterns  []string          `json:"keepPatterns"`
 	Age           *string           `json:"age"`
 	Now           int64             `json:"now"`
 	Endpoint      *refpins.Endpoint `json:"endpoint"`
@@ -102,7 +103,7 @@ func refItem(r RefRow) RefItem {
 
 func newRefsPlanOutput() PlanOutput {
 	return PlanOutput{Schema: 1, SchemaVersion: schema.VersionOf("refs-sweep-plan"), Command: refsSweepCommand,
-		Patterns: []string{}, Problems: []RefProblem{}, Items: []RefItem{}}
+		Patterns: []string{}, KeepPatterns: []string{}, Problems: []RefProblem{}, Items: []RefItem{}}
 }
 
 // SweepPlanJSON writes wt refs sweep --dry-run --json: every backup the
@@ -119,6 +120,7 @@ func SweepPlanJSON(ctx *kit.Context, opts Options, out, progress io.Writer) erro
 	o.Repo, o.Trunk, o.TrunkSource = jsonout.Strp(plan.Repo), jsonout.Strp(plan.Trunk), plan.TrunkSource
 	o.Fetched, o.Remote, o.Age, o.Now = plan.Fetched, plan.Remote, jsonout.Strp(plan.Age), plan.Now
 	o.Patterns = append(o.Patterns, plan.Patterns...)
+	o.KeepPatterns = append(o.KeepPatterns, plan.KeepPatterns...)
 	o.Endpoint, o.Problems = plan.Endpoint, append(o.Problems, plan.Problems...)
 	if err == nil {
 		o.Token = refsToken(plan)

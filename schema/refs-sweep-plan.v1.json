@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-sweep-plan.v1.json",
-  "x-version": "1.0.0",
+  "x-version": "1.1.0",
   "title": "wt refs sweep --dry-run --json",
   "description": "What `wt refs sweep` would move: every branch and tag, here and with --remote on origin, whose name matches a backup pattern, and what it is. Printed by `wt refs sweep --json` without --yes as the only thing on stdout; it moves nothing. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -15,6 +15,7 @@
     "fetched",
     "remote",
     "patterns",
+    "keepPatterns",
     "age",
     "now",
     "endpoint",
@@ -73,6 +74,13 @@
         "type": "string"
       },
       "description": "ref_sweep_patterns, in the order they are tried."
+    },
+    "keepPatterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "ref_keep_patterns: a ref matching one is listed as kept (deliberateBackup) and never selected, even when patterns matches it too."
     },
     "age": {
       "type": [
@@ -203,7 +211,7 @@
               "backupYoung",
               "kept"
             ],
-            "description": "backupContained: another ref contains it (selected). backupOld: it holds commits no other ref has and is older than age (selected). backupYoung: the same, younger (not selected unless --only names it). kept: something holds it; kept says what."
+            "description": "backupContained: another ref contains it (selected). backupOld: it holds commits no other ref has and is older than age (selected). backupYoung: the same, younger (not selected unless --only names it). kept: something holds it, or it is a deliberate backup (ref_keep_patterns); kept says what. Never selected."
           },
           "selected": {
             "type": "boolean",
@@ -277,7 +285,8 @@
                 "objectMissing",
                 "pullRequestOpen",
                 "pullRequestUnknown",
-                "notContained"
+                "notContained",
+                "deliberateBackup"
               ]
             },
             "description": "Every reason that holds it; empty unless category is kept."

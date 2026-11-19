@@ -4,6 +4,16 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-19 09:31 — backups made on purpose are kept, safety copies still swept
+
+`backup/*`, `backup-*` and `*-backup` are deliberate backups now: `wt refs sweep`
+lists them as kept and never selects them (not by age, not for being contained,
+not with `--only`), and `wt sync --stack` and `wt up` still leave them alone.
+`safe/*`, `safety/*` and the like, and `prefold/*` tags, are swept as before.
+The new `ref_keep_patterns` setting holds the kept names and wins over
+`ref_sweep_patterns`. `wt refs sweep --json` gains `keepPatterns` and the `kept`
+code `deliberateBackup` (refs-sweep-plan 1.1.0). Names to use: docs/worktree-conventions.md.
+
 ## 2026-11-19 01:35 — wt up moves the branches between a stack's worktrees
 
 In a stack where only some branches have a worktree, `wt up` (and `wt sync

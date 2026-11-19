@@ -57,7 +57,7 @@ func writeUser(t *testing.T, body string) string {
 func TestUserFileOverridesTheDefaults(t *testing.T) {
 	u, err := loadUser(writeUser(t,
 		"superset = true\ngithub = false\ntimemachine = false\nbranch_suffix = \"\"\ntype_names = [\"feat=feature\"]\nff_trunk = false\n"+
-			"ref_sweep_patterns = [\"old/*\"]\nref_sweep_age = \"3w\"\n"))
+			"ref_sweep_patterns = [\"old/*\"]\nref_keep_patterns = [\"keep/*\"]\nref_sweep_age = \"3w\"\n"))
 	if err != nil {
 		t.Fatalf("loadUser: %v", err)
 	}

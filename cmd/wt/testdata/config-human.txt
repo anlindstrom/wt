@@ -19,7 +19,8 @@ user config:   {{USER_CONFIG}}
   branch_suffix: "_mine" (user file)
   type_names:    ["feat=feature", "docs=doc"] (user file)
   ff_trunk:      true (default)
-  ref_sweep_patterns: ["backup/*", "safe/*", "safety/*", "backup-*", "safe-*", "safety-*", "*-backup", "*-safe", "*-safety"] (default)
+  ref_sweep_patterns: ["safe/*", "safety/*", "safe-*", "safety-*", "*-safe", "*-safety", "prefold/*"] (default)
+  ref_keep_patterns: ["backup/*", "backup-*", "*-backup"] (default)
   ref_sweep_age: "14d" (default)
 roots:         (WT_ROOTS)
   repos:         /fixture/repos

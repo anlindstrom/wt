@@ -68,7 +68,7 @@ func TestRefsPlanSortsTheBackups(t *testing.T) {
 		t.Errorf("the plan wrote to the repository:\nbefore %s\nafter %s", before, after)
 	}
 	if p.Command != "refs sweep" || p.Token == nil || !strings.HasPrefix(*p.Token, "rs1-") || p.RunID != nil ||
-		jsonout.Deref(p.Trunk) != "main" || jsonout.Deref(p.Age) != "14d" || len(p.Patterns) != 9 {
+		jsonout.Deref(p.Trunk) != "main" || jsonout.Deref(p.Age) != "14d" || len(p.Patterns) != 7 {
 		t.Fatalf("plan = %+v", p)
 	}
 	it := RefPlanItem(t, p, "refs/heads/safe/contained")

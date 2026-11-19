@@ -15,7 +15,7 @@ import (
 // readLine reads the stack held on the line of branch against trunk: the
 // layers named, or every local branch whose tip is on it but the backups.
 func readLine(ctx *kit.Context, branch, trunkSHA string, layers []string) (wtsync.Line, error) {
-	return wtsync.ReadLine(ctx.Repo.MainRoot, branch, trunkSHA, layers, ctx.UserConfig().RefSweepPatterns)
+	return wtsync.ReadLine(ctx.Repo.MainRoot, branch, trunkSHA, layers, ctx.UserConfig().BackupPatterns())
 }
 
 // stackLookAt is the look at the stack held on the line of the worktree

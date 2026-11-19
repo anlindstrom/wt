@@ -38,18 +38,23 @@ func newRefsSweepCmd() *cobra.Command {
 		Long: "Move the backup branches and tags nothing needs any more out of the\n" +
 			"way: each goes to a pin under refs/wt-swept/<run>/ and is deleted in\n" +
 			"the same step, so it can be put back until wt refs purge deletes it.\n\n" +
-			"A backup is a branch or tag whose name matches a pattern, by default\n" +
-			"backup/* safe/* safety/* backup-* safe-* safety-* *-backup *-safe\n" +
-			"*-safety (* matches slashes too). wt config set ref_sweep_patterns\n" +
-			"\"...\" replaces them. Every other branch, tag and origin/* ref is a\n" +
-			"container. The plan sorts each backup:\n" +
+			"A backup is a branch or tag whose name matches a pattern. Transient\n" +
+			"safety copies are swept: by default safe/* safety/* safe-* safety-*\n" +
+			"*-safe *-safety and prefold/* (* matches slashes too);\n" +
+			"wt config set ref_sweep_patterns \"...\" replaces them. Deliberate\n" +
+			"backups are kept: backup/* backup-* *-backup by default, set with\n" +
+			"ref_keep_patterns. Kept ones are listed and never swept, not by age,\n" +
+			"not for being contained, not by --only; a name both lists match is\n" +
+			"kept, also when your file sets ref_sweep_patterns. Every other\n" +
+			"branch, tag and origin/* ref is a container. The plan sorts each\n" +
+			"backup:\n" +
 			"  contained  a container has its commit: nothing is only on it. Swept\n" +
 			"  old        it has commits no container has, and is older than\n" +
 			"             ref_sweep_age (14d unless set). Swept\n" +
 			"  young      the same, and younger. Left, unless --only names it\n" +
-			"  kept       checked out in a worktree, held by a rebase or bisect,\n" +
-			"             the branch of a worktree moved to a folder, trunk or a\n" +
-			"             long-lived branch\n\n" +
+			"  kept       a deliberate backup (ref_keep_patterns), checked out in a\n" +
+			"             worktree, held by a rebase or bisect, the branch of a\n" +
+			"             worktree moved to a folder, trunk or a long-lived branch\n\n" +
 			"Age is when the branch was made, from the first entry of its reflog:\n" +
 			"a backup of a three-week-old branch taken this morning is young. An\n" +
 			"annotated tag's age is its tagger date; anything else, its commit's.\n\n" +
@@ -80,7 +85,7 @@ func newRefsSweepCmd() *cobra.Command {
 			"refs-sweep print the schemas; docs/json.md explains them.",
 		Example: "  wt refs sweep --dry-run      # the plan; change nothing\n" +
 			"  wt refs sweep --remote --no-fetch --yes  # origin's too, no question\n" +
-			"  wt refs sweep --only refs/heads/backup/x --only refs/tags/safe-1\n" +
+			"  wt refs sweep --only refs/heads/safe/x --only refs/tags/safe-1\n" +
 			"  wt refs sweep --yes --json --expect rs1-0a1b --run-id 20260930T091500Z-3f2a",
 		Args:              cobra.NoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,

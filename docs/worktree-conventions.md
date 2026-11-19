@@ -384,13 +384,28 @@ $ wt list
 wt: every integration is off for this run: /Users/you/.config/wt/config.toml: toml: line 2 (last key "superset"): expected value but found '\n' instead
 
 $ wt list
-wt: ignoring unknown key "githb" in /Users/you/.config/wt/config.toml (wt's settings are: superset github timemachine branch_suffix type_names ff_trunk ref_sweep_patterns ref_sweep_age, and the [roots] and [profiles] tables)
+wt: ignoring unknown key "githb" in /Users/you/.config/wt/config.toml (wt's settings are: superset github timemachine branch_suffix type_names ff_trunk ref_sweep_patterns ref_keep_patterns ref_sweep_age, and the [roots] and [profiles] tables)
 ```
 
 `wt config set` refuses to edit a file it cannot parse; `wt config get` answers
 with the value wt is acting on and puts the file's problem on stderr. Both
 refuse an unknown key outright: that is input validation, not a file wt could
 not read.
+
+## Backup names
+
+wt tells a deliberate backup from a transient safety copy by its name, so name a
+copy for the purpose it serves.
+
+| Name | Purpose | What wt does |
+|---|---|---|
+| `backup/<what>`, `backup/<date>/<what>`, `backup-*`, `*-backup`, e.g. `backup/2026-11-19/huge-redo` | a backup made on purpose at a moment worth keeping ("huge redo started here") | kept: `wt sync --stack` and `wt up` never move it, `wt refs sweep` lists it and never selects it |
+| `safety/<branch>-pre-fold-<n>`, `safe/pre-rebase-<sha>`, `safe-*`, `safety-*`, `*-safe`, `*-safety` | a branch copy a tool takes before it rewrites history | swept once contained or old |
+| `prefold/<branch>` (a tag) | the tip a fold started from | swept the same way |
+
+`ref_keep_patterns` and `ref_sweep_patterns` in `wt config` change the lists;
+a name both match is kept. Nothing wt does deletes a kept backup: only `git
+branch -D` or `git tag -d` does.
 
 ## More
 

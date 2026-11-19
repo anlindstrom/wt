@@ -20,7 +20,7 @@ func looseOf(ctx *kit.Context, worktrees repo.Worktrees, base string, parents ma
 		return wtsync.LooseLine{}
 	}
 	users := worktrees.Users()
-	line, err := wtsync.ReadLoose(ctx.Repo.MainRoot, branch, base, ctx.Config.MainBranch, ctx.UserConfig().RefSweepPatterns, func(name string) bool { _, ok := users[name]; return ok })
+	line, err := wtsync.ReadLoose(ctx.Repo.MainRoot, branch, base, ctx.Config.MainBranch, ctx.UserConfig().BackupPatterns(), func(name string) bool { _, ok := users[name]; return ok })
 	if err != nil {
 		return wtsync.LooseLine{}
 	}
