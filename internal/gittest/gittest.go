@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -29,9 +30,9 @@ var identity = []string{
 // url rewrite of the user's applies, and none of the GIT_ variables the
 // environment carries (an agent launcher's GIT_CONFIG_* and GIT_SSH_COMMAND,
 // a hook's GIT_DIR). HOME is an empty directory, with no XDG_CONFIG_HOME,
-// CODEX_HOME or WT_ROOTS pointing elsewhere, and the PATH finds no claude:
-// where none is installed, as in CI, is the state a test starts from, and one
-// that wants a claude puts its own first. The global config holds one thing:
+// CODEX_HOME or WT_ROOTS pointing elsewhere, and the PATH finds no claude and
+// no devports: where none is installed, as in CI, is the state a test starts
+// from, and one that wants either puts its own first. The global config holds one thing:
 // no automatic maintenance, whose detached git would still be working in a
 // repository when the test's next command, a clone of it say, reads the same
 // files. Call it from TestMain before m.Run and the returned func after.
@@ -63,14 +64,20 @@ func Isolate() func() {
 	return func() { _ = os.RemoveAll(dir) }
 }
 
-// hideClaude puts in place of each PATH directory holding a claude one under
+// hidden are the tools a test must not reach on the machine running it.
+var hidden = []string{"claude", "devports"}
+
+// hideClaude puts in place of each PATH directory holding one of hidden one under
 // dir that links to everything else in it, so every other tool, git among
 // them, is still found where it was. It panics if git is not.
 func hideClaude(dir string) {
 	git, _ := exec.LookPath("git")
 	path := filepath.SplitList(os.Getenv("PATH"))
 	for i, d := range path {
-		if _, err := os.Stat(filepath.Join(d, "claude")); err != nil { //nolint:gosec // G703: only asks whether a PATH entry holds a claude
+		if !slices.ContainsFunc(hidden, func(name string) bool {
+			_, err := os.Stat(filepath.Join(d, name)) //nolint:gosec // G703: only asks whether a PATH entry holds one
+			return err == nil
+		}) {
 			continue
 		}
 		abs, err := filepath.Abs(d)
@@ -86,7 +93,7 @@ func hideClaude(dir string) {
 			panic(err)
 		}
 		for _, e := range entries {
-			if e.Name() != "claude" {
+			if !slices.Contains(hidden, e.Name()) {
 				if err := os.Symlink(filepath.Join(abs, e.Name()), filepath.Join(shadow, e.Name())); err != nil {
 					panic(err)
 				}

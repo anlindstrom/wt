@@ -11,6 +11,7 @@ import (
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/supersetws"
+	"github.com/anlindstrom/wt/internal/devports"
 	"github.com/anlindstrom/wt/internal/jsonout"
 )
 
@@ -43,7 +44,13 @@ func New(ctx *kit.Context, spec string, opts NewOptions, w io.Writer) (string, e
 	if base == "" {
 		base = ctx.Config.MainBranch
 	}
-	return AddAndProvision(ctx, path, newAdd(ctx, path, branch, base, w), opts, w, nil)
+	path, err = AddAndProvision(ctx, path, newAdd(ctx, path, branch, base, w), opts, w, nil)
+	if path != "" {
+		for _, a := range devports.Addresses(path) {
+			fmt.Fprintln(w, a.URL)
+		}
+	}
+	return path, err
 }
 
 // dotOrRoot refuses "." and "/" as a work name. They name a place that

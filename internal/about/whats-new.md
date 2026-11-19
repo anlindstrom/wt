@@ -4,6 +4,15 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-19 12:30 — wt new and wt list show a worktree's devports address
+
+Where devports is installed, `wt new` prints `https://<name>.<domain>` for each
+app of the new worktree that `devports config --json` gives a domain, where its
+dev server will be reached; `wt new --json` has them as `addresses`. `wt list` gets
+an ADDRESS column for worktrees whose server is running now, matched by
+checkout, so same-named worktrees never share one, and left out, with a line
+saying so, where it would not fit the terminal. No devports, no change.
+
 ## 2026-11-19 10:20 — --alone no longer moves branches in no worktree
 
 `wt sync rebase <work> --alone` promised that only the named branch moves, but

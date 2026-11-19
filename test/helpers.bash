@@ -8,8 +8,8 @@
 # are this run's own, git reads no system config and none of the GIT_
 # variables the environment carries (an agent launcher's GIT_CONFIG_* and
 # GIT_SSH_COMMAND), WT_ROOTS and CODEX_HOME are unset, and the PATH finds no
-# claude and no tmutil, so a Mac running them neither lists its sessions nor
-# excludes a test's folders from Time Machine; a test that wants one puts its
+# claude, no tmutil and no devports, so a Mac running them neither lists its
+# sessions, excludes a test's folders from Time Machine nor asks devports; a test that wants one puts its
 # own fake first. One directory per bats
 # run, inside the tree bats removes afterwards. Sourced from a script instead,
 # the script says where its own throwaway tree is: nothing here creates a
@@ -41,14 +41,14 @@ if [ -n "$WT_TEST_TMPDIR" ]; then
     [ -f "$GIT_CONFIG_GLOBAL" ] || printf '%s\n' '[user]' '	name = T' '	email = t@example.com' \
         '[commit]' '	gpgsign = false' '[tag]' '	gpgsign = false' '[maintenance]' '	auto = false' \
         '[init]' '	defaultBranch = main' > "$GIT_CONFIG_GLOBAL"
-    # Each PATH directory holding a claude or a tmutil is replaced by one
+    # Each PATH directory holding a claude, a tmutil or a devports is replaced by one
     # that links to everything else in it, so every other tool, git among
     # them, is still found where it was.
     hide_tools() {
         local dirs d shadow tmp e path=
         IFS=: read -ra dirs <<< "$PATH"
         for d in "${dirs[@]}"; do
-            if [ -n "$d" ] && { [ -e "$d/claude" ] || [ -e "$d/tmutil" ]; }; then
+            if [ -n "$d" ] && { [ -e "$d/claude" ] || [ -e "$d/tmutil" ] || [ -e "$d/devports" ]; }; then
                 d=$(cd "$d" && pwd)
                 shadow="$WT_TEST_TMPDIR/path-$(printf %s "$d" | cksum | cut -d' ' -f1)"
                 if [ ! -d "$shadow" ]; then
@@ -56,7 +56,7 @@ if [ -n "$WT_TEST_TMPDIR" ]; then
                     for e in "$d"/* "$d"/.[!.]*; do
                         [ -e "$e" ] || [ -L "$e" ] || continue
                         case "${e##*/}" in
-                            claude | tmutil) ;;
+                            claude | tmutil | devports) ;;
                             *) ln -s "$e" "$tmp/" ;;
                         esac
                     done

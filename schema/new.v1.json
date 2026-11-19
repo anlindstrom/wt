@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new.v1.json",
-  "x-version": "1.1.0",
+  "x-version": "1.2.0",
   "title": "wt new --json",
   "description": "What a `wt new` run did, side effect by side effect. Printed by `wt new --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends the run. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -19,7 +19,8 @@
     "base",
     "expectedCommit",
     "commit",
-    "steps"
+    "steps",
+    "addresses"
   ],
   "properties": {
     "schema": {
@@ -104,6 +105,28 @@
         "$ref": "#/$defs/step"
       },
       "description": "Every side effect, in the order they happen: worktree, branch, config, cache (since 1.1.0), provision, submodules, build, superset."
+    },
+    "addresses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "app",
+          "url"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "The app's name, as `devports config --json` reports it."
+          },
+          "url": {
+            "type": "string",
+            "description": "`https://<name>.<domain>`: where the app is reached when its dev server runs, with the name devports gives the worktree and the app's `domain:`."
+          }
+        }
+      },
+      "description": "Since 1.2.0: one entry per app that `devports config --json` gives a domain, in the order it lists them. Empty when no app has one, or devports is not installed, fails, is slow or is too old to report domains."
     }
   },
   "$defs": {
