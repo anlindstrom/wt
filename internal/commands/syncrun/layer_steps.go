@@ -34,7 +34,7 @@ func LayerStepsOf(steps []wtsync.LayerStep) []LayerStepJSON {
 	out := []LayerStepJSON{}
 	for _, s := range steps {
 		j := LayerStepJSON{Layer: s.Layer, Layers: s.Layers, Branch: s.Branch, Step: s.Step.Run, Ran: s.Ran, Result: s.Result,
-			Reason: jsonout.Strp(kit.OneLine(s.Why))}
+			Reason: jsonout.Strp(kit.OneLine(s.Why)), ElapsedMs: s.Elapsed.Milliseconds()}
 		if s.Owner != "" {
 			j.Owner, j.OwnerSubject = jsonout.Strp(s.Owner), jsonout.Strp(s.OwnerSubject)
 		}

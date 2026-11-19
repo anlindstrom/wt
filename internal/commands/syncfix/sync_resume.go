@@ -92,7 +92,10 @@ func syncResume(ctx *kit.Context, work string, opts ResumeOptions, w io.Writer) 
 	if err := r.takeLock(); err != nil {
 		return err
 	}
+	// Before the error is looked at: a resume that is refused after it ran
+	// checks has still timed them.
 	res, err := r.rebase()
+	defer syncrun.ReportTimings(w, r.j, r.st.Branch, r.timings, true)
 	if err != nil {
 		return err
 	}
@@ -113,6 +116,9 @@ type resume struct {
 	w       io.Writer
 	j       *syncrun.RunJournal
 	tracker *syncrun.RebaseTracker
+	// timings is what this resume's checks and steps came to, filled as they
+	// finish.
+	timings *wtsync.Timings
 
 	target repo.Worktree
 	gitDir string
@@ -467,6 +473,9 @@ func (r *resume) rebase() (wtsync.Result, error) {
 	}
 	// Resuming, not rebasing: an interrupt must point back at resume, since
 	// the abort that is right for a run would discard a person's resolution.
+	r.timings = wtsync.NewTimings()
+	req.Timings = r.timings
+	r.j.TrackTimings(st.Branch, r.timings)
 	res, rerr := syncrun.TrackedRebase(r.tracker, &syncrun.RebaseInFlight{Work: name, Path: r.target.Path, Safety: st.Safety, Resuming: true}, func() (wtsync.Result, error) {
 		if r.adopt != nil {
 			return wtsync.Adopt(r.ctx.Repo.MainRoot, r.cfg, req, st.OldTip, safety, *r.adopt, r.w)
@@ -713,7 +722,7 @@ func (r *resume) checkAdoptedTips(res wtsync.Result, head string, cerr error) []
 	})
 	r.tracker.Set(&syncrun.RebaseInFlight{Work: r.name, Path: r.target.Path, Rebased: true, Adopted: res.Adopted.Kept})
 	r.probeLate(head)
-	checks := wtsync.CheckTips(r.target.Path, r.cfg, r.tipsOf(head), r.unavailable, r.w)
+	checks := wtsync.CheckTips(r.target.Path, r.cfg, r.tipsOf(head), r.unavailable, res.Timings, r.w)
 	r.tracker.Set(nil)
 	syncrun.PrintUnchecked(r.w, checks.Unchecked)
 	owed := syncrun.OwedChecks(checks.Unchecked)

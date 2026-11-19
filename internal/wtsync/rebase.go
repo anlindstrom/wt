@@ -136,6 +136,10 @@ func agentLabel(a *agents.Agent) string {
 
 // Request names one rebase.
 type Request struct {
+	// Timings is the record the run fills as each check and step finishes,
+	// when the caller keeps it too (an interrupt reads it); nil makes the
+	// run its own.
+	Timings  *Timings
 	Path     string // the worktree
 	Branch   string
 	Trunk    string // the ref the declaration and scripts are read from; never a parent's tip
@@ -300,6 +304,9 @@ type Result struct {
 	// Rechecked is how many folded commits the each_commit checks ran at
 	// again, because the fold changed what they read.
 	Rechecked int
+	// Timings is how long each check and step of this run, or of this
+	// resume, took.
+	Timings *Timings
 	// LayerState is the per-layer state at a handover, for the resume to
 	// go on from; nil otherwise.
 	LayerState *LayerState
@@ -503,7 +510,7 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 		return Result{Branch: req.Branch}, errors.New("--each-commit=tips cannot be combined with --edit: the checks of an edit run sit at the commits above the edit")
 	}
 	req.EachCommit = mode
-	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, res: Result{Branch: req.Branch, Edit: req.Edit, EachCommit: mode, Layered: req.Stack != nil || req.ReportLine != nil},
+	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, res: Result{Branch: req.Branch, Edit: req.Edit, EachCommit: mode, Timings: req.timings(), Layered: req.Stack != nil || req.ReportLine != nil},
 		stepFailed: map[string]int{}, made: map[string]bool{}}
 	old, err := d.git("rev-parse", "--verify", req.Branch)
 	if err != nil {
@@ -749,7 +756,7 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 	}
 	req.EachCommit = mode
 	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true, resumed: true,
-		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, Edit: req.Edit, EachCommit: mode, Layered: req.Stack != nil || req.ReportLine != nil}, stepFailed: map[string]int{}, made: map[string]bool{}}
+		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, Edit: req.Edit, EachCommit: mode, Timings: req.timings(), Layered: req.Stack != nil || req.ReportLine != nil}, stepFailed: map[string]int{}, made: map[string]bool{}}
 	d.restoreLayers(req.Resumed)
 	d.res.Unchecked = slices.Clone(req.UncheckedBefore)
 	if d.res.SignaturesDropped, err = signedCount(req.Path, req.base(), old); err != nil {
@@ -1691,4 +1698,12 @@ func TodoHash(wtPath string) string {
 	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// timings is the record the run fills: the caller's, or a new one.
+func (r Request) timings() *Timings {
+	if r.Timings != nil {
+		return r.Timings
+	}
+	return NewTimings()
 }

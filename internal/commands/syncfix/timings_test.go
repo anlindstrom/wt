@@ -60,7 +60,7 @@ func TestAResumeSaysItsTimingsCoverTheResumeAndStopsPrintThem(t *testing.T) {
 	if !strings.Contains(out.String(), "⏱ this resume took ") || !strings.Contains(out.String(), "covers only what the resume ran") {
 		t.Errorf("the finished resume's summary does not say what it covers:\n%s", out.String())
 	}
-	p := synccmdtest.Participant(t, synccmdtest.DecodeSyncRun(t, js.Bytes()), "bump")
+	p := synccmdtest.Participant(t, synccmdtest.DecodeSyncRun(t, js.Bytes()), "feat_wt/bump")
 	if len(p.Timings.Runs) != 1 || p.Timings.Runs[0].Kind != "check" || p.Timings.Runs[0].Run != slowCheck || p.Timings.Runs[0].Count < 1 {
 		t.Fatalf("the resume's timings %+v, want the check it ran", p.Timings)
 	}

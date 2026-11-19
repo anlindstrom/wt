@@ -30,6 +30,15 @@ per layer plus once per fixup, not once per commit. It is for a fold in place;
 with `--onto`, `--edit` or no `--autosquash` it is refused, and `tips` is the
 choice there. `--json` carries `targets` in `eachCommit` (sync-run 1.19.0).
 
+## 2026-11-19 15:58 — wt sync says how long each check and step took
+
+Every `each_commit` check, rechecks included, ends with its time (`✓ <name>  12s`, or on its failure
+line), and every per-layer step's result line carries its time. A run and a
+resume end with a summary: the wall time, how many times each check and step ran
+and the total, and the slowest three with their commit or layer. A resume says
+its numbers cover only what it ran. `--json` has the same as `timings` and
+`elapsedMs` (sync-run 1.20.0).
+
 ## 2026-11-19 15:54 — a fold in place says so, and says when its tree check passed
 
 `wt sync rebase --stack --autosquash` (and `--edit`, `wt sync steps --stack`) now
