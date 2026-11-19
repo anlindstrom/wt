@@ -2,6 +2,8 @@ package wtsync
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -129,6 +131,39 @@ func TestReadSidesTakesTheBranchWithAnUpstreamForTwins(t *testing.T) {
 	}
 	if got := strings.Join(order, " "); got != "ui-check ui-pass2 chore/live pass3" {
 		t.Errorf("order %q, want the twins together, the one that stands for them first", got)
+	}
+}
+
+// Of two branches at one commit, neither with an upstream, the one made
+// first stands for them, by when its reflog says it was made, whatever the
+// names and the commit's own date.
+func TestReadSidesTakesTheOlderBranchForTwins(t *testing.T) {
+	t.Parallel()
+	s := stackLine(t, "")
+	tip := sideCommit(t, s.Dir, "ui-check", s.Tips["s2"], "x1.txt")
+	for name, when := range map[string]string{"zzz-old": "@1000000000 +0000", "aaa-new": "@2000000000 +0000"} {
+		cmd := exec.Command("git", "branch", "--no-track", name, tip)
+		cmd.Dir = s.Dir
+		cmd.Env = append(os.Environ(), "GIT_COMMITTER_DATE="+when)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git branch %s: %v\n%s", name, err, out)
+		}
+	}
+	sideCommit(t, s.Dir, "above", tip, "x2.txt")
+	line, err := ReadLine(s.Dir, gittest.StackTmp, "origin/main", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sides, err := ReadSides(s.Dir, line, nil, SideGuard{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := sidesByName(sides)
+	if by["ui-check"].With != "zzz-old" || by["aaa-new"].With != "zzz-old" || by["zzz-old"].With != "" {
+		t.Errorf("ui-check %+v, aaa-new %+v, zzz-old %+v: want zzz-old, made first, to stand for them", by["ui-check"], by["aaa-new"], by["zzz-old"])
+	}
+	if by["above"].On != "zzz-old" {
+		t.Errorf("above is on %q, want zzz-old", by["above"].On)
 	}
 }
 

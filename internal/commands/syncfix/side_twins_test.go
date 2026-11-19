@@ -3,9 +3,12 @@ package syncfix
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
@@ -44,7 +47,11 @@ func newTwinLine(t *testing.T) *twinLine {
 	l.twin, _ = sideBranch(t, main, "ui-pass2", "ui-check", "y3.txt", false)
 	testkit.GitIn(t, main, "config", "branch.ui-pass2.remote", "origin")
 	testkit.GitIn(t, main, "config", "branch.ui-pass2.merge", "refs/heads/ui-pass2")
-	l.livePath = filepath.Join(t.TempDir(), "live")
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.livePath = filepath.Join(tmpDir, "live")
 	testkit.GitIn(t, main, "worktree", "add", "-q", "-b", "chore/live", l.livePath, "ui-pass2")
 	l.pass3, _ = sideBranch(t, main, "pass3", "ui-pass2", "y4.txt", false)
 	return l
@@ -151,6 +158,9 @@ func TestSyncStackLookShowsTwinsAsSiblingsHeldTogether(t *testing.T) {
 		}
 	}
 	row := rowOf(out, "chore/live")
+	if !strings.Contains(row, "by hand") || strings.Contains(row, "prints the command") {
+		t.Errorf("chore/live row %q, want it moved by hand after ui-pass2, no command promised", row)
+	}
 	if strings.Count(row, "pid") != 1 || !strings.Contains(row, why) || !strings.Contains(row, "stop it, and a run carries it") {
 		t.Errorf("chore/live row %q, want %q once, and what frees it", row, why)
 	}
@@ -230,10 +240,18 @@ func TestStackHoldsTwinsTogetherWithTheCommandThatMovesEach(t *testing.T) {
 		}
 	}
 	check := testkit.GitOut(t, main, "rev-parse", "ui-check")
-	// chore/live goes onto ui-pass2 once that has moved: the same commit.
-	wantLive := "wt sync rebase 'chore/live' --onto 'ui-pass2' --upstream " + l.twin
+	// ui-pass2 did not move, so no commit chore/live could be checked to
+	// land on exists: it gets no command, and is moved by hand after
+	// ui-pass2, once that is checked to carry all of chore/live's commits.
 	wantPass2 := "git rebase --no-update-refs --onto " + check + " " + l.check + " 'ui-pass2'"
-	for b, want := range map[string]string{"chore/live": wantLive, "ui-pass2": wantPass2} {
+	if x := sides["chore/live"]; deref(x.Result) != wtsync.MoveHeld || x.MoveCommand != nil ||
+		!strings.Contains(deref(x.Held), "move ui-pass2 first") || !strings.Contains(deref(x.Held), "by hand") {
+		t.Errorf("chore/live: %+v (%s), want held with no command, to move by hand after ui-pass2\n%s", x, deref(x.Held), human)
+	}
+	if row := runRow(human, "chore/live"); !strings.Contains(row, "by hand") || strings.Contains(row, "to move it later") {
+		t.Errorf("chore/live's run line %q, want by hand and no command", row)
+	}
+	for b, want := range map[string]string{"ui-pass2": wantPass2} {
 		if x := sides[b]; deref(x.Result) != wtsync.MoveHeld || deref(x.MoveCommand) != want {
 			t.Errorf("%s: %+v (%s), want held with %q\n%s", b, x, deref(x.Held), want, human)
 		}
@@ -253,17 +271,53 @@ func TestStackHoldsTwinsTogetherWithTheCommandThatMovesEach(t *testing.T) {
 			t.Errorf("%s moved to %s", b, got)
 		}
 	}
+	// The commands printed, run in that order, put ui-pass2 on ui-check's
+	// new tip and pass3 on it; chore/live stays where it was.
+	for _, b := range []string{"ui-pass2", "pass3"} {
+		runPrinted(t, main, deref(sides[b].MoveCommand))
+	}
+	pass2 := testkit.GitOut(t, main, "rev-parse", "ui-pass2")
+	if testkit.GitOut(t, main, "rev-parse", "ui-pass2^") != check || testkit.GitOut(t, main, "rev-parse", "pass3^") != pass2 || pass2 == l.twin {
+		t.Error("ui-pass2 is not on ui-check's new tip, or pass3 is not on it")
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", "chore/live"); got != l.twin {
+		t.Errorf("chore/live moved to %s", got)
+	}
 }
 
-// A twin that turns dirty after the branch it moves with has moved is held
-// with a command onto that branch from its own tip: nothing of it replayed
-// twice, nothing of it dropped. Its change and its commit are untouched.
-func TestStackHoldsATwinThatTurnsDirtyWithACommandOntoItsSibling(t *testing.T) {
-	t.Parallel()
-	if testing.Short() {
-		t.Skip("integration: a stack over real repositories and worktrees")
+// runRow is the run's line for a side branch, "" for none.
+func runRow(human, branch string) string {
+	for _, l := range strings.Split(human, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), "⏸ "+branch+" ") {
+			return l
+		}
 	}
-	l := newTwinLine(t)
+	return ""
+}
+
+// runPrinted runs a command the run printed, as a person would paste it.
+func runPrinted(t *testing.T, dir, command string) {
+	t.Helper()
+	if command == "" {
+		t.Fatal("no command printed")
+	}
+	if out, err := printedCmd(dir, command).CombinedOutput(); err != nil {
+		t.Fatalf("%s: %v\n%s", command, err, out)
+	}
+}
+
+func printedCmd(dir, command string) *exec.Cmd {
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Dir = dir
+	return cmd
+}
+
+// racedTwins is a run in which chore/live turns dirty after ui-pass2, the
+// branch it moves with, has moved: chore/live is held with the command that
+// moves it later. It returns that command and ui-pass2's new tip.
+func racedTwins(t *testing.T) (l *twinLine, command, pass2 string) {
+	t.Helper()
+	l = newTwinLine(t)
 	main := l.ctx.Repo.MainRoot
 	opts := synccmdtest.NoAgents()
 	opts.Stack = &synccmd.StackOptions{AfterMove: func(m wtsync.LayerMove) error {
@@ -277,14 +331,188 @@ func TestStackHoldsATwinThatTurnsDirtyWithACommandOntoItsSibling(t *testing.T) {
 	if x := sides["ui-pass2"]; deref(x.Result) != wtsync.MoveMoved {
 		t.Fatalf("ui-pass2: %+v (%s)\n%s", x, deref(x.Held), human)
 	}
-	want := "wt sync rebase 'chore/live' --onto 'ui-pass2' --upstream " + l.twin
-	if x := sides["chore/live"]; deref(x.Result) != wtsync.MoveHeld || deref(x.MoveCommand) != want {
-		t.Errorf("chore/live: %+v (%s), want held with %q\n%s", x, deref(x.Held), want, human)
+	pass2 = testkit.GitOut(t, main, "rev-parse", "ui-pass2")
+	x := sides["chore/live"]
+	command = deref(x.MoveCommand)
+	if deref(x.Result) != wtsync.MoveHeld || command == "" {
+		t.Fatalf("chore/live: %+v (%s), want held with a command\n%s", x, deref(x.Held), human)
+	}
+	for _, part := range []string{"--no-autostash", "'refs/heads/chore/live'", "'refs/heads/ui-pass2'", pass2, l.twin} {
+		if !strings.Contains(command, part) {
+			t.Errorf("chore/live's command %q lacks %q", command, part)
+		}
 	}
 	if got := testkit.GitOut(t, main, "rev-parse", "chore/live"); got != l.twin {
 		t.Errorf("chore/live moved to %s", got)
 	}
-	if st := strings.TrimSpace(testkit.GitOut(t, l.livePath, "status", "--porcelain")); st != "M y3.txt" {
-		t.Errorf("chore/live's change: %q", st)
+	return l, command, pass2
+}
+
+// refuses runs command and wants it to fail with chore/live where it was.
+func refuses(t *testing.T, l *twinLine, command, why string) {
+	t.Helper()
+	if out, err := printedCmd(l.ctx.Repo.MainRoot, command).CombinedOutput(); err == nil {
+		t.Errorf("the command ran %s:\n%s", why, out)
+	}
+}
+
+// A twin that turns dirty after the branch it moves with has moved is held
+// with a command onto that branch's new tip from its own: run over the
+// change, rebase.autoStash set or not, it refuses and touches nothing; once
+// the change is gone, it lands on that very commit.
+func TestStackHoldsATwinThatTurnsDirtyWithACommandOntoItsSibling(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	l, command, pass2 := racedTwins(t)
+	main := l.ctx.Repo.MainRoot
+	testkit.GitIn(t, main, "config", "rebase.autoStash", "true")
+	refuses(t, l, command, "over a change in chore/live's worktree with rebase.autoStash")
+	if got := testkit.GitOut(t, main, "rev-parse", "chore/live"); got != l.twin {
+		t.Errorf("the refused command moved chore/live to %s", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(l.livePath, "y3.txt")); string(got) != "work in progress\n" {
+		t.Errorf("the refused command touched the change: %q", got)
+	}
+	if st := strings.TrimSpace(testkit.GitOut(t, l.livePath, "stash", "list")); st != "" {
+		t.Errorf("the refused command stashed: %s", st)
+	}
+	testkit.GitIn(t, l.livePath, "checkout", "--", "y3.txt")
+	runPrinted(t, main, command)
+	if got := testkit.GitOut(t, main, "rev-parse", "chore/live"); got != pass2 {
+		t.Errorf("chore/live is at %s, want ui-pass2's %s", got, pass2)
+	}
+}
+
+// The command refuses, changing nothing, once the twin is no longer at the
+// tip the run recorded: a commit or a merge made on it since.
+func TestStackTwinCommandRefusesATwinThatMoved(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	l, command, pass2 := racedTwins(t)
+	main := l.ctx.Repo.MainRoot
+	testkit.GitIn(t, l.livePath, "checkout", "--", "y3.txt")
+	gittest.WriteFile(t, filepath.Join(l.livePath, "y5.txt"), "more\n")
+	testkit.GitIn(t, l.livePath, "add", "-A")
+	testkit.GitIn(t, l.livePath, "commit", "-q", "--no-verify", "-m", "feat(live): y5.txt")
+	ahead := testkit.GitOut(t, main, "rev-parse", "chore/live")
+	refuses(t, l, command, "over a commit made on chore/live since the run")
+	if got := testkit.GitOut(t, main, "rev-parse", "chore/live"); got != ahead {
+		t.Errorf("chore/live moved from %s to %s", ahead, got)
+	}
+	testkit.GitIn(t, l.livePath, "reset", "-q", "--hard", l.twin)
+	sideBranch(t, main, "other", l.twin, "z1.txt", false)
+	testkit.GitIn(t, l.livePath, "merge", "-q", "--no-ff", "--no-edit", "--no-verify", "other")
+	merged := testkit.GitOut(t, main, "rev-parse", "chore/live")
+	refuses(t, l, command, "over a merge made on chore/live since the run")
+	if got := testkit.GitOut(t, main, "rev-parse", "chore/live"); got != merged {
+		t.Errorf("chore/live moved from its merge %s to %s", merged, got)
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", "ui-pass2"); got != pass2 {
+		t.Errorf("ui-pass2 moved to %s", got)
+	}
+}
+
+// The command refuses once the branch the twin moves with has moved again:
+// the pair never splits.
+func TestStackTwinCommandRefusesASiblingThatMovedAgain(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	l, command, pass2 := racedTwins(t)
+	main := l.ctx.Repo.MainRoot
+	testkit.GitIn(t, l.livePath, "checkout", "--", "y3.txt")
+	again := commitWithFile(t, main, "ui-pass2", "y6.txt")
+	refuses(t, l, command, "after ui-pass2 moved again")
+	if got := testkit.GitOut(t, main, "rev-parse", "chore/live"); got != l.twin {
+		t.Errorf("chore/live moved to %s", got)
+	}
+	if again == pass2 {
+		t.Fatal("ui-pass2 did not move again")
+	}
+}
+
+// commitWithFile adds a commit of file on branch, in no worktree, and
+// returns the branch's new tip.
+func commitWithFile(t *testing.T, main, branch, file string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "again")
+	testkit.GitIn(t, main, "worktree", "add", "-q", path, branch)
+	gittest.WriteFile(t, filepath.Join(path, file), file+"\n")
+	testkit.GitIn(t, path, "add", "-A")
+	testkit.GitIn(t, path, "commit", "-q", "--no-verify", "-m", "feat(again): "+file)
+	testkit.GitIn(t, main, "worktree", "remove", "--force", path)
+	return testkit.GitOut(t, main, "rev-parse", branch)
+}
+
+// A tag named like the branch the held twin moves with is never where the
+// twin lands: the command, run as printed, puts it on the branch's commit.
+func TestStackTwinCommandNeverLandsOnATagOfTheSameName(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	l, command, pass2 := racedTwins(t)
+	main := l.ctx.Repo.MainRoot
+	testkit.GitIn(t, l.livePath, "checkout", "--", "y3.txt")
+	testkit.GitIn(t, main, "tag", "ui-pass2", l.check)
+	testkit.GitIn(t, main, "tag", "chore/live", l.check)
+	runPrinted(t, main, command)
+	if got := testkit.GitOut(t, main, "rev-parse", "refs/heads/chore/live"); got != pass2 {
+		t.Errorf("chore/live is at %s, want the branch ui-pass2's %s, not the tag's %s", got, pass2, l.check)
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", "refs/tags/chore/live"); got != l.check {
+		t.Errorf("the tag chore/live moved to %s", got)
+	}
+}
+
+// A lock on one twin's worktree, held by a run outside it, holds both
+// before either moves: the pair never splits, and nothing moves.
+func TestStackHoldsTwinsWhenOneWorktreeIsLocked(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	l := newTwinLine(t)
+	main := l.ctx.Repo.MainRoot
+	owner := gittest.StartIn(t, t.TempDir())
+	gitDir := testkit.GitOut(t, l.livePath, "rev-parse", "--absolute-git-dir")
+	gittest.WriteFile(t, filepath.Join(gitDir, wtsync.LockName), fmt.Sprintf("pid=%d\nstart=%d\nowner=someone\n", owner, time.Now().Unix()))
+	opts := synccmdtest.NoAgents()
+	opts.Now = time.Now
+	res, human, _ := synccmdtest.StackRun(t, l.ctx, gittest.StackTmp, opts)
+	sides := sidesOf(synccmdtest.Participant(t, res, gittest.StackTmp).Stack)
+	for _, b := range []string{"ui-pass2", "chore/live", "pass3"} {
+		if x := sides[b]; deref(x.Result) != wtsync.MoveHeld {
+			t.Errorf("%s: %+v, want held\n%s", b, x, human)
+		}
+	}
+	if x := sides["ui-pass2"]; !strings.Contains(deref(x.Held), "locked") {
+		t.Errorf("ui-pass2 held %q, want the lock on chore/live named", deref(x.Held))
+	}
+	for b, tip := range map[string]string{"ui-pass2": l.twin, "chore/live": l.twin, "pass3": l.pass3} {
+		if got := testkit.GitOut(t, main, "rev-parse", b); got != tip {
+			t.Errorf("%s moved to %s", b, got)
+		}
+	}
+}
+
+// The look of a worktree with nothing ahead of trunk is a stack of no
+// commits: its top counts 0, and the schema takes it.
+func TestSyncStackLookOfAnUpToDateWorktree(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	ctx, _ := synccmdtest.StackLine(t, "")
+	main := ctx.Repo.MainRoot
+	testkit.GitIn(t, main, "worktree", "add", "-q", "-b", "fresh", filepath.Join(t.TempDir(), "fresh"), "origin/main")
+	o := synccmdtest.OverviewJSONWith(t, ctx, synccmd.SyncOptions{NoFetch: true, Stack: &synccmd.StackLook{Work: "fresh"}})
+	if o.Stack == nil || o.Stack.Top == nil || o.Stack.Top.Commits != 0 || len(o.Stack.Layers) != 0 {
+		t.Errorf("stack %+v, want a top of 0 commits and no layers", o.Stack)
 	}
 }
