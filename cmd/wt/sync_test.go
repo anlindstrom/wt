@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
+	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
 func TestConfirmPushDefaultsToNo(t *testing.T) {
@@ -148,12 +149,16 @@ func TestSyncVerbFlagsRefuseAFlagWithoutItsVerb(t *testing.T) {
 		{syncVerbFlags{rebase: true, eachCommit: "tips"}, ""},
 		{syncVerbFlags{rebase: true, stack: true, eachCommit: "off", autosquash: true, onto: "main", ifReady: true}, ""},
 		{syncVerbFlags{rebase: true, eachCommit: "all"}, ""},
-		{syncVerbFlags{rebase: true, eachCommit: "sometimes"}, `--each-commit takes all, tips or off, not "sometimes"`},
+		{syncVerbFlags{rebase: true, eachCommit: "sometimes"}, `--each-commit takes all, tips, targets or off, not "sometimes"`},
 		{syncVerbFlags{resume: true, eachCommit: "tips"}, "--each-commit needs --rebase: a resume goes on with the mode its run was given"},
 		{syncVerbFlags{eachCommit: "tips"}, "--each-commit needs --rebase: a resume goes on with the mode its run was given"},
 		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", eachCommit: "tips"},
 			"--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after"},
 		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", eachCommit: "off"}, ""},
+		{syncVerbFlags{rebase: true, stack: true, autosquash: true, eachCommit: "targets"}, ""},
+		{syncVerbFlags{rebase: true, stack: true, eachCommit: "targets"}, wtsync.TargetsRefusal(false)},
+		{syncVerbFlags{rebase: true, stack: true, autosquash: true, onto: "main", eachCommit: "targets"}, wtsync.TargetsRefusal(false)},
+		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", eachCommit: "targets"}, wtsync.TargetsRefusal(true)},
 	} {
 		if got := errString(tc.flags.check()); got != tc.err {
 			t.Errorf("%+v: error %q, want %q", tc.flags, got, tc.err)

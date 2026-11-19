@@ -699,6 +699,8 @@ func (r *resume) checkAdoptedTips(res wtsync.Result, head string, cerr error) []
 		return nil
 	case wtsync.EachAll:
 		fmt.Fprintf(r.w, "    each_commit checks run at each layer's tip only: the rebase was finished by hand, so the commits between are not checked\n")
+	case wtsync.EachTargets:
+		fmt.Fprintf(r.w, "    each_commit checks run at each layer's tip only: the rebase was finished by hand, so the commits a fixup folded into are not known, and are not checked\n")
 	}
 	// The line is finished, its result pinned and its layers moved: what an
 	// interrupt now leaves is checks owed, which it says, and undo's way

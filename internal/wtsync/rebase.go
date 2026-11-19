@@ -346,6 +346,13 @@ type driver struct {
 	callSteps map[string][]int
 	layerIDs  []string
 	layerEdit bool
+	// foldTargets says, for each commit of the run a per-layer step folds its
+	// output into (the owner and the commits after it), whether a fixup or
+	// squash had been folded into it; set only under --each-commit=targets.
+	foldTargets []bool
+	// tipStop is whether the check stop checkAt found ends a layer, as
+	// opposed to closing a fold target.
+	tipStop bool
 	// checkTail is the abbreviated id of the last fixup or squash folded
 	// into the commit at a check stop, as the sequencer's done list names
 	// it; empty for a pick with none.
@@ -480,6 +487,9 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 	if err != nil {
 		return Result{Branch: req.Branch}, err
 	}
+	if mode == EachTargets && (req.Stack == nil || !req.Stack.Autosquash || req.Edit != nil || req.Onto != req.Stack.Line.Base) {
+		return Result{Branch: req.Branch}, errors.New(TargetsRefusal(req.Edit != nil))
+	}
 	if mode == EachTips && req.Edit != nil {
 		return Result{Branch: req.Branch}, errors.New("--each-commit=tips cannot be combined with --edit: the checks of an edit run sit at the commits above the edit")
 	}
@@ -550,7 +560,7 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 		return early(err)
 	}
 	d.liftMarks = lift.marks
-	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: req.EachCommit == EachTips}
+	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: atTips(req.EachCommit), targets: req.EachCommit == EachTargets}
 	plan.stops, plan.tail = d.layerStops()
 	plan.edit, plan.final = d.editMarks()
 	if req.Stack != nil {
@@ -915,10 +925,10 @@ func (d *driver) markTodo() error {
 		return err
 	}
 	d.liftMarks = lift.marks
-	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: d.req.EachCommit == EachTips}
+	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: atTips(d.req.EachCommit), targets: d.req.EachCommit == EachTargets}
 	plan.stops, plan.tail = d.layerStops()
 	plan.edit, plan.final = d.editMarks()
-	if plan.open, plan.due, err = d.stoppedGroup(); err != nil {
+	if plan.open, plan.due, plan.folded, err = d.stoppedGroup(); err != nil {
 		return err
 	}
 	if plan.carry, err = d.tipCarry(); err != nil {

@@ -21,6 +21,15 @@ the backup patterns; quote it. A pattern never takes a backup name and lists
 a match off the line as not taken; one that takes no layer is refused before
 anything moves. Several layers are repeated `--layer` flags.
 
+## 2026-11-19 16:05 — --each-commit=targets checks a fold where it changed
+
+`wt sync rebase --stack --autosquash --each-commit=targets` runs the `each_commit`
+checks at each layer's tip and at each commit a fixup folded into, and nowhere
+between: a fold that touches a few commits of a long line is checked about once
+per layer plus once per fixup, not once per commit. It is for a fold in place;
+with `--onto`, `--edit` or no `--autosquash` it is refused, and `tips` is the
+choice there. `--json` carries `targets` in `eachCommit` (sync-run 1.19.0).
+
 ## 2026-11-19 15:54 — a fold in place says so, and says when its tree check passed
 
 `wt sync rebase --stack --autosquash` (and `--edit`, `wt sync steps --stack`) now

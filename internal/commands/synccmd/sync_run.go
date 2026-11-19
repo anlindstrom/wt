@@ -47,7 +47,8 @@ type RunOptions struct {
 	Alone bool
 	// EachCommit is where the each_commit checks run: "all" (also "") at
 	// every replayed commit that touches their paths, "tips" at the end of
-	// each layer only, "off" nowhere.
+	// each layer only, "targets" there and at each commit a fixup folded
+	// into (an in-place fold), "off" nowhere.
 	EachCommit string
 	// Journal records what the run does, participant by participant, for
 	// --json; nil records nothing.
@@ -275,6 +276,9 @@ func (r *RunPlan) run(works []string) error {
 		return err
 	}
 	r.eachCommit = mode
+	if mode == wtsync.EachTargets && (opts.Stack == nil || !opts.Stack.Autosquash || opts.Stack.Edit != "" || opts.Onto != "" || opts.Steps != nil) {
+		return errors.New(wtsync.TargetsRefusal(opts.Stack != nil && opts.Stack.Edit != ""))
+	}
 	if mode == wtsync.EachTips && opts.Stack != nil && opts.Stack.Edit != "" {
 		return errors.New("--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after")
 	}

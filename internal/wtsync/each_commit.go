@@ -28,9 +28,28 @@ const (
 	EachAll = "all"
 	// EachTips checks only at the tip of each layer, or of the branch.
 	EachTips = "tips"
+	// EachTargets checks at the tip of each layer, as tips does, and at each
+	// fold target: a commit a fixup, squash or amend folded into. It is for a
+	// fold in place.
+	EachTargets = "targets"
 	// EachOff runs no each_commit check.
 	EachOff = "off"
 )
+
+// TargetsRefusal is why --each-commit=targets is refused for a run that is
+// not a fold in place. An edit run is told what an edit run under tips is: its
+// checks sit above the edit, so off, or edit first and check after.
+func TargetsRefusal(edit bool) string {
+	const why = "--each-commit=targets is for an in-place fold (--stack --autosquash, without --onto): there the commits that are not fold targets keep their own changes"
+	if edit {
+		return why + "; an --edit run's checks sit at the commits above the edit: use --each-commit=off, or edit first and check after"
+	}
+	return why + "; use --each-commit=tips for any other run"
+}
+
+// atTips is whether mode checks at the tip of each layer: tips, and targets,
+// which adds the fold targets to them.
+func atTips(mode string) bool { return mode == EachTips || mode == EachTargets }
 
 // EachCommitMode is mode as a run's own: "" is all. An unknown mode is an
 // error naming the ones there are.
@@ -38,10 +57,10 @@ func EachCommitMode(mode string) (string, error) {
 	switch mode {
 	case "", EachAll:
 		return EachAll, nil
-	case EachTips, EachOff:
+	case EachTips, EachTargets, EachOff:
 		return mode, nil
 	}
-	return "", fmt.Errorf("--each-commit takes all, tips or off, not %q", mode)
+	return "", fmt.Errorf("--each-commit takes all, tips, targets or off, not %q", mode)
 }
 
 // EachCommitNote is the plan's and the summary's one line for a mode other
@@ -54,6 +73,12 @@ func EachCommitNote(mode string, stacked bool) string {
 			where = "the tip of each layer only"
 		}
 		return "each_commit checks run at " + where + " (--each-commit=tips): the commits between are not checked, and are not owed"
+	case EachTargets:
+		where := "the tip of the branch"
+		if stacked {
+			where = "the tip of each layer"
+		}
+		return "each_commit checks run at the commits a fixup folded into and at " + where + " (--each-commit=targets): the commits between are not checked, and are not owed"
 	case EachOff:
 		return "each_commit checks off (--each-commit=off): none ran, and none is owed"
 	}
@@ -152,13 +177,13 @@ func (c *Config) checksFor(paths []string) []EachCommit {
 }
 
 // planChecks fills in the driver's list of commits to check, and under
-// --each-commit=tips the steps due at each of them.
+// --each-commit=tips or targets the steps due at each of them.
 func (d *driver) planChecks() error {
 	d.checks, d.callSteps = nil, nil
 	switch d.req.EachCommit {
 	case EachOff:
 		return nil
-	case EachTips:
+	case EachTips, EachTargets:
 		return d.planTipChecks()
 	}
 	commits, _, err := checksDue(d.req.Path, d.cfg, d.req.target(), d.req.Branch)
@@ -172,11 +197,12 @@ func (d *driver) planChecks() error {
 	return err
 }
 
-// planTipChecks is planChecks for --each-commit=tips: the commits that call
-// for a check, as under all, each with the steps it calls for. The break that
-// runs them is the end of the layer they land in, which the list git writes
-// decides, not this plan: a fixup folded into an earlier commit, or a pick
-// git drops as empty, moves where a layer ends.
+// planTipChecks is planChecks for --each-commit=tips and targets: the commits
+// that call for a check, as under all, each with the steps it calls for. The
+// break that runs them is the end of the layer they land in, which the list
+// git writes decides, not this plan: a fixup folded into an earlier commit, or
+// a pick git drops as empty, moves where a layer ends. Under targets the group
+// a fixup folded into gets a break of its own as well.
 func (d *driver) planTipChecks() error {
 	cfg := d.cfg
 	if cfg == nil || len(cfg.EachCommit) == 0 {
@@ -219,8 +245,13 @@ func (d *driver) checkAt() (sha string, edited bool, err error) {
 	if len(d.checks) == 0 {
 		return "", false, nil
 	}
-	if d.req.EachCommit == EachTips {
-		return d.tipAt()
+	d.tipStop = false
+	if atTips(d.req.EachCommit) {
+		sha, edited, err = d.tipAt()
+		if err != nil || sha != "" || d.req.EachCommit == EachTips {
+			d.tipStop = sha != ""
+			return sha, edited, err
+		}
 	}
 	dir, err := rebaseDir(d.req.Path)
 	if err != nil {
@@ -261,6 +292,10 @@ func (d *driver) checkAt() (sha string, edited bool, err error) {
 	if (prev[0] != "pick" && prev[0] != "edit") || len(prev) < 2 {
 		return "", false, nil
 	}
+	if d.req.EachCommit == EachTargets && len(members) == 0 {
+		// A break after a pick nothing was folded into is not a target's.
+		return "", false, nil
+	}
 	for _, c := range d.checks {
 		if strings.HasPrefix(c, prev[1]) {
 			return c, prev[0] == "edit", nil
@@ -288,23 +323,23 @@ func (d *driver) checkAt() (sha string, edited bool, err error) {
 // such a place: the break that would have followed the group was taken out
 // with the rest of the run's own stops, and the list that is left has the
 // pick behind it. A list that already goes on with a break needs nothing.
-func (d *driver) stoppedGroup() (open, due bool, err error) {
+func (d *driver) stoppedGroup() (open, due, folded bool, err error) {
 	if len(d.checks) == 0 {
-		return false, false, nil
+		return false, false, false, nil
 	}
 	dir, err := rebaseDir(d.req.Path)
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	done, err := os.ReadFile(filepath.Join(dir, "done"))
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	if next, err := os.ReadFile(filepath.Join(dir, "git-rebase-todo")); err == nil {
 		for _, line := range strings.Split(string(next), "\n") {
 			if f := strings.Fields(line); len(f) > 0 && !strings.HasPrefix(f[0], "#") {
 				if f[0] == "break" {
-					return false, false, nil
+					return false, false, false, nil
 				}
 				break
 			}
@@ -326,21 +361,24 @@ func (d *driver) stoppedGroup() (open, due bool, err error) {
 		ids = append(ids, id)
 	}
 	if i < 0 || (cmds[i][0] != "pick" && cmds[i][0] != "edit") || len(cmds[i]) < 2 {
-		return false, false, nil
+		return false, false, false, nil
 	}
 	ids = append(ids, cmds[i][1])
 	if d.req.EachCommit == EachTips {
 		// No break closes a group under tips: a layer's end does.
-		return true, false, nil
+		return true, false, false, nil
 	}
+	// Under targets the break that closes the group is written when a fixup
+	// or squash has been folded into it, now or by the rest of the list.
+	folded = slices.ContainsFunc(cmds[i+1:], func(c []string) bool { return c[0] == "fixup" || c[0] == "squash" })
 	for _, id := range ids {
 		for _, c := range d.checks {
 			if strings.HasPrefix(c, id) {
-				return true, true, nil
+				return true, true, folded, nil
 			}
 		}
 	}
-	return true, false, nil
+	return true, false, false, nil
 }
 
 // doneCommands is the sequencer's done list as fields, comments left out.
@@ -448,12 +486,75 @@ func (d *driver) tipAt() (sha string, edited bool, err error) {
 	return sha, edit, err
 }
 
+// targetsAmong says, for each commit of run (the layer's commits as they are
+// now, oldest first), whether a fixup, squash or amend! folded into it: the
+// layer's own commands as the sequencer ran them name the picks that took one,
+// and git's record of what it rewrote names what each became.
+func (d *driver) targetsAmong(run []string) ([]bool, error) {
+	cmds, dir, err := d.doneCommands()
+	if err != nil {
+		return nil, err
+	}
+	var taken []string
+	pick := ""
+	for _, c := range cmds {
+		switch c[0] {
+		case "update-ref":
+			if !isForkMark(c) {
+				pick, taken = "", nil
+			}
+		case "pick", "edit":
+			pick = ""
+			if len(c) >= 2 {
+				pick = c[1]
+			}
+		case "fixup", "squash":
+			if pick != "" && !slices.Contains(taken, pick) {
+				taken = append(taken, pick)
+			}
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "rewritten-list"))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	var became []string
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && slices.ContainsFunc(taken, func(id string) bool { return strings.HasPrefix(f[0], id) }) {
+			became = append(became, f[1])
+		}
+	}
+	out := make([]bool, len(run))
+	for i, c := range run {
+		out[i] = slices.Contains(became, c)
+	}
+	return out, nil
+}
+
+// targetsOf is the commits of rewritten a run under --each-commit=targets
+// checks after a step folded into them: the owner the output went into (the
+// first), every commit a fixup had been folded into, and the tip. Without a
+// record of the targets every commit is kept.
+func (d *driver) targetsOf(rewritten []string) []string {
+	if len(d.foldTargets) != len(rewritten) {
+		return rewritten
+	}
+	var out []string
+	for i, c := range rewritten {
+		if i == 0 || i == len(rewritten)-1 || d.foldTargets[i] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // tipCarry says the layer the rest of the list starts in already holds a
 // commit that called for a check, replayed before the stop a resume goes on
 // from. A stop at a layer's end break is not such a place: that break runs
 // the layer's check itself.
 func (d *driver) tipCarry() (bool, error) {
-	if d.req.EachCommit != EachTips || len(d.checks) == 0 {
+	if !atTips(d.req.EachCommit) || len(d.checks) == 0 {
 		return false, nil
 	}
 	cmds, dir, err := d.doneCommands()
@@ -552,7 +653,7 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 	}
 	if !forced {
 		var ok bool
-		if d.req.EachCommit == EachTips {
+		if d.tipStop {
 			ok, err = d.layerSurvived()
 		} else {
 			ok, err = d.pickCommitted(sha, head, edited)
@@ -581,7 +682,7 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 		}
 	}
 	steps := d.cfg.checksFor(changed)
-	if d.req.EachCommit == EachTips {
+	if d.tipStop {
 		// At a layer's end the steps due are those any commit of it called for.
 		// HEAD's own paths count too, as under all: a fix a person amended in
 		// may touch what another check lists.
