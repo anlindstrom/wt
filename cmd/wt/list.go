@@ -11,6 +11,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/session"
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
+	"github.com/anlindstrom/wt/internal/devports"
 )
 
 // pathWidthHelp ends the help of the commands that print a path column.
@@ -56,6 +57,15 @@ func newListCmd() *cobra.Command {
 			"around a quarter of a second on every listing, and a claude that has\n" +
 			"not answered in two seconds is one line under the table.\n" +
 			"--no-sessions leaves the column out and does not ask.\n\n" +
+			"An ADDRESS column appears when a worktree here has a dev server that\n" +
+			"devports routes to a name now: its https://<name>.<domain> address. A\n" +
+			"route belongs to the checkout devports says it came from, so two\n" +
+			"worktrees that share a folder name never show each other's server. One\n" +
+			"`devports route list --json` call, given two seconds, answers for the\n" +
+			"whole listing, --all and the like included; without devports, or when it\n" +
+			"is slow or fails, there is no column. Like the SESSION column it is\n" +
+			"left out, with a line saying so, where a row would not fit the\n" +
+			"terminal; --wide shows it.\n\n" +
 			"--all, --roots or --profile list every repository they name, one\n" +
 			"section each.\n\n" + pathWidthHelp,
 		Example: "  wt ls                        # work name, branch and path for each worktree\n" +
@@ -72,6 +82,8 @@ func newListCmd() *cobra.Command {
 				if !opts.NoSessions {
 					opts.Sessions = session.ReadClaudeSessions(nil, session.SessionsDeadline)
 				}
+				// And one read of devports' routes, which name their checkouts.
+				opts.Routes = devports.Take()
 				err := kit.AcrossRepos(loadUserWarn(cmd.ErrOrStderr()), sel.selection(), out,
 					func(ctx *kit.Context, w io.Writer) error { return commands.List(ctx, opts, w, terminalWidth(out)) })
 				if opts.Sessions != nil {

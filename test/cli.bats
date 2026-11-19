@@ -38,10 +38,11 @@ setup() {
     [ "$status" -eq 2 ]
 }
 
-@test "the tests reach no tmutil and no claude, while git still runs" {
+@test "the tests reach no tmutil, claude or devports, while git still runs" {
     # helpers.bash hides both, so a Mac running these never excludes a test
     # folder from Time Machine or lists its own sessions.
     run ! command -v tmutil
     run ! command -v claude
+    run ! command -v devports
     git --version
 }

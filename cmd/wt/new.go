@@ -26,6 +26,14 @@ func newNewCmd() *cobra.Command {
 			"fix_wt/login-crash.\n\n" +
 			"The path alone goes to stdout, so `cd \"$(wt new fix/login-crash)\"`\n" +
 			"works.\n\n" +
+			"Where devports is installed and `devports config --json` gives an app a\n" +
+			"domain, one line per such app, on stderr, says where its dev\n" +
+			"server will be reached once it runs: https://<name>.<domain>, with the\n" +
+			"name `devports route name` gives the folder. wt adds no route; the\n" +
+			"server's start does. Nothing is printed when devports is missing, fails\n" +
+			"or takes over two seconds, or is too old to report domains, and nothing\n" +
+			"else about the run changes.\n" +
+			"--json carries them as `addresses`.\n\n" +
 			"Once you have opted in with `wt config set superset true`, and this\n" +
 			"repository is a Superset project with the app running, the new\n" +
 			"worktree is also registered there as a workspace. `--no-superset`\n" +

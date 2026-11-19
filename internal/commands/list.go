@@ -15,6 +15,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/session"
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
+	"github.com/anlindstrom/wt/internal/devports"
 	"github.com/anlindstrom/wt/internal/naming"
 	"github.com/anlindstrom/wt/internal/repo"
 	"github.com/anlindstrom/wt/internal/wtsync"
@@ -37,6 +38,9 @@ type ListOptions struct {
 	// Wide prints the table as it is printed when piped, whatever the
 	// terminal's width: the SESSION column in it, and nothing cut to fit.
 	Wide bool
+	// Routes is the live devports routes a listing shares with others, as
+	// Sessions is; nil reads them here.
+	Routes *devports.Snapshot
 }
 
 // List prints every worktree of the repository, in whatever layout it is in.
@@ -71,6 +75,7 @@ func List(ctx *kit.Context, opts ListOptions, w io.Writer, width int) error {
 	if !opts.NoSessions {
 		sessions = read.ByWorktree(paths)
 	}
+	addresses := liveAddresses(opts, paths)
 	header := []string{"", "WORK", "BRANCH", "PATH"}
 	if len(prs) > 0 {
 		header = []string{"", "WORK", "BRANCH", "PR", "PATH"}
@@ -103,6 +108,18 @@ func List(ctx *kit.Context, opts ListOptions, w io.Writer, width int) error {
 	if opts.Wide {
 		width = 0
 	}
+	// The ADDRESS column goes in before the path as the SESSION column does,
+	// and like it only where every row still fits; a row is never wrapped for
+	// either.
+	addressesLeftOut := false
+	if len(addresses) > 0 {
+		with := withAddresses(rows, paths, addresses)
+		if width <= 0 || kit.PathTableFits(with, width) {
+			rows = with
+		} else {
+			addressesLeftOut = true
+		}
+	}
 	leftOut := false
 	if len(sessions) > 0 {
 		if with := session.WithSessions(rows, paths, sessions); width <= 0 || kit.PathTableFits(with, width) {
@@ -128,6 +145,9 @@ func List(ctx *kit.Context, opts ListOptions, w io.Writer, width int) error {
 	}
 	if line := prAgeLine(cached, "wt list"); line != "" {
 		legend = append(legend, line)
+	}
+	if addressesLeftOut {
+		legend = append(legend, "   addresses left out at this width — `wt list --wide` shows them")
 	}
 	if leftOut {
 		legend = append(legend, "   sessions left out at this width — `wt list --wide` shows them")
@@ -199,6 +219,40 @@ func listPRs(ctx *kit.Context, names []kit.WorkName, refresh bool) (map[string]s
 		}
 	}
 	return out, a.Cached
+}
+
+// liveAddresses is the addresses devports routes to a server running in each
+// worktree now, keyed by worktree path: from the routes the caller shares, else
+// one call to devports. A route belongs to the worktree it names as its
+// checkout, never to one that only shares its name. Empty means no column:
+// with devports absent, failing, slow or routing nothing here, the listing is
+// byte for byte what it was without it.
+func liveAddresses(opts ListOptions, paths []string) map[string]string {
+	routes := opts.Routes
+	if routes == nil {
+		routes = devports.Take()
+	}
+	out := map[string]string{}
+	for _, p := range paths {
+		if urls := routes.Of(p); len(urls) > 0 {
+			out[p] = strings.Join(urls, ", ")
+		}
+	}
+	return out
+}
+
+// withAddresses is rows with the ADDRESS column put in before the path. paths
+// is the worktree of each row after the header.
+func withAddresses(rows [][]string, paths []string, addresses map[string]string) [][]string {
+	out := make([][]string, len(rows))
+	for i, r := range rows {
+		cell := "ADDRESS"
+		if i > 0 {
+			cell = kit.Dash(addresses[paths[i-1]])
+		}
+		out[i] = slices.Insert(slices.Clone(r), len(r)-1, cell)
+	}
+	return out
 }
 
 func layoutMark(l naming.Layout) string {

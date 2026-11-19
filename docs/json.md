@@ -1971,6 +1971,7 @@ without `--json`, with no object.
 | `steps[].result` | see below | |
 | `steps[].commit` | string \| null | `worktree`: its HEAD; `branch`: its tip |
 | `steps[].reason` | string \| null | why, for `skipped`, `failed` and `interrupted`; a note on a step that went through, as `worktree`, `branch` and `cache` give |
+| `addresses` | array | `wt new` only, since `new` 1.2.0: where the new worktree's dev servers are reached, one `{app, url}` per app that `devports config --json` gives a `domain`, in the order it lists them, the url being `https://<name>.<domain>` with the name [devports](https://github.com/anlindstrom/devports) gives the worktree. Required, `[]` when no app has a domain or devports is not installed, fails, does not answer within two seconds or is too old to report domains (wt does not read `.dev-ports.yaml` itself). Nothing is routed by wt: the address works once the dev server runs |
 
 `steps[].result`, by step:
 

@@ -10,6 +10,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/supersetws"
 	"github.com/anlindstrom/wt/internal/config"
+	"github.com/anlindstrom/wt/internal/devports"
 	"github.com/anlindstrom/wt/internal/git"
 	"github.com/anlindstrom/wt/internal/jsonout"
 	"github.com/anlindstrom/wt/internal/naming"
@@ -82,6 +83,16 @@ type CheckoutSource struct {
 	Source    *string `json:"source"`
 	Remote    *string `json:"remote"`
 	RemoteRef *string `json:"remoteRef"`
+}
+
+// NewResult is the one object wt new --json prints: the result every
+// worktree-creating command has, and the addresses the worktree's dev servers
+// get from devports.
+type NewResult struct {
+	CreateResult
+	// Addresses is one entry per app with a domain; empty when there is none,
+	// or devports is absent or did not answer.
+	Addresses []devports.Address `json:"addresses"`
 }
 
 // CheckoutResult is the one object wt checkout --json prints.
@@ -325,7 +336,10 @@ func NewJSON(ctx *kit.Context, spec string, opts NewOptions, expect string, j *C
 	if err := j.admit(p.CreatePlan, expect); err != nil {
 		return err
 	}
-	_, err := AddAndProvision(ctx, *p.Path, newAdd(ctx, *p.Path, *p.Branch, *p.Base, w), opts, w, j)
+	path, err := AddAndProvision(ctx, *p.Path, newAdd(ctx, *p.Path, *p.Branch, *p.Base, w), opts, w, j)
+	if path != "" {
+		j.addressed(devports.Addresses(path))
+	}
 	j.Finish()
 	return err
 }
@@ -365,6 +379,18 @@ type CreateJournal struct {
 	*jsonout.Journal[CreateResult]
 	// co is what wt checkout adds to the result; nil for wt new.
 	co *CheckoutResult
+	// addresses is what wt new adds to the result; guarded by the journal's lock.
+	addresses []devports.Address
+}
+
+// addressed records the addresses of the worktree wt new made.
+func (j *CreateJournal) addressed(a []devports.Address) {
+	if j == nil {
+		return
+	}
+	j.Lock()
+	defer j.Unlock()
+	j.addresses = a
 }
 
 // NewCreateJournal is a journal for command ("new" or "checkout") that
@@ -610,6 +636,13 @@ func (j *CreateJournal) close(r *CreateResult, signalled bool, _ string) any {
 	if j.co != nil {
 		j.co.CreateResult = *r
 		return j.co
+	}
+	if r.Command == "new" {
+		a := j.addresses
+		if a == nil {
+			a = []devports.Address{}
+		}
+		return NewResult{CreateResult: *r, Addresses: a}
 	}
 	return r
 }

@@ -70,7 +70,10 @@ carry are shims that call `wt`.
    absolute path; only when nothing exists is it where `wt new` would put the work.
    Scripts that rebuild the convention themselves are how tools drift apart.
 3. **Create with `wt new`.** Its only stdout is the path:
-   `path="$(wt new fix/login-crash)"`. For a checkout another tool made, run
+   `path="$(wt new fix/login-crash)"`. Where devports is installed, `wt new` also
+   says on stderr where the new worktree's dev servers will be reached, one
+   `https://<name>.<domain>` line per app with a `domain:`; `--json` gives them as
+   `addresses`. For a checkout another tool made, run
    `wt adopt <path> --relocate`. Claude Code's `WorktreeCreate` and `WorktreeRemove`
    hook events can be routed through `wt hook claude-create` and
    `wt hook claude-remove`.
