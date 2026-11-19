@@ -3,9 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/anlindstrom/wt/internal/commands/testkit"
+	"github.com/anlindstrom/wt/internal/devports/devportstest"
 	"github.com/anlindstrom/wt/internal/gittest"
 )
 
@@ -105,5 +108,35 @@ func TestListAcrossRepositoriesSaysOnceWhenSessionsCouldNotBeRead(t *testing.T) 
 	if strings.Count(out, "sessions not shown") != 1 || !strings.HasSuffix(out,
 		"\n   sessions not shown: claude agents --json printed something wt cannot read as a list of sessions\n") {
 		t.Errorf("want one line, in words, at the end:\n%s", out)
+	}
+}
+
+// --all reads devports' routes once for every repository, and each section
+// shows the addresses of its own worktrees.
+func TestListAcrossRepositoriesAsksDevportsOnce(t *testing.T) {
+	repoWithWorktrees(t)
+	main, _ := os.Getwd()
+	root := filepath.Dir(main)
+	beta := testkit.ManagedRepo(t, root, "beta")
+	betaWT := filepath.Join(root, "beta_wt", "feat_wt", "other")
+	gittest.Git(t, beta, "worktree", "add", "-q", "-b", "feat_wt/other", betaWT)
+	t.Setenv("WT_ROOTS", root)
+	demoWT := filepath.Join(root, "demo_wt", "fix_wt", "login-crash")
+	f := &devportstest.Fake{Routes: devportstest.RouteDoc(
+		[4]string{"https://login-crash.am.telcred.locally", "login-crash", demoWT, strconv.Itoa(os.Getpid())},
+		[4]string{"https://other.am.telcred.locally", "other", betaWT, strconv.Itoa(os.Getpid())})}
+	f.Install(t)
+
+	out, err := runCmd(t, "list", "--all", "--no-sessions", "--wide")
+	if err != nil {
+		t.Fatalf("list --all: %v\n%s", err, out)
+	}
+	for _, want := range []string{"https://login-crash.am.telcred.locally", "https://other.am.telcred.locally"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %s:\n%s", want, out)
+		}
+	}
+	if calls := f.Calls(); len(calls) != 1 {
+		t.Errorf("devports was called %d times: %v", len(calls), calls)
 	}
 }

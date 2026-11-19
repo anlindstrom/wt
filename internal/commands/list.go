@@ -15,6 +15,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/session"
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
+	"github.com/anlindstrom/wt/internal/devports"
 	"github.com/anlindstrom/wt/internal/naming"
 	"github.com/anlindstrom/wt/internal/repo"
 	"github.com/anlindstrom/wt/internal/wtsync"
@@ -37,6 +38,8 @@ type ListOptions struct {
 	// Wide prints the table as it is printed when piped, whatever the
 	// terminal's width: the SESSION column in it, and nothing cut to fit.
 	Wide bool
+	// Routes is the live devports routes a listing shares with others.
+	Routes *devports.Snapshot
 }
 
 // List prints every worktree of the repository, in whatever layout it is in.
