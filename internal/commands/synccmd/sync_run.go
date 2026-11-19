@@ -1828,7 +1828,8 @@ func (r *RunPlan) recordFailed(b string, p *participant, why, oldTip, safety str
 
 // readLoose reads, before the rebase, the branches in no worktree on the
 // line it replays: what wt up moves with it. A run of a stack held on one
-// line, in place or onto a target already reads its own layers.
+// line, in place or onto a target already reads its own layers. With --alone
+// it moves none of them and names them as left alone.
 func (r *RunPlan) readLoose(b string, p *participant, req wtsync.Request) error {
 	if r.opts.Stack != nil || r.opts.Steps != nil {
 		return nil
@@ -1842,6 +1843,11 @@ func (r *RunPlan) readLoose(b string, p *participant, req wtsync.Request) error 
 	line, err := wtsync.ReadLoose(r.ctx.Repo.MainRoot, b, base, r.ctx.Config.MainBranch, r.ctx.UserConfig().BackupPatterns(), func(name string) bool { _, ok := users[name]; return ok })
 	if err != nil {
 		return err
+	}
+	if r.opts.Alone {
+		// Read, never planned: nothing but the named branch moves.
+		r.looseLeftAlone(worktrees, line)
+		return nil
 	}
 	if len(line.Layers) > 0 {
 		p.loose, p.looseOnto = &line, req.Onto
