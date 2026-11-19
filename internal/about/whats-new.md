@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-19 16:10 — bullet-union: both sides' new list items, kept
+
+A new conflict strategy for a Markdown bullet list that both sides only add to,
+such as a README's prerequisites. Declare `strategy: bullet-union` for the file
+in `.wt-sync.yaml`: trunk's items stay, then the branch's new items follow, each
+once, nested lines moving with their bullet. A removed or reworded item is still
+yours to decide. See `docs/sync-declaration.md`.
+
 ## 2026-11-19 12:45 — the --stack look shows the top, and twins move together
 
 `wt sync <top> --stack` now lists the top itself as the last layer, with its

@@ -74,7 +74,7 @@ guesses.
 | key | meaning |
 |---|---|
 | `paths` | required: the files the rule claims |
-| `strategy` | required: `owned-line`, `openapi`, `list-union`, `take-trunk` or `script` |
+| `strategy` | required: `owned-line`, `openapi`, `list-union`, `bullet-union`, `take-trunk` or `script` |
 | `line` | a regular expression (Go's syntax), for `owned-line` and `list-union` |
 | `rule` | how a version is decided, for `owned-line` and `openapi` (below) |
 | `delimiter` | for `list-union`: what separates the items; `,` when left out |
@@ -124,6 +124,37 @@ a trunk line anywhere in the file, is not added again.
 Blank lines may sit in a conflict; the branch's own blank lines are dropped.
 Any other line that is not a list line is refused, as is a conflict with
 nothing on one side. An item one side removed is refused: a removal is a
+decision, not a merge.
+
+### `bullet-union`
+
+A Markdown bullet list that both sides only add to, such as a README's
+prerequisites or setup steps. It takes no other key. Trunk's items stay as
+trunk has them, then the items the branch added follow in the branch's order.
+An item is its bullet line (`- `, `* ` or `+ `) with the more indented lines
+under it, and it moves and is compared as one unit; one both sides added is
+written once in its list; another list may hold the same item.
+
+```yaml
+conflicts:
+  - paths: [README.md]
+    strategy: bullet-union
+```
+
+Trunk adds `- Node 22` and the branch adds `- Gradle 9` after `- Docker`:
+
+```markdown
+- Java 21
+- Docker
+- Node 22
+- Gradle 9
+```
+
+It refuses, and the stop stays yours, when a side removes or changes an item
+of the base, in the list it is in, wherever in the file (a nested line added
+under an existing bullet changes that bullet, and so does a trailing space); when a conflict holds anything but bullet items
+and blank lines, numbered lists included; and when the two sides' items use
+different bullet markers or indents in one list. A removal or a rewording is a
 decision, not a merge.
 
 ### `take-trunk`
