@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -615,11 +616,11 @@ func TestUserFFTrunkDefaultsOnAndTurnsOff(t *testing.T) {
 	}
 }
 
-// The ref sweep's settings default to the nine backup patterns and 14 days,
+// The ref sweep's settings default to the seven transient patterns and 14 days,
 // and a pattern or an age wt cannot use is refused, by set and by the reader.
 func TestRefSweepSettings(t *testing.T) {
 	u := DefaultUser()
-	if len(u.RefSweepPatterns) != 9 || u.RefSweepPatterns[0] != "backup/*" || u.RefSweepAge != "14d" {
+	if len(u.RefSweepPatterns) != 7 || u.RefSweepPatterns[0] != "safe/*" || u.RefSweepAge != "14d" {
 		t.Fatalf("defaults = %q %q", u.RefSweepPatterns, u.RefSweepAge)
 	}
 	for _, tc := range []struct{ key, value string }{
@@ -646,5 +647,41 @@ func TestRefSweepSettings(t *testing.T) {
 		if got, _ := MatchRefPattern(ps, name); got != want {
 			t.Errorf("%s matched %q, want %q", name, got, want)
 		}
+	}
+}
+
+// The transient safety names are swept, the deliberate backup names are kept,
+// and BackupPatterns is both: every name wt treats as a backup.
+func TestRefKeepSettings(t *testing.T) {
+	u := DefaultUser()
+	for _, want := range []string{"safe/*", "safety/*", "safe-*", "safety-*", "*-safe", "*-safety", "prefold/*"} {
+		if !slices.Contains(u.RefSweepPatterns, want) {
+			t.Errorf("sweep defaults %q lack %s", u.RefSweepPatterns, want)
+		}
+	}
+	for _, kept := range []string{"backup/*", "backup-*", "*-backup"} {
+		if slices.Contains(u.RefSweepPatterns, kept) {
+			t.Errorf("sweep defaults %q still sweep %s", u.RefSweepPatterns, kept)
+		}
+		if !slices.Contains(u.RefKeepPatterns, kept) || !slices.Contains(u.BackupPatterns(), kept) {
+			t.Errorf("%s is not kept by default: keep %q", kept, u.RefKeepPatterns)
+		}
+	}
+	for _, name := range []string{"safe/x", "prefold/x", "backup/2026-11-19/huge-redo"} {
+		if _, ok := MatchRefPattern(CompileRefPatterns(u.BackupPatterns()), name); !ok {
+			t.Errorf("%s is not a backup name", name)
+		}
+	}
+	if _, err := userValue(UserKeyRefKeepPatterns, "*"); err == nil {
+		t.Error("ref_keep_patterns = * was accepted")
+	}
+	// A file that sets the sweep list keeps its meaning for what is swept,
+	// and the keep list still applies.
+	u, err := loadUser(writeUser(t, "ref_sweep_patterns = [\"backup/*\", \"tmp/*\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(u.RefSweepPatterns, []string{"backup/*", "tmp/*"}) || !slices.Contains(u.RefKeepPatterns, "backup/*") {
+		t.Errorf("sweep %q keep %q", u.RefSweepPatterns, u.RefKeepPatterns)
 	}
 }

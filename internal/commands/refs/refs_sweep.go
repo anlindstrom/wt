@@ -50,6 +50,9 @@ const (
 	KeptPullRequestOpen    = "pullRequestOpen"
 	KeptPullRequestUnknown = "pullRequestUnknown"
 	KeptNotContained       = "notContained"
+	// KeptDeliberate is a name ref_keep_patterns matches: a backup someone
+	// made on purpose, never swept.
+	KeptDeliberate = "deliberateBackup"
 )
 
 // keptWords is the codes as the Kept table prints them: as they are, but

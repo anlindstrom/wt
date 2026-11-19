@@ -28,6 +28,12 @@ func gitAt(t *testing.T, dir string, when time.Time, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// GitAt is gitAt for tests outside this package.
+func GitAt(t *testing.T, dir string, when time.Time, args ...string) string {
+	t.Helper()
+	return gitAt(t, dir, when, args...)
+}
+
 // CommitOn puts one empty commit on branch, made at when, and returns it.
 func CommitOn(t *testing.T, main, branch, msg string, when time.Time) string {
 	t.Helper()
