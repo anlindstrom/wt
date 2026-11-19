@@ -331,5 +331,62 @@ func CheckMarker(dir, head, onto string, p LayerPlan) (tip, why string, err erro
 // empty to begin with is kept. Nothing else is touched: no ref, no index,
 // no worktree. A conflict returns no tip and says which commit and paths.
 func ReplaySide(dir, base, tip, onto string) (newTip, conflict string, err error) {
-	return "", "", nil
+	out, err := gitEnv(dir, nil, nil, "rev-list", "--reverse", "--topo-order", base+".."+tip)
+	if err != nil {
+		return "", "", err
+	}
+	parent := onto
+	for _, c := range strings.Fields(out) {
+		was, err := gitEnv(dir, nil, nil, "rev-parse", c+"^", c+"^{tree}", c+"^^{tree}")
+		if err != nil {
+			return "", "", err
+		}
+		f := strings.Fields(was)
+		if len(f) != 3 {
+			return "", "", fmt.Errorf("%s: its parent could not be read", git.ShortID(c, 7))
+		}
+		tree, clean, conflicts, _, err := mergeTree(dir, f[0], parent, c)
+		if err != nil {
+			return "", "", err
+		}
+		if !clean {
+			var paths []string
+			for _, x := range conflicts {
+				paths = append(paths, x.Path)
+			}
+			subject, _ := gitEnv(dir, nil, nil, "log", "-1", "--format=%s", c)
+			return "", fmt.Sprintf("%s %q conflicts in %s", git.ShortID(c, 7), subject, strings.Join(paths, ", ")), nil
+		}
+		parentTree, err := gitEnv(dir, nil, nil, "rev-parse", parent+"^{tree}")
+		if err != nil {
+			return "", "", err
+		}
+		if tree == parentTree && f[1] != f[2] {
+			continue // its change is on the new parent already
+		}
+		if parent, err = replayCommit(dir, c, tree, parent); err != nil {
+			return "", "", err
+		}
+	}
+	return parent, "", nil
+}
+
+// replayCommit commits tree on parent with c's message, author and author
+// date; the committer is whoever runs it, as in a rebase.
+func replayCommit(dir, c, tree, parent string) (string, error) {
+	raw, err := gitEnv(dir, nil, nil, "cat-file", "commit", c)
+	if err != nil {
+		return "", err
+	}
+	_, message, _ := strings.Cut(raw, "\n\n")
+	who, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%an%x00%ae%x00%ad", "--date=raw", c)
+	if err != nil {
+		return "", err
+	}
+	f := strings.Split(who, "\x00")
+	if len(f) != 3 {
+		return "", fmt.Errorf("the author of %s could not be read", git.ShortID(c, 7))
+	}
+	env := []string{"GIT_AUTHOR_NAME=" + f[0], "GIT_AUTHOR_EMAIL=" + f[1], "GIT_AUTHOR_DATE=" + f[2]}
+	return gitEnv(dir, env, strings.NewReader(message+"\n"), "commit-tree", "--no-gpg-sign", tree, "-p", parent, "-F", "-")
 }
