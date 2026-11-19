@@ -123,7 +123,7 @@ var userKeys = []userKey{
 		listAt:   func(u *User) *[]string { return &u.RefSweepPatterns },
 		validate: validRefPatterns},
 	{Name: UserKeyRefKeepPatterns, Kind: userList, Default: strings.Join(DefaultRefKeepPatterns, " "),
-		Doc:      "the deliberate backups (globs): wt never moves them, refs sweep lists and never selects them; keep wins over ref_sweep_patterns",
+		Doc:      "the deliberate backups (globs): wt refs sweep and wt sweep keep them, --stack and wt up leave them, unless --layer names one; keep wins over ref_sweep_patterns",
 		listAt:   func(u *User) *[]string { return &u.RefKeepPatterns },
 		validate: validRefPatterns},
 	{Name: UserKeyRefSweepAge, Kind: userString, Default: DefaultRefSweepAge,

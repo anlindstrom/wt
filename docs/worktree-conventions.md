@@ -318,7 +318,7 @@ swept.
 Will be removed with its branch, 1 worktree:
   login-crash  fix_wt/login-crash  ~/src/repo_wt/fix_wt/login-crash  #34 merged on GitHub (squashed or rebased, so git cannot see it)
 
-Merged, but in use in a worktree, so kept:
+Merged, but kept:
   fix_wt/api-tidy  dirty; commit or discard the changes, then sweep again · #35 open
 ```
 
@@ -399,13 +399,15 @@ copy for the purpose it serves.
 
 | Name | Purpose | What wt does |
 |---|---|---|
-| `backup/<what>`, `backup/<date>/<what>`, `backup-*`, `*-backup`, e.g. `backup/2026-11-19/huge-redo` | a backup made on purpose at a moment worth keeping ("huge redo started here") | kept: `wt sync --stack` and `wt up` never move it, `wt refs sweep` lists it and never selects it |
+| `backup/<what>`, `backup/<date>/<what>`, `backup-*`, `*-backup`, e.g. `backup/2026-11-19/huge-redo` | a backup made on purpose at a moment worth keeping ("huge redo started here") | kept: `wt refs sweep` lists it and never selects it, `wt sweep` never deletes it (nor removes its worktree), and `wt sync --stack` layer discovery and `wt up` never move it |
 | `safety/<branch>-pre-fold-<n>`, `safe/pre-rebase-<sha>`, `safe-*`, `safety-*`, `*-safe`, `*-safety` | a branch copy a tool takes before it rewrites history | swept once contained or old |
 | `prefold/<branch>` (a tag) | the tip a fold started from | swept the same way |
 
 `ref_keep_patterns` and `ref_sweep_patterns` in `wt config` change the lists;
-a name both match is kept. Nothing wt does deletes a kept backup: only `git
-branch -D` or `git tag -d` does.
+a name both match is kept. Those four are the commands that keep them; `wt
+remove` on the branch's worktree and `git branch -D` are yours to run. One
+exception: `wt sync --stack --layer <backup>` names a backup on purpose, and
+the run may move it.
 
 ## More
 

@@ -11,7 +11,8 @@ lists them as kept and never selects them (not by age, not for being contained,
 not with `--only`), and `wt sync --stack` and `wt up` still leave them alone.
 `safe/*`, `safety/*` and the like, and `prefold/*` tags, are swept as before.
 The new `ref_keep_patterns` setting holds the kept names and wins over
-`ref_sweep_patterns`. `wt refs sweep --json` gains `keepPatterns` and the `kept`
+`ref_sweep_patterns`. Plain `wt sweep` keeps a merged deliberate backup too, and its
+worktree (sweep-plan 1.7.0, kept code `deliberateBackup`). `wt refs sweep --json` gains `keepPatterns` and the `kept`
 code `deliberateBackup` (refs-sweep-plan 1.1.0). Names to use: docs/worktree-conventions.md.
 
 ## 2026-11-19 01:35 — wt up moves the branches between a stack's worktrees
