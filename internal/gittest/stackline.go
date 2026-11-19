@@ -110,6 +110,13 @@ func NewStackLine(t testing.TB, dir, wtDir, yaml string) *StackLine {
 	return s
 }
 
+// StartIn starts a process that works in dir until the test ends, as the
+// one in s5's worktree does, and returns its pid.
+func StartIn(t testing.TB, dir string) int {
+	t.Helper()
+	return startIn(t, dir)
+}
+
 // startIn starts a process that works in dir until the test ends, as a dev
 // server started in a terminal tab would.
 func startIn(t testing.TB, dir string) int {

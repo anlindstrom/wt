@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-19 12:45 — the --stack look shows the top, and twins move together
+
+`wt sync <top> --stack` now lists the top itself as the last layer, with its
+own commit count. Two side branches on one commit are siblings, no longer one
+"on" the other with 0 commits: they move together onto one new commit, or are
+held together. A held branch says once, briefly, what holds it ("a process in its
+worktree: bash (pid 31227)") and what frees it.
+
 ## 2026-11-19 12:30 — wt new and wt list show a worktree's devports address
 
 Where devports is installed, `wt new` prints `https://<name>.<domain>` for each

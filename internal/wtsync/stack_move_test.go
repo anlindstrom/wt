@@ -2,6 +2,7 @@ package wtsync
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -406,5 +407,31 @@ func TestUndoRefusesAnInterruptedMoveCheckedOutElsewhere(t *testing.T) {
 	}
 	if st := gitIn(t, other, "status", "--porcelain", "--untracked-files=no"); st != "" {
 		t.Errorf("the other worktree was touched: %s", st)
+	}
+}
+
+// What holds a branch is said short and once: the program and its pid, how
+// many more, and what frees it, never a command line cut off mid-path.
+func TestHolderWhyNamesTheProcessShortly(t *testing.T) {
+	t.Parallel()
+	s := stackLine(t, "")
+	scan, err := agents.ScanHolders(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := ReadHolder("s5", worktreesOf(t, s.Dir), nil, scan, nil)
+	want := fmt.Sprintf("a process in its worktree: sleep (pid %d)", s.Process)
+	if got := HolderWhy(h); got != want {
+		t.Errorf("why %q, want %q", got, want)
+	}
+	many := LayerHolder{State: HolderProcess, Proc: "bash", PID: 31227, More: 10}
+	if got := HolderWhy(many); got != "a process in its worktree: bash (pid 31227), +10 more" {
+		t.Errorf("why %q", got)
+	}
+	if got := HolderFrees(many); got != "stop it, and a run carries it" {
+		t.Errorf("frees %q", got)
+	}
+	if got := HolderWhy(LayerHolder{State: HolderDirty}); got != "dirty: tracked changes in its worktree" {
+		t.Errorf("dirty why %q", got)
 	}
 }

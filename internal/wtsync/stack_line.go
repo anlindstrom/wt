@@ -29,9 +29,11 @@ type SkippedBranch struct{ Branch, Tip, Why string }
 // branches whose tips are among them, bottom first.
 type Line struct {
 	Branch, Head, Base string
-	Commits            []string
-	Layers             []LineLayer
-	Skipped            []SkippedBranch
+	// Subject is Head's subject: the top's, as the look lists it.
+	Subject string
+	Commits []string
+	Layers  []LineLayer
+	Skipped []SkippedBranch
 }
 
 // fold subjects: a commit git's autosquash folds into another.
@@ -89,7 +91,10 @@ func ReadLine(dir, branch, trunk string, named, backups []string) (Line, error) 
 	for _, r := range strings.Split(refs, "\n") {
 		name, rest, _ := strings.Cut(r, " ")
 		tip, subject, _ := strings.Cut(rest, " ")
-		if name != "" && name != branch {
+		switch {
+		case name == branch:
+			line.Subject = subject
+		case name != "":
 			branches[name] = found{tip, subject}
 		}
 	}

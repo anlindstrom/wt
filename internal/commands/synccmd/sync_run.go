@@ -1229,7 +1229,7 @@ func (r *RunPlan) readStack() error {
 	if err != nil {
 		return err
 	}
-	s := syncrun.StackOf(line, r.opts.Stack.Autosquash, holders)
+	s := syncrun.StackOf(line, r.opts.Stack.Autosquash, holders, r.parts[b].wt.Path)
 	if !r.opts.Stack.NoSideBranches {
 		if r.sides, err = readSides(r.ctx, line, r.trunkSHA, r.target); err != nil {
 			return fmt.Errorf("the branches off the line of %s could not be read: %w; --no-side-branches leaves them out", r.parts[b].work, err)

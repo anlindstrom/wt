@@ -71,7 +71,7 @@ func stackLookAt(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, lo
 	if err != nil {
 		return nil, err
 	}
-	s := syncrun.StackOf(line, look.Autosquash, holders)
+	s := syncrun.StackOf(line, look.Autosquash, holders, wt.Path)
 	if !look.NoSideBranches {
 		sides, err := readSides(ctx, line, trunkSHA, target)
 		if err != nil {

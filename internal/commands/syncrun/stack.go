@@ -49,6 +49,8 @@ type StackLayer struct {
 	// Note is what else happened to a moved layer: a checkout of it that
 	// landed during its move.
 	Note *string `json:"note"`
+	// why is what holds its worktree, said short, for the look's table.
+	why string
 }
 
 // How a side branch hangs off the line, for --json.
@@ -89,6 +91,29 @@ type StackSide struct {
 	How         *string `json:"how"`
 	Held        *string `json:"held"`
 	MoveCommand *string `json:"moveCommand"`
+	// SameTip is the other side branches at its very tip, by name: siblings,
+	// carried or held together.
+	SameTip []string `json:"sameTip"`
+	// frees is, when what holds its worktree is why it is left, what frees
+	// it, and ownBy says that holder is why; the look's line says it once.
+	frees string
+	ownBy bool
+	// byHand says no run gives it a command: a merge commit of its own.
+	// with is the branch at its tip it moves with: held, it is held with
+	// that one, and moved by hand after it.
+	byHand bool
+	with   string
+}
+
+// StackTop is the line's own branch, the top of the stack: the last row of
+// the look's layer table. It is not one of the layers, which are what a run
+// moves after its rebase; the rebase itself moves the top.
+type StackTop struct {
+	Branch   string  `json:"branch"`
+	OldTip   string  `json:"oldTip"`
+	Commits  int     `json:"commits"`
+	Subject  string  `json:"subject"`
+	Worktree *string `json:"worktree"`
 }
 
 // StackSkipped is a branch on the line the run does not take as a layer.
@@ -106,6 +131,7 @@ type Stack struct {
 	Autosquash bool           `json:"autosquash"`
 	Layers     []StackLayer   `json:"layers"`
 	Skipped    []StackSkipped `json:"skipped"`
+	Top        *StackTop      `json:"top"`
 	// SideBranches is the branches that hang off the line, parents first:
 	// forked from a commit of it, or above its top. Empty with
 	// --no-side-branches.
@@ -160,10 +186,15 @@ type StackCommit struct {
 	Subject string `json:"subject"`
 }
 
-// StackOf is the look's report of a line: its layers and what holds each.
-func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *Stack {
+// StackOf is the look's report of a line: its layers and what holds each,
+// and its top, the line's own branch, checked out at path.
+func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder, path string) *Stack {
 	s := &Stack{Branch: line.Branch, Base: line.Base, Head: line.Head, Autosquash: autosquash,
-		Layers: []StackLayer{}, Skipped: []StackSkipped{}, SideBranches: []StackSide{}, ContextGaps: []StackContextGap{}, ContextUnchecked: []string{}}
+		Layers: []StackLayer{}, Skipped: []StackSkipped{}, SideBranches: []StackSide{}, ContextGaps: []StackContextGap{}, ContextUnchecked: []string{},
+		Top: &StackTop{Branch: line.Branch, OldTip: line.Head, Commits: len(line.Commits), Subject: line.Subject}}
+	if path != "" {
+		s.Top.Worktree = jsonout.Strp(path)
+	}
 	for i, l := range line.Layers {
 		found := LayerFoundTip
 		if l.Named {
@@ -180,6 +211,7 @@ func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *S
 			if h.Detail != "" {
 				sl.StateDetail = jsonout.Strp(h.Detail)
 			}
+			sl.why = wtsync.HolderWhy(h)
 		}
 		s.Layers = append(s.Layers, sl)
 	}
@@ -192,13 +224,15 @@ func StackOf(line wtsync.Line, autosquash bool, holders []wtsync.LayerHolder) *S
 // SetSides lists sides on s as the look sees them, with what holds each
 // (holders, in the same order) and whether the run would carry it: not a
 // backup, a branch with a merge commit or on more than one branch, one a
-// worktree holds, one on a branch that is not carried, and none with leave
-// (why the run moves no side branch, such as --alone).
+// worktree holds, one at the same tip as a branch that is held, one on a
+// branch that is not carried, and none with leave (why the run moves no
+// side branch, such as --alone).
 func SetSides(s *Stack, sides []wtsync.SideBranch, holders []wtsync.LayerHolder, leave string) {
-	carried := map[string]bool{}
+	own := make([]string, len(sides))
 	for i, x := range sides {
 		side := StackSide{Branch: x.Branch, Kind: x.Kind, OldTip: x.Tip, Fork: x.Fork, ForkSubject: x.ForkSubject,
-			Base: x.Base, Commits: x.Commits, Backup: x.Backup, State: wtsync.HolderNone}
+			Base: x.Base, Commits: x.Commits, Backup: x.Backup, State: wtsync.HolderNone, SameTip: append([]string{}, x.SameTip...),
+			byHand: x.Merges, with: x.With}
 		if x.On != "" {
 			side.On = jsonout.Strp(x.On)
 		}
@@ -212,17 +246,37 @@ func SetSides(s *Stack, sides []wtsync.SideBranch, holders []wtsync.LayerHolder,
 				side.StateDetail = jsonout.Strp(h.Detail)
 			}
 		}
-		why := x.Left
 		switch {
-		case why != "":
+		case x.Left != "":
+			own[i] = x.Left
 		case leave != "":
-			why = leave
+			own[i] = leave
 		case i < len(holders) && holders[i].Holds():
-			why = holders[i].State
-			if holders[i].Detail != "" {
-				why += ": " + holders[i].Detail
+			own[i] = wtsync.HolderWhy(holders[i])
+			side.frees, side.ownBy = wtsync.HolderFrees(holders[i]), true
+		}
+		s.SideBranches = append(s.SideBranches, side)
+	}
+	// Branches at one tip move together: one held holds the rest.
+	held := map[string]string{}
+	for i, x := range sides {
+		if own[i] != "" && !x.Backup {
+			held[x.Branch] = own[i]
+		}
+	}
+	carried := map[string]bool{}
+	for i, x := range sides {
+		side := &s.SideBranches[i]
+		why := own[i]
+		if why == "" && !x.Backup {
+			for _, t := range x.SameTip {
+				if h, ok := held[t]; ok {
+					why = "it is the same commit as " + t + ", which is held (" + h + "): they move together"
+					break
+				}
 			}
-		case x.On != "" && !carried[x.On]:
+		}
+		if why == "" && x.On != "" && !carried[x.On] {
 			why = "it is stacked on " + x.On + ", which is not carried"
 		}
 		if why != "" {
@@ -230,7 +284,6 @@ func SetSides(s *Stack, sides []wtsync.SideBranch, holders []wtsync.LayerHolder,
 		} else {
 			side.Carry, carried[x.Branch] = true, true
 		}
-		s.SideBranches = append(s.SideBranches, side)
 	}
 }
 
@@ -313,12 +366,12 @@ func PrintLayers(w io.Writer, s *Stack) {
 	for _, l := range s.Layers {
 		where := "no worktree"
 		if l.Worktree != nil {
-			where = l.State
-			if l.StateDetail != nil {
-				where += ": " + *l.StateDetail
-			}
+			where = cmp.Or(l.why, layerState(l))
 		}
 		fmt.Fprintf(w, "    %-24s %s  %3d  %-50s  %s\n", l.Branch, git.ShortID(l.OldTip, 7), l.Commits, l.Subject, where)
+	}
+	if t := s.Top; t != nil {
+		fmt.Fprintf(w, "    %-24s %s  %3d  %-50s  %s\n", t.Branch, git.ShortID(t.OldTip, 7), t.Commits, t.Subject, "the top: the rebase moves it")
 	}
 	for _, k := range s.Skipped {
 		fmt.Fprintf(w, "    %-24s %s  not taken: %s\n", k.Branch, git.ShortID(k.Tip, 7), k.Reason)
@@ -351,7 +404,12 @@ func sideWhere(x StackSide) string {
 		where = "above the top"
 	}
 	where += ", " + kit.Count(x.Commits, "commit")
-	if x.Worktree != nil {
+	if len(x.SameTip) > 0 {
+		where += ", same commit as " + strings.Join(x.SameTip, ", ")
+	}
+	// What holds its worktree, said once: in the reason when it is why the
+	// branch is held.
+	if x.Worktree != nil && !x.ownBy {
 		where += ", " + x.State
 		if x.StateDetail != nil {
 			where += ": " + *x.StateDetail
@@ -360,10 +418,26 @@ func sideWhere(x StackSide) string {
 	switch {
 	case x.Backup:
 		return where + "; a backup: stays where it is"
-	case x.Left != nil:
+	case x.Left != nil && x.with != "" && x.frees != "":
+		return where + "; held: " + *x.Left + " — " + x.frees + "; otherwise a run holds it with " + x.with + ": " + wtsync.TwinByHand(x.with)
+	case x.Left != nil && x.with != "":
+		return where + "; held: " + *x.Left + "; a run holds it with " + x.with + ": " + wtsync.TwinByHand(x.with)
+	case x.Left != nil && x.frees != "":
+		return where + "; held: " + *x.Left + " — " + x.frees + "; otherwise a run holds it and prints the command to move it later"
+	case x.Left != nil && x.byHand:
 		return where + "; held: " + *x.Left
+	case x.Left != nil:
+		return where + "; held: " + *x.Left + "; a run holds it and prints the command to move it later"
 	}
 	return where + "; carried"
+}
+
+// layerState is a layer's state as --json has it, with its detail.
+func layerState(l StackLayer) string {
+	if l.StateDetail != nil {
+		return l.State + ": " + *l.StateDetail
+	}
+	return l.State
 }
 
 // StackFinish is what FinishStack needs: the run's record, the rebase's
@@ -418,7 +492,7 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	for i, l := range rec.Line.Layers {
 		holders[i] = wtsync.LayerHolder{Branch: l.Branch, State: wtsync.HolderNone}
 	}
-	s = StackOf(rec.Line, rec.Autosquash, holders)
+	s = StackOf(rec.Line, rec.Autosquash, holders, rec.Path)
 	SetSides(s, rec.Sides, nil, "")
 	s.ContextGaps = GapsJSON(in.Gaps)
 	s.ContextUnchecked = append(s.ContextUnchecked, in.Unchecked...)

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json",
-  "x-version": "1.12.0",
+  "x-version": "1.13.0",
   "title": "wt sync --json",
   "description": "What a rebase onto trunk would do to every worktree of a repository, as `wt sync --json` prints it on stdout: one overview object, or with --all, --roots or --profile an array of them, one per repository. It fetches trunk and each worktree branch's own remote (unless --no-fetch) and writes nothing else. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "oneOf": [
@@ -194,13 +194,14 @@
     "stack": {
       "type": "object",
       "description": "Since 1.7.0: a stack held on one line, for --stack: the line from where it leaves trunk (base) to its tip (head), and its layer branches, bottom first. See docs/json.md.",
-      "required": ["branch", "base", "head", "autosquash", "layers", "skipped", "sideBranches", "refusal", "edit", "contextGaps", "contextUnchecked"],
+      "required": ["branch", "base", "head", "autosquash", "layers", "top", "skipped", "sideBranches", "refusal", "edit", "contextGaps", "contextUnchecked"],
       "properties": {
         "branch": { "type": "string", "description": "The line's own branch: the worktree named." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where the line leaves trunk: the merge base." },
         "head": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's tip before the run." },
         "autosquash": { "type": "boolean", "description": "A fold of the line's fixups (--autosquash): onto its own base, or, with --onto, as the line moves onto the target." },
         "layers": { "type": "array", "items": { "$ref": "#/$defs/stackLayer" } },
+        "top": { "$ref": "#/$defs/stackTop", "description": "Since 1.13.0: the line's own branch, the top of the stack: the last row of the look's layer table. Not one of layers, which are the branches a run moves after its rebase; the rebase itself moves the top." },
         "skipped": { "type": "array", "items": { "$ref": "#/$defs/stackSkipped" } },
         "sideBranches": { "type": "array", "items": { "$ref": "#/$defs/stackSide" }, "description": "Since 1.12.0: the local branches that hang off the line, parents first: forked from a commit of it above its base, or above its top. Empty with --no-side-branches." },
         "refusal": { "type": ["string", "null"], "description": "The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held." },
@@ -275,16 +276,16 @@
     "stackSide": {
       "type": "object",
       "description": "Since 1.12.0: one branch that hangs off a stack held on one line. The look fills what it sees; a run also fills what came of the branch, and those fields are null in the look.",
-      "required": ["branch", "kind", "oldTip", "fork", "forkSubject", "on", "base", "commits", "backup", "worktree", "state", "stateDetail", "carry", "left", "newBase", "newTip", "result", "how", "held", "moveCommand"],
+      "required": ["branch", "kind", "oldTip", "fork", "forkSubject", "on", "base", "commits", "backup", "worktree", "state", "stateDetail", "carry", "left", "newBase", "newTip", "result", "how", "held", "moveCommand", "sameTip"],
       "properties": {
         "branch": { "type": "string" },
         "kind": { "enum": ["forked", "above"], "description": "forked: it leaves the line at a commit below its top. above: it carries the line's top." },
         "oldTip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Its tip before the run." },
         "fork": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit of the line it leaves the line at: its merge base with the line's tip." },
         "forkSubject": { "type": "string" },
-        "on": { "type": ["string", "null"], "description": "The side branch it is stacked on, which moves first; null when it sits on the line itself. A backup is never what a branch is on." },
+        "on": { "type": ["string", "null"], "description": "The side branch it is stacked on, which moves first; null when it sits on the line itself. A backup is never what a branch is on, and neither is a branch at its own tip (see sameTip). On branches at one tip, it names the one that stands for them: one with an upstream, then the oldest, then the first by name." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where its own commits start: the tip of the branch it is on, or fork." },
-        "commits": { "type": "integer", "minimum": 0, "description": "Its own commits, from base to its tip; 0 for a branch at the same tip as the one it is on." },
+        "commits": { "type": "integer", "minimum": 0, "description": "Its own commits, from base to its tip. A branch at the same tip as another is never on it: both count the same commits." },
         "backup": { "type": "boolean", "description": "Its name is a backup (wt refs sweep's patterns): listed, never moved." },
         "worktree": { "type": ["string", "null"], "description": "The worktree it is checked out in; null when it is in none." },
         "state": { "enum": ["none", "clean", "dirty", "rebasing", "bisecting", "busy", "idle", "process", "unknown"], "description": "What holds its worktree, as for a layer." },
@@ -296,7 +297,20 @@
         "result": { "oneOf": [{ "type": "null" }, { "enum": ["moved", "held", "unchanged", "planned", "moving", "needsRecovery"] }], "description": "The run's, as for a layer. A backup is always held, with no moveCommand." },
         "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }] },
         "held": { "type": ["string", "null"], "description": "The run's: why it was held." },
-        "moveCommand": { "type": ["string", "null"], "description": "The run's: for a held branch, the command that moves it later, with real commits and branch names shell-quoted: wt sync rebase '<branch>' --onto <newBase> --upstream <base> for a branch in a worktree, git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in the main checkout, git rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in none; for a branch on a held side branch, --onto names that branch, to run once it has moved. Null for a backup, for a branch with a merge commit of its own (move it by hand), and when where it goes is not known." }
+        "moveCommand": { "type": ["string", "null"], "description": "The run's: for a held branch, the command that moves it later, with real commits and branch names shell-quoted: wt sync rebase '<branch>' --onto <newBase> --upstream <base> for a branch in a worktree, git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in the main checkout, git rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in none; for a branch on a held side branch, --onto names that branch, to run once it has moved. Null for a backup, for a branch with a merge commit of its own (move it by hand), and when where it goes is not known." },
+        "sameTip": { "type": "array", "items": { "type": "string" }, "description": "Since 1.13.0: the other side branches at its very tip, by name: siblings, carried or held together onto one new commit. Empty for most." }
+      }
+    },
+    "stackTop": {
+      "type": "object",
+      "description": "Since 1.13.0: the top of a stack held on one line: the branch the worktree named is on.",
+      "required": ["branch", "oldTip", "commits", "subject", "worktree"],
+      "properties": {
+        "branch": { "type": "string", "description": "The line's own branch." },
+        "oldTip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Its tip before the run: head." },
+        "commits": { "type": "integer", "minimum": 0, "description": "Its commits from the line's base, its tip included; 0 for a branch with nothing ahead of trunk." },
+        "subject": { "type": "string", "description": "Its tip's subject." },
+        "worktree": { "type": ["string", "null"], "description": "The worktree it is checked out in." }
       }
     },
     "stackSkipped": {
