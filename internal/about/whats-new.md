@@ -21,6 +21,15 @@ the backup patterns; quote it. A pattern never takes a backup name and lists
 a match off the line as not taken; one that takes no layer is refused before
 anything moves. Several layers are repeated `--layer` flags.
 
+## 2026-11-19 15:54 — a fold in place says so, and says when its tree check passed
+
+`wt sync rebase --stack --autosquash` (and `--edit`, `wt sync steps --stack`) now
+heads its output "folds <line> in place on its own base <sha>" with where the
+declaration is read from, and no longer prints a "contested" stop for a conflict
+with trunk that an in-place fold never meets. When the fold's tree check passes it
+prints `✓ tip tree equal to <old tip>`, naming the step paths it left out. `--json`
+(sync-run 1.18.0) gains `fold` on the participant: the base and what the check compared.
+
 ## 2026-11-19 12:45 — the --stack look shows the top, and twins move together
 
 `wt sync <top> --stack` now lists the top itself as the last layer, with its

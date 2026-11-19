@@ -230,6 +230,9 @@ type RunPlan struct {
 	sides []wtsync.SideBranch
 	// edit is the commit of the line --edit names, resolved; nil without.
 	edit *wtsync.EditStop
+	// foldHeader is the header of a run that folds the line in place, held
+	// until the line is read and its base is known; nil once printed.
+	foldHeader *foldHeader
 	// gaps is, for a fold, the hunks of its fixups that lack their context
 	// behind their targets, named before the rebase.
 	gaps          []wtsync.ContextGap
@@ -265,6 +268,7 @@ func RunSync(ctx *kit.Context, works []string, opts RunOptions, w io.Writer) (*R
 func (r *RunPlan) run(works []string) error {
 	w, opts := r.w, r.opts
 	defer syncrun.WatchSignals(w, r.tracker)()
+	defer r.flushFoldHeader()
 
 	mode, err := wtsync.EachCommitMode(opts.EachCommit)
 	if err != nil {
@@ -486,11 +490,18 @@ func (r *RunPlan) declare(works []string) error {
 		r.target, r.tgt = &target, target.Target(trunkSHA)
 		fmt.Fprintf(r.w, "%s  onto %s %s\n", label, target.Short(), how)
 		fmt.Fprintf(r.w, "the declaration and its scripts are read from trunk, %s %s %s\n", onto, git.ShortID(trunkSHA, 7), fetched)
+	} else if r.foldsInPlace() {
+		// Said once the line is read and its own base is known; as the plain
+		// header if the run stops before that.
+		r.foldHeader = &foldHeader{label: label, onto: onto, trunkSHA: git.ShortID(trunkSHA, 7), fetched: fetched}
 	} else {
 		fmt.Fprintf(r.w, "%s  onto %s %s %s\n", label, onto, git.ShortID(trunkSHA, 7), fetched)
 	}
 	r.opts.Journal.Target(r.targetJSON())
 	cfg, err := wtsync.LoadFromRef(ctx.Repo.MainRoot, trunkSHA)
+	if err != nil {
+		r.flushFoldHeader()
+	}
 	if errors.Is(err, wtsync.ErrUndeclared) && r.opts.undeclaredOK {
 		fmt.Fprintf(r.w, "no %s on %s: nothing is declared, so only a conflict-free rebase goes\n", wtsync.ConfigFile, onto)
 		r.cfg = &wtsync.Config{}
@@ -1226,6 +1237,7 @@ func (r *RunPlan) readStack() error {
 		r.edit = e
 	}
 	r.line = line
+	r.printFoldHeader(r.parts[b].work, line.Base)
 	listed, err := r.listAgents()
 	if err != nil {
 		return err
@@ -1256,8 +1268,60 @@ func (r *RunPlan) readStack() error {
 			return err
 		}
 	}
-	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s })
+	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) {
+		jp.Stack = s
+		if r.opts.Stack.Autosquash || r.opts.Steps != nil || r.edit != nil {
+			jp.Fold = &syncrun.StackFold{InPlace: r.foldsInPlace(), Base: line.Base}
+		}
+	})
 	return nil
+}
+
+// foldHeader is what the header of a fold in place says, apart from the
+// line and its base.
+type foldHeader struct {
+	label, onto, trunkSHA, fetched string
+}
+
+// printFoldHeader prints the header of a run that folds work in place on
+// its own base, once.
+func (r *RunPlan) printFoldHeader(work, base string) {
+	h := r.foldHeader
+	if h == nil {
+		return
+	}
+	r.foldHeader = nil
+	verb := "folds " + work
+	switch {
+	case r.opts.Stack.Autosquash:
+	case r.edit != nil:
+		verb = "edits " + work
+	default:
+		verb = "runs its steps over " + work
+	}
+	fmt.Fprintf(r.w, "%s  %s in place on its own base %s\n", h.label, verb, git.ShortID(base, 7))
+	fmt.Fprintf(r.w, "the declaration and its scripts are read from trunk, %s %s %s\n", h.onto, h.trunkSHA, h.fetched)
+	if r.opts.Stack.Autosquash {
+		fmt.Fprintln(r.w, "the fold's own stops are not simulated before it runs")
+	}
+}
+
+// flushFoldHeader prints the plain header in place of a fold's own when the
+// run stops before the line is read, so a failure still says what was run.
+func (r *RunPlan) flushFoldHeader() {
+	if h := r.foldHeader; h != nil {
+		r.foldHeader = nil
+		fmt.Fprintf(r.w, "%s  onto %s %s %s\n", h.label, h.onto, h.trunkSHA, h.fetched)
+	}
+}
+
+// foldsInPlace is whether the run folds the line on its own base: with
+// --autosquash and no --onto, with wt sync steps --stack, and with --edit.
+// A run that folds the line does not rebase it onto trunk, which is only
+// what it is assessed against.
+func (r *RunPlan) foldsInPlace() bool {
+	st := r.opts.Stack
+	return st != nil && ((st.Autosquash && r.opts.Onto == "") || r.opts.Steps != nil || st.Edit != "")
 }
 
 // lineMoved is why the line or a layer is no longer what readStack read,
@@ -1378,7 +1442,7 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) (rest
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: res.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: r.own, Listed: listed, ListErr: lerr, Force: rec.Force, Now: r.opts.Clock(), AfterMove: st.AfterMove, Between: st.Between,
 		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops), Dropped: res.Emptied, Confirmed: res.Replay != nil && res.Replay.Confirmed, Gaps: r.gaps, Unchecked: r.gapsUnchecked})
-	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s })
+	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s; syncrun.SetFold(jp, s) })
 	restored = s != nil && s.Restored
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, p.work)
@@ -1432,6 +1496,7 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 	if r.target != nil {
 		ontoLabel = r.target.Ref
 	}
+	inPlace := false
 	if st := r.opts.Stack; st != nil {
 		req.Stack = &wtsync.StackRequest{Line: r.line, Autosquash: st.Autosquash, Forks: wtsync.ForkPoints(r.sides)}
 		req.Gaps = r.gaps
@@ -1439,6 +1504,7 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 		// edit always is.
 		if (st.Autosquash && r.target == nil) || r.opts.Steps != nil || r.edit != nil {
 			req.Onto, ontoLabel = r.line.Base, "its own base "+git.ShortID(r.line.Base, 7)
+			inPlace = true
 		}
 		if r.edit != nil {
 			req.Edit = r.edit
@@ -1462,7 +1528,8 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 			req.Onto, req.Upstream, ontoLabel = pp.head, pp.result.OldTip, pp.work
 		}
 	}
-	if p.a.Class == wtsync.Contested && p.a.Replay.Stop != nil {
+	// The assessment replays onto trunk, which an in-place fold never meets.
+	if !inPlace && p.a.Class == wtsync.Contested && p.a.Replay.Stop != nil {
 		what := "the run stops there and writes a plan"
 		if req.Stacked {
 			what = "the run stops there and puts the branch back: a stack parent cannot be left waiting"

@@ -1655,6 +1655,7 @@ Each participant has `wt up`'s fields, and:
 | `planFile` | string \| null | for `handedOver`: the plan saying what is yours |
 | `ownRemoteSync` | object \| null | since 1.2.0: [`ownRemoteSync`](#ownremotesync--what-a-run-did-about-it), an object from `wt sync rebase`; always null from resume and undo |
 | `stack` | object \| null | since 1.6.0: for `wt sync rebase <work> --stack`, and the resume of one it handed over, the [stack held on this worktree's line](#stack--a-stack-held-on-one-line) and what came of each layer; null for any other run, and from undo |
+| `fold` | object \| null | since 1.18.0: for a `--stack` run that folds the line (`--autosquash`, `--edit`, `wt sync steps`), [what it folded on and what its tree guard compared](#fold--what-a-fold-compared); null for any other run |
 | `eachCommit` | string | since 1.11.0: where the run's `each_commit` checks ran, as `wt sync rebase --each-commit` named it: `all` (every replayed commit that touches a step's paths, the default), `tips` (only the tip of each layer of a `--stack` line, or of the branch; the commits between are neither checked nor owed) or `off` (no `each_commit` check). A resume says its run's mode; `wt sync undo` checks nothing and says `all` |
 | `rechecked` | int | since 1.7.0: how many commits the `each_commit` checks that read a per-layer step's files ran at again, once the step folded its output into them or committed it |
 | `layerSteps` | array | since 1.7.0: what each [per-layer step](#layersteps--a-step-at-every-layer-tip) came to at the end of each layer, bottom first; empty when none is declared or the rebase did not finish |
@@ -1830,6 +1831,20 @@ The line's content was held, before its branch or any layer moved, to the old
 line with the amend merged in. A run whose content was refused is not here: it
 is `restored`, with nothing moved and what it came to kept under
 `refs/wt-sync-kept/<branch>/<epoch>`, which its `reason` names.
+
+### `fold` — what a fold compared
+
+Since `sync-run` 1.18.0, on a participant of a `--stack` run that folds the
+line. For a fold in place (`--autosquash` without `--onto`, `--edit`,
+`wt sync steps --stack`) the run's `target` and `onto` say only what the
+line was assessed against and where the declaration is read from, trunk;
+the rebase goes onto `base`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `inPlace` | bool | the line is folded on its own base, not moved onto a target |
+| `base` | string | the line's own base: what an in-place fold rebases onto |
+| `guard` | object \| null | the tree guard once the rebase finished: `oldTip`, `newTip`, `onto` (the commit a moving fold's old line was merged onto to compare, null for a fold in place), `excludedGlobs` (the declared per-layer step paths a changed file matched, left out), `conflictAllowed` (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), `outcome` (`passed` or `failed`) and `reason` (why it failed, else null). Null while the run has not finished, and for an edit |
 
 ### `layerSteps` — a step at every layer tip
 
@@ -2386,3 +2401,4 @@ change made it.
 | `up` 1.7.0, `sync-run` 1.15.0, `status` 1.12.0 | [`layers`](#layers--branches-in-no-worktree) on each participant of `up` and `sync-run`: the branches in no worktree on its line that the run moved with its rebase or left, and why; `layers` on each `stack` member of `status`, which its token covers |
 | `sync` 1.12.0, `sync-run` 1.16.0 | [`sideBranches`](#side-branches--what-hangs-off-the-line) on `stack`: the branches forked from the line or above its top, which a `--stack` run carries with it, and what came of each |
 | `sync` 1.13.0, `sync-run` 1.17.0 | `top` on [`stack`](#stack--a-stack-held-on-one-line): the line's own branch, the last row of the look's layer table; `sameTip` on each side branch: branches at one tip are siblings, carried or held together, and none is `on` another |
+| `sync-run` 1.18.0 | [`fold`](#fold--what-a-fold-compared) on each participant: for a fold of the line, whether it is in place and on which base, and what its tree guard compared and found |
