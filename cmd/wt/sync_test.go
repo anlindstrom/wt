@@ -123,6 +123,8 @@ func TestSyncVerbFlagsRefuseAFlagWithoutItsVerb(t *testing.T) {
 		{syncVerbFlags{undo: true, stack: true}, "--stack needs --rebase, or no verb"},
 		{syncVerbFlags{rebase: true, layers: []string{"a"}}, "--layer needs --stack"},
 		{syncVerbFlags{rebase: true, autosquash: true}, "--autosquash needs --stack"},
+		{syncVerbFlags{rebase: true, noSides: true}, "--no-side-branches needs --stack"},
+		{syncVerbFlags{noSides: true}, "--no-side-branches needs --stack"},
 		{syncVerbFlags{resume: true, alone: true}, "--alone needs --rebase, or no verb"},
 		{syncVerbFlags{undo: true, alone: true}, "--alone needs --rebase, or no verb"},
 		{syncVerbFlags{alone: true, json: true}, "--alone with --json needs --rebase: the look has no JSON of it"},
