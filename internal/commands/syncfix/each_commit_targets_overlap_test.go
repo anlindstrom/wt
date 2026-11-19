@@ -11,6 +11,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
 	"github.com/anlindstrom/wt/internal/commands/synccmd/synccmdtest"
+	"github.com/anlindstrom/wt/internal/commands/syncrun"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 )
 
@@ -68,7 +69,9 @@ func overlapLine(t *testing.T, logPath string) (*kit.Context, string) {
 	yaml := "defer:\n" +
 		"  - run: ./gen-a.sh\n    paths: [gen/a.txt]\n    each: layer\n    fold: owner\n    commit: \"chore: regenerate a\"\n" +
 		"  - run: ./gen-b.sh\n    paths: [gen/b.txt]\n    each: layer\n    fold: owner\n    commit: \"chore: regenerate b\"\n" +
-		"each_commit:\n  - run: git log -1 --format=%s >> '" + logPath + "'\n"
+		"each_commit:\n  - run: |\n" +
+		"      s=$(git log -1 --format=%s); echo \"$s\" >> '" + logPath + "'\n" +
+		"      if [ \"$s\" = 'feat: t' ] && [ ! -f '" + logPath + ".pass' ]; then echo 'feat: t needs the pass file'; exit 1; fi\n"
 	testkit.WriteFile(t, main, ".wt-sync.yaml", yaml)
 	commit("chore: declare")
 	testkit.GitIn(t, main, "remote", "add", "origin", main)
@@ -90,6 +93,7 @@ func TestFoldUnderTargetsKeepsATargetThroughTwoOverlappingFolds(t *testing.T) {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
 	logPath := filepath.Join(t.TempDir(), "checked.log")
+	testkit.WriteFile(t, filepath.Dir(logPath), "checked.log.pass", "")
 	ctx, work := overlapLine(t, logPath)
 	opts := runAt(200, &synccmd.StackOptions{Autosquash: true})
 	opts.EachCommit = "targets"
@@ -117,5 +121,45 @@ func TestFoldUnderTargetsKeepsATargetThroughTwoOverlappingFolds(t *testing.T) {
 		if _, ok := want[subject]; !ok && !strings.HasPrefix(subject, "chore: regenerate") {
 			t.Errorf("checked at %q, which is neither an owner, a target nor a tip", subject)
 		}
+	}
+}
+
+// A resume has no record of the targets the run before it found. A run that
+// stopped at its first check and was resumed does both folds in the resumed
+// process, which takes the safe side: every commit a fold rewrote is checked
+// again, the interior target included, and the summary says so.
+func TestResumeUnderTargetsChecksEveryRewrittenCommitAfterAFold(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	logPath := filepath.Join(t.TempDir(), "checked.log")
+	ctx, work := overlapLine(t, logPath)
+	opts := runAt(200, &synccmd.StackOptions{Autosquash: true})
+	opts.EachCommit = "targets"
+	if _, human, err := synccmdtest.StackRun(t, ctx, work, opts); err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	testkit.WriteFile(t, filepath.Dir(logPath), "checked.log.pass", "")
+	resume := noResumeAgents()
+	resume.Push = syncrun.PushNever
+	var out strings.Builder
+	if err := SyncResume(ctx, work, resume, &out); err != nil {
+		t.Fatalf("resume: %v\n%s", err, out.String())
+	}
+	seen := map[string]int{}
+	for _, subject := range synccmdtest.CheckedSubjects(t, logPath) {
+		seen[subject]++
+	}
+	// feat: t: the check that failed, again after the fix, and after each of
+	// the two folds. feat: b, which is no target, is checked after both folds
+	// too, since the resumed run does not know which commits are.
+	for subject, n := range map[string]int{"feat: t": 4, "feat: b": 2, "feat: a": 1, "chore: bump": 3} {
+		if seen[subject] != n {
+			t.Errorf("%q was checked %d times, want %d (%v)\n%s", subject, seen[subject], n, seen, out.String())
+		}
+	}
+	if !strings.Contains(out.String(), "after a fold the checks cover every rewritten commit") {
+		t.Errorf("the summary does not say so:\n%s", out.String())
 	}
 }
