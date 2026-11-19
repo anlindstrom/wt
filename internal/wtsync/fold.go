@@ -605,6 +605,18 @@ func (d *driver) foldInto(r *LayerStep, run, files []string, head string) error 
 	if err != nil {
 		return err
 	}
+	if d.req.EachCommit == EachTargets {
+		// The fold recommitted run: the targets and the owner, which is one
+		// too, are known by their new ids to the folds that come after.
+		if d.targetShas == nil {
+			d.targetShas = map[string]bool{}
+		}
+		for i, c := range rewritten {
+			if i == 0 || d.foldTargets[i] {
+				d.targetShas[c] = true
+			}
+		}
+	}
 	r.Result, r.Owner, r.OwnerSubject, r.Proof = LayerFolded, rewritten[0], subject, ProofHeld
 	return nil
 }

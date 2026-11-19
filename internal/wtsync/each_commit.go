@@ -489,7 +489,8 @@ func (d *driver) tipAt() (sha string, edited bool, err error) {
 // targetsAmong says, for each commit of run (the layer's commits as they are
 // now, oldest first), whether a fixup, squash or amend! folded into it: the
 // layer's own commands as the sequencer ran them name the picks that took one,
-// and git's record of what it rewrote names what each became.
+// and git's record of what it rewrote names what each became. A commit an
+// earlier fold of this run rewrote is a target by the id that fold gave it.
 func (d *driver) targetsAmong(run []string) ([]bool, error) {
 	cmds, dir, err := d.doneCommands()
 	if err != nil {
@@ -527,7 +528,7 @@ func (d *driver) targetsAmong(run []string) ([]bool, error) {
 	}
 	out := make([]bool, len(run))
 	for i, c := range run {
-		out[i] = slices.Contains(became, c)
+		out[i] = slices.Contains(became, c) || d.targetShas[c]
 	}
 	return out, nil
 }

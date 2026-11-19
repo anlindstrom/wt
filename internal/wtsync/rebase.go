@@ -350,6 +350,11 @@ type driver struct {
 	// output into (the owner and the commits after it), whether a fixup or
 	// squash had been folded into it; set only under --each-commit=targets.
 	foldTargets []bool
+	// targetShas is every commit of the line known to be a target, by the id
+	// it has now: a fold recommits the commits it rewrites, so what the
+	// sequencer recorded for a target no longer names it, and the next fold
+	// that reaches it takes it from here. Set only under targets.
+	targetShas map[string]bool
 	// tipStop is whether the check stop checkAt found ends a layer, as
 	// opposed to closing a fold target.
 	tipStop bool
