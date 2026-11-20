@@ -205,7 +205,7 @@ func Adopt(mainRoot string, cfg *Config, req Request, old string, safety Safety,
 	}
 	req.EachCommit = mode
 	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true,
-		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, EachCommit: mode, Layered: req.Stack != nil || req.ReportLine != nil}, stepFailed: map[string]int{}, made: map[string]bool{}}
+		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, EachCommit: mode, Timings: req.timings(), Layered: req.Stack != nil || req.ReportLine != nil}, stepFailed: map[string]int{}, made: map[string]bool{}}
 	d.restoreLayers(req.Resumed)
 	d.res.Unchecked = slices.Clone(req.UncheckedBefore)
 	if d.res.SignaturesDropped, err = signedCount(req.Path, req.base(), old); err != nil {
@@ -354,7 +354,7 @@ func (f TipFailure) Owed() string {
 // checked (an emptied layer ends where the one below does) is not checked
 // again. A step whose need did not answer, or whose script the tip lacks,
 // is not run and is owed.
-func CheckTips(wtPath string, cfg *Config, tips []Tip, unavailable map[string]string, log io.Writer) TipChecks {
+func CheckTips(wtPath string, cfg *Config, tips []Tip, unavailable map[string]string, rec *Timings, log io.Writer) TipChecks {
 	var res TipChecks
 	if cfg == nil || len(cfg.EachCommit) == 0 {
 		return res
@@ -408,14 +408,15 @@ func CheckTips(wtPath string, cfg *Config, tips []Tip, unavailable map[string]st
 					fmt.Fprintf(log, "  ▸ check %s at its tip %s %s\n", tip.Branch, git.ShortID(tip.Commit, 7), subject)
 				}
 			}
-			why, output, retried := runEachCommit(dir, s, EachCommitTimeout)
+			why, output, retried, took := runTimed(rec, tip.Branch+" tip "+git.ShortID(tip.Commit, 7), dir, s, EachCommitTimeout)
 			if why == "" {
+				logCheck(log, cfg, s, why, retried, took)
 				continue
 			}
 			f := TipFailure{Branch: tip.Branch, CheckFailure: CheckFailure{Step: s.Run, Commit: tip.Commit, Subject: subject, Err: why, Output: output, Retried: retried}}
 			res.Failed = append(res.Failed, f)
 			if log != nil {
-				fmt.Fprintf(log, "  ✗ %s at %s: %s\n", s.Run, tip.Branch, why)
+				fmt.Fprintf(log, "  ✗ %s at %s: %s  %s\n", s.Run, tip.Branch, why, FormatDuration(took))
 				for _, line := range lastOutputLines(output, 5) {
 					fmt.Fprintf(log, "    %s\n", line)
 				}

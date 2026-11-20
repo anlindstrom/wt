@@ -24,6 +24,9 @@ type LayerStepJSON struct {
 	OwnerSubject *string `json:"ownerSubject"`
 	Commit       *string `json:"commit"`
 	Proof        *string `json:"proof"`
+	// ElapsedMs is how long the step took, in milliseconds; 0 when it did
+	// not run.
+	ElapsedMs int64 `json:"elapsedMs"`
 }
 
 // LayerStepsOf is steps for --json; never nil.
@@ -31,7 +34,7 @@ func LayerStepsOf(steps []wtsync.LayerStep) []LayerStepJSON {
 	out := []LayerStepJSON{}
 	for _, s := range steps {
 		j := LayerStepJSON{Layer: s.Layer, Layers: s.Layers, Branch: s.Branch, Step: s.Step.Run, Ran: s.Ran, Result: s.Result,
-			Reason: jsonout.Strp(kit.OneLine(s.Why))}
+			Reason: jsonout.Strp(kit.OneLine(s.Why)), ElapsedMs: s.Elapsed.Milliseconds()}
 		if s.Owner != "" {
 			j.Owner, j.OwnerSubject = jsonout.Strp(s.Owner), jsonout.Strp(s.OwnerSubject)
 		}

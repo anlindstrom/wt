@@ -729,16 +729,13 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 				fmt.Fprintf(d.log, "  ▸ check %d/%d %s %s\n", at, max(len(d.checks), at), git.ShortID(head, 7), subject)
 			}
 		}
-		why, output, retried := runEachCommit(d.req.Path, s, EachCommitTimeout)
+		why, output, retried, took := runTimed(d.res.Timings, git.ShortID(head, 7)+" "+subject, d.req.Path, s, EachCommitTimeout)
+		logCheck(d.log, d.cfg, s, why, retried, took)
 		if why == "" {
-			if retried && d.log != nil {
-				fmt.Fprintf(d.log, "  ✓ %s passed on retry\n", s.Run)
-			}
 			continue
 		}
 		f := &CheckFailure{Step: s.Run, Commit: head, Subject: subject, Index: p.Index, Total: p.Total, Err: why, Output: output, Retried: retried}
 		if d.log != nil {
-			fmt.Fprintf(d.log, "  ✗ %s: %s\n", s.Run, why)
 			for _, line := range strings.Split(output, "\n") {
 				if line != "" {
 					fmt.Fprintf(d.log, "    %s\n", line)

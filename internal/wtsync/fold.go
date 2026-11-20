@@ -386,6 +386,7 @@ func (d *driver) runLayerStep(r *LayerStep, commits []string, touched map[string
 	}
 	var failed error
 	r.Output, r.Elapsed, failed = runStep(d.req.Path, step.Run, DeferTimeout)
+	d.res.Timings.Add(TimedStep, step.Run, fmt.Sprintf("layer %d/%d %s", r.Layer, r.Layers, r.Branch), r.Elapsed)
 	files, outside, err := d.stepOutput(step.Paths, already)
 	if err != nil {
 		return err
@@ -667,11 +668,23 @@ func (d *driver) recheckFold(rewritten, files []string) (*CheckFailure, error) {
 		if _, err := d.git("reset", "-q", "--hard", c); err != nil {
 			return nil, err
 		}
+		announced := false
 		for _, s := range steps {
 			if d.unavailable(s.Needs) != "" {
 				continue
 			}
-			if why, output, retried := runEachCommit(d.req.Path, s, EachCommitTimeout); why != "" {
+			if !announced && d.log != nil {
+				announced = true
+				fmt.Fprintf(d.log, "  ▸ recheck %s\n", git.ShortID(c, 7))
+			}
+			why, output, retried, took := runTimed(d.res.Timings, git.ShortID(c, 7)+" (recheck)", d.req.Path, s, EachCommitTimeout)
+			logCheck(d.log, d.cfg, s, why, retried, took)
+			if why != "" {
+				if d.log != nil {
+					for _, line := range lastOutputLines(output, 5) {
+						fmt.Fprintf(d.log, "    %s\n", line)
+					}
+				}
 				return &CheckFailure{Step: s.Run, Commit: c, Err: why, Output: output, Retried: retried}, nil
 			}
 		}
@@ -705,16 +718,16 @@ func (d *driver) logLayerStep(r LayerStep) {
 	case LayerOwed:
 		fmt.Fprintf(d.log, "  ✗ step %s layer %d/%d %s owed: %s\n", r.Step.Run, r.Layer, r.Layers, r.Branch, r.Why)
 	case LayerFailed:
-		fmt.Fprintf(d.log, "    ✗ owed: %s\n", r.Why)
+		fmt.Fprintf(d.log, "    ✗ owed: %s  %s\n", r.Why, FormatDuration(r.Elapsed))
 		for _, l := range lastOutputLines(r.Output, 20) {
 			fmt.Fprintf(d.log, "      %s\n", l)
 		}
 	case LayerUnchanged:
-		fmt.Fprintf(d.log, "    ✓ nothing to fold\n")
+		fmt.Fprintf(d.log, "    ✓ nothing to fold  %s\n", FormatDuration(r.Elapsed))
 	case LayerFolded:
-		fmt.Fprintf(d.log, "    ✓ folded into %s %s\n", git.ShortID(r.Owner, 7), r.OwnerSubject)
+		fmt.Fprintf(d.log, "    ✓ folded into %s %s  %s\n", git.ShortID(r.Owner, 7), r.OwnerSubject, FormatDuration(r.Elapsed))
 	case LayerCommitted:
-		fmt.Fprintf(d.log, "    ✓ no commit of the layer owns it: committed %s %s\n", git.ShortID(r.Commit, 7), r.Step.Commit)
+		fmt.Fprintf(d.log, "    ✓ no commit of the layer owns it: committed %s %s  %s\n", git.ShortID(r.Commit, 7), r.Step.Commit, FormatDuration(r.Elapsed))
 	}
 }
 

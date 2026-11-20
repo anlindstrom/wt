@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/anlindstrom/wt/internal/agents"
 	"github.com/anlindstrom/wt/internal/commands/kit"
@@ -342,14 +341,14 @@ func printDeferred(w io.Writer, d wtsync.DeferredResult) {
 	case !d.Ran:
 		fmt.Fprintf(w, "  ⏭ %s  %s\n", d.Step.Run, d.Why)
 	case d.Err != nil:
-		fmt.Fprintf(w, "  ✗ %s  %s  owed: %v\n", d.Step.Run, d.Elapsed.Round(time.Second), d.Err)
+		fmt.Fprintf(w, "  ✗ %s  %s  owed: %v\n", d.Step.Run, wtsync.FormatDuration(d.Elapsed), d.Err)
 		for _, l := range lastLines(d.Output, 20) {
 			fmt.Fprintf(w, "    %s\n", l)
 		}
 	case d.Commit != "":
-		fmt.Fprintf(w, "  ✓ %s  %s  committed %s (+%d −%d) as %s\n", d.Step.Run, d.Elapsed.Round(time.Second), kit.Count(d.Files, "file"), d.Insertions, d.Deletions, d.Commit)
+		fmt.Fprintf(w, "  ✓ %s  %s  committed %s (+%d −%d) as %s\n", d.Step.Run, wtsync.FormatDuration(d.Elapsed), kit.Count(d.Files, "file"), d.Insertions, d.Deletions, d.Commit)
 	default:
-		fmt.Fprintf(w, "  ✓ %s  %s\n", d.Step.Run, d.Elapsed.Round(time.Second))
+		fmt.Fprintf(w, "  ✓ %s  %s\n", d.Step.Run, wtsync.FormatDuration(d.Elapsed))
 	}
 }
 

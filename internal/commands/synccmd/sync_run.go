@@ -1139,10 +1139,14 @@ func (r *RunPlan) rebaseOne(b string) {
 			return
 		}
 	}
+	timed := wtsync.NewTimings()
+	req.Timings = timed
+	r.opts.Journal.TrackTimings(b, timed)
 	res, rerr := syncrun.TrackedRebase(r.tracker, &syncrun.RebaseInFlight{Work: p.work, Path: p.wt.Path, Safety: wtsync.SafetyRef(b, r.epoch)}, func() (wtsync.Result, error) {
 		return wtsync.Rebase(r.ctx.Repo.MainRoot, r.cfg, req, r.w)
 	})
 	p.result = &res
+	defer syncrun.ReportTimings(r.w, r.opts.Journal, b, timed, false)
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) {
 		jp.Checked, jp.CheckFailed, jp.Rechecked = res.Checked, syncrun.CheckFailedOf(res.CheckFailed), res.Rechecked
 	})

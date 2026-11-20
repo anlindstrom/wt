@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/git"
@@ -169,6 +170,9 @@ type SyncParticipant struct {
 	// Adopted is the rebase finished by hand that wt sync resume --adopt
 	// took over; null for anything else.
 	Adopted *AdoptedJSON `json:"adopted"`
+	// Timings is how long the run's each_commit checks and per-layer steps
+	// took; empty lists when none ran.
+	Timings TimingsJSON `json:"timings"`
 }
 
 // AdoptedJSON is what wt sync resume --adopt took over: the ref that keeps
@@ -279,6 +283,11 @@ type RunJournal struct {
 	// it caught changed, for a verb that moves several with nothing in
 	// flight to name: undo.
 	changed func(p *SyncParticipant) bool
+	// live is the timing record of each branch's rebase in flight, which a
+	// signal reads into the object: the handler exits without running the
+	// summary that ends a run.
+	liveMu sync.Mutex
+	live   map[string]*wtsync.Timings
 }
 
 // NewRunJournal is a journal that writes wt up's object to out.
@@ -487,6 +496,13 @@ func (j *RunJournal) untouched() bool {
 // work the handler names, and any still recorded as not run that changed
 // says the signal caught changed; the rest stand as recorded.
 func (j *RunJournal) caught(r *RunResult, inFlight, recovery string) {
+	j.liveMu.Lock()
+	for _, p := range r.Worktrees {
+		if rec := j.live[p.Branch]; rec != nil {
+			p.Timings = TimingsOf(rec.Summary())
+		}
+	}
+	j.liveMu.Unlock()
 	for _, p := range r.Worktrees {
 		caught := p.Branch == inFlight || p.Work == inFlight
 		if !caught && p.Result == ResultNotRun && j.changed != nil {

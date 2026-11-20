@@ -1662,6 +1662,7 @@ Each participant has `wt up`'s fields, and:
 | `emptied` | array | since `sync-run` 1.10.0: each commit a finished rebase set out to replay that left no commit in the result (trunk already has its change, or a conflict was resolved to trunk's side), oldest first, as [`dropped`](#dropped--a-commit-a-rebase-emptied); empty when none, and when the rebase did not finish |
 | `testsOnly` | array | since `sync-run` 1.10.0: each commit whose replay changed only paths matching the declaration's [`test_paths`](sync-declaration.md#test_paths--the-test-files) while the original changed others too, as `dropped`; empty when none or when none are declared |
 | `adopted` | object \| null | since `sync-run` 1.12.0: for `wt sync resume --adopt`, the [rebase finished by hand](sync-declaration.md#wt-sync-resume---adopt--a-rebase-finished-by-hand) it took over: `keptRef` (the ref that keeps the tip it found, made before anything moved: `refs/wt-sync-kept/<branch>/<epoch>-adopted`, or `-adopted-2` and on when that is taken; undo leaves it), `rebaseTip` (where the rebase itself finished, which the layers are moved against) and `commits` (the commits made after the rebase, oldest first, each `commit` and `subject`; they stay on the branch). A check that failed at a tip is in `failedSteps`. Null for every other run, and for a resume `--adopt` refused |
+| `timings` | object | since `sync-run` 1.20.0: how long the run's `each_commit` checks and per-layer steps took, as [`timings`](#timings--where-the-time-went). A resume's covers what that resume ran; empty lists when nothing ran, and for `wt sync undo` |
 
 ### `dropped` — a commit a rebase emptied
 
@@ -1864,6 +1865,27 @@ branch is the one layer. One entry per layer and step:
 | `owner`, `ownerSubject` | string \| null | for `folded`: the commit it folded into, as rewritten (the layer's last commit that changed one of its paths), and its subject |
 | `commit` | string \| null | for `committed`: the step's commit |
 | `proof` | string \| null | for a fold: `held` when the folded tip's tree is the step's output and no rewritten commit changed outside the step's `paths`; otherwise what did not hold, and nothing was folded. Null when nothing was folded |
+| `elapsedMs` | int | since `sync-run` 1.20.0: how long the step took at this layer, in milliseconds; 0 when it did not run |
+
+### `timings` — where the time went
+
+On each participant of `wt sync rebase`, `wt sync steps`, `wt sync resume` and
+`wt sync undo`. The text output ends with the same numbers. A resume's covers
+only what that resume ran, not the run it continues. Every duration is an
+integer number of milliseconds.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `wallMs` | int | the wall time of the run, or of the resume |
+| `runs` | array | one row per `each_commit` step and per per-layer step that ran, in the order each first ran; `[]` when none did |
+| `slowest` | array | the slowest runs of any check or step, slowest first, at most three; `[]` when none ran |
+
+A `runs` row: `kind` (`check` for an `each_commit` step, at every commit, tip
+or recheck it ran at; `step` for a per-layer step), `run` (its `run` line),
+`count` (how many times it ran; a check that failed and was retried is one
+run, with its retry's time in it) and `totalMs`. A `slowest` entry: `kind`,
+`run`, `at` (a commit's short id and subject, `<branch> tip <id>`, `<id>
+(recheck)`, or `layer n/N <branch>`) and `ms`.
 
 ## `wt new <type>/<work> [--base <ref>] --dry-run --json` — the plan
 
@@ -2403,3 +2425,4 @@ change made it.
 | `sync` 1.13.0, `sync-run` 1.17.0 | `top` on [`stack`](#stack--a-stack-held-on-one-line): the line's own branch, the last row of the look's layer table; `sameTip` on each side branch: branches at one tip are siblings, carried or held together, and none is `on` another |
 | `sync-run` 1.18.0 | [`fold`](#fold--what-a-fold-compared) on each participant: for a fold of the line, whether it is in place and on which base, and what its tree guard compared and found |
 | `sync-run` 1.19.0 | `eachCommit` gains `targets`: the run's `--each-commit=targets` mode, checks at each layer's tip and at each commit a fixup folded into |
+| `sync-run` 1.20.0 | [`timings`](#timings--where-the-time-went) on each participant: the run's wall time, how many times each check and step ran and its total, and the slowest runs; `elapsedMs` on each [`layerSteps`](#layersteps--a-step-at-every-layer-tip) entry. All in milliseconds |
