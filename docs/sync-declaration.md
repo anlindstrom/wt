@@ -129,7 +129,7 @@ decision, not a merge.
 ### `bullet-union`
 
 A Markdown bullet list that both sides only add to, such as a README's
-prerequisites or setup steps. It takes no other key. Trunk's items stay as
+prerequisites or setup steps. It needs no other key. Trunk's items stay as
 trunk has them, then the items the branch added follow in the branch's order.
 An item is its bullet line (`- `, `* ` or `+ `) with the more indented lines
 under it, and it moves and is compared as one unit; one both sides added is
@@ -253,7 +253,9 @@ rechecks after such a fold are at the targets and the tips only. The commits
 between are not checked and not owed, as under `tips`, and `retry`, a script the
 commit predates and `--allow-owed` work as there. `targets` is refused, before
 anything moves, for a run that is not an in-place fold (no `--autosquash`,
-`--onto`, or `--edit`): use `tips` there.
+`--onto`, or `--edit`): use `tips` there. A resume does not know the targets
+of the run before it, so its rechecks after a per-layer fold cover every
+commit the fold rewrote, and it says so.
 
 A resume takes no `--each-commit`: it goes on with the mode its run was
 given, which the handover records. `--each-commit=tips` with `--edit` is
@@ -320,12 +322,31 @@ In `wt sync rebase <work> --stack --autosquash`, which folds a line's
 `fixup!` commits into their targets, a check runs at a target once its
 fixups are folded in. `.wt-sync.yaml` has no key for `--stack`: a stack
 held on one line is rebased with the same declaration as any branch.
-Without `--layer`, a branch with no commits of its own (its tip is the line's
-tip or another layer's) that has uncommitted changes to tracked files in
-another worktree is listed as not taken, not held as a layer: it is probably a
-spike on the same commit. `--layer` takes it by name or by pattern as before, and its dirty
-worktree then holds it: it stays on the old commits until those changes are
-committed or stashed.
+
+The layers of a `--stack` line are the local branches, other than the line's
+own, whose tips are on the line, bottom first. A branch with a backup name
+(`wt refs sweep`'s backup patterns and `ref_keep_patterns`) is listed as not
+taken and moves only when `--layer` names it. Without `--layer`, a branch with
+no commits of its own (its tip is the line's tip or another layer's) that has
+uncommitted changes to tracked files in a worktree other than the line's own
+is listed as not taken, not held as a layer: it is probably a spike on the same
+commit. A line this would leave with no layer keeps them all. `--layer` takes
+it by name or by pattern, and its dirty worktree then holds it: it stays on
+the old commits until those changes are committed or stashed.
+
+`--layer` names the layers instead, and is repeated for several: a name that
+is no local branch, or whose tip is not on the line, is refused. A value with
+`*` or `?` is a pattern, matched against the whole branch name as the backup
+patterns are (`*` crosses a slash, `?` is one character, no `[...]`); quote it
+so the shell does not expand it. It takes every local branch it matches whose
+tip is on the line; a match that is a backup name or off the line is listed as
+not taken, and a pattern that takes no layer is refused before any branch of
+the stack moves: one that matches no local branch at all after the fetch and
+before local trunk is fast-forwarded, one whose matches are all backup names
+or off the line once the line is read, after trunk is fetched and local trunk
+perhaps fast-forwarded.
+`wt sync rebase tmp/stack --stack --layer 'tmp/layer/*'` takes a stack of
+many layers in one flag and leaves a stray branch on the line's tip out.
 
 A `--stack` run also carries the line's side branches: the local branches cut
 from a commit of the line that are not on it, those stacked on them, and those
@@ -345,7 +366,12 @@ command that moves a held branch, since only a run knows the new commits.
 The look lists the line's own branch as the last row of its layer table,
 marked as the top, with its commits from the line's base.
 
-`--autosquash` alone folds in place, onto the line's own base, so the replayed
+`--autosquash` alone folds in place, onto the line's own base, and says so at
+the top of its output (`folds <work> in place on its own base <sha>`, then the
+trunk commit the declaration and its scripts are read from); a conflict with
+trunk, which an in-place fold never meets, is not shown as contested. When the
+content check at the end passes it prints `✓ tip tree equal to <old tip>`,
+naming the step paths it left out. The replayed
 trees can predate a script trunk declared since. A step whose `run` starts
 with a repository path (`bin/check.sh`, `./gradlew`) that is not in the
 replayed commit's tree is not run there and does not stop the rebase with
@@ -465,8 +491,9 @@ markers its rebase wrote, checked the way a run checks them, never matched by
 subject; if one does not check out, nothing moves. The commits made after the
 rebase stay on the line's own branch and are named. Then the deferred steps
 run, and the checks run at every layer's tip and at the line's tip, as under
-`tips`. Under `all` that is said: the commits between were never checked. Under
-`off` no check runs. A check that fails, and a per-layer step (`each: layer`)
+`tips`. Under `all` that is said: the commits between were never checked.
+Under `targets` it is said too: the commits a fixup folded into are not known,
+and are not checked. Under `off` no check runs. A check that fails, and a per-layer step (`each: layer`)
 the hand finish went past, is owed, and a worktree with anything owed is not
 pushed. The checks of lower tips run in a temporary worktree of their own, and
 only that worktree's registration is ever removed, an interrupt's included. An
@@ -569,6 +596,44 @@ tip of the line. The JSON says, per layer and step, whether it ran and why,
 the commit it folded into, its commit, what is owed, and the proof
 (`layerSteps`, docs/json.md).
 
+## How long it took
+
+Every `each_commit` check, rechecks included, ends its line with its time:
+`✓ <name>  12s`, where the name is the base name of the command's first word
+(numbered, `make (#2)`, when two declared checks share it); a pass on retry and
+a failure name the `run` and carry the time too, a retry's counted with its
+`run`. Every per-layer step's result line carries its time, and so does each
+deferred step's.
+
+A run and a resume end with a summary, when a check or a per-layer step ran:
+the wall time (`⏱ the run took 14m3s`), each check and step with how many
+times it ran and its total, and the slowest three with their commit or layer.
+A resume says its numbers cover only what it ran. `--json` has the same as
+`timings` on the participant and `elapsedMs` on each `layerSteps` entry
+(docs/json.md).
+
+## Locks — one run per worktree
+
+A run takes a lock in each worktree it rebases or moves a layer in,
+`wt-sync.lock` in the worktree's own git dir, naming its process, when it started and who ran it. A
+second run is refused while the lock holds, with the pid and since when. A
+lock holds while it is younger than 30 minutes, and for as long as its process
+still runs, however old: a fold that runs for hours keeps its worktree. A
+process with that pid that started after the lock was taken reused the pid and
+does not hold it; one whose start cannot be read counts as running, so the cost
+of doubt is a refused run, never two at once. A refusal of an old lock says
+that the process is still running and that stopping it frees the worktree.
+
+Once the process is gone, a lock older than 30 minutes is expired: the next run
+breaks it, `wt sync doctor` names it and `--fix` removes it. A live one the
+doctor only names, with no fix. Ctrl-C releases every lock the run holds; a run
+that hands a stop over leaves its lock for `wt sync resume` to take over.
+
+Local trunk's fast-forward after the fetch is not under this lock: it runs
+before the run locks anything, and has its own checks instead (trunk checked
+out nowhere, or in a clean checkout with nothing in progress and no session
+busy in it; `wt up --help`).
+
 ## Waiting for a run in the background
 
 A shell tool of an agent cuts a foreground command off after about ten
@@ -590,8 +655,8 @@ copy holds what goes to stderr, never the result object). The log is made when
 the run takes its first lock. A worktree whose lock the run takes gets a
 `wt-sync-run.json` in its own git dir that names the log; a later run in the
 worktree replaces it. The exit code goes in `<log>.end` when the command ends.
-A look (`wt sync <work>`), a refusal before any lock, `wt sync undo` and a
-rebase across repositories (`--all`, `--roots`, `--profile`) write none, and a
+A look (`wt sync <work>`), a refusal before any lock, `wt sync undo`, `wt up`
+and a rebase across repositories (`--all`, `--roots`, `--profile`) write none, and a
 wait on their worktree finds no run. Logs older than 7 days whose process is
 gone are removed when a new one is made. A log that cannot be written is one
 warning and never changes the run.
@@ -601,7 +666,7 @@ A wait only reads. Its exit codes:
 | code | meaning |
 |---|---|
 | the run's | 0 done; 1 a handover or a failure (with a line pointing at `wt sync resume <work>` when the run left a plan); 130 Ctrl-C, 143 SIGTERM |
-| 124 | `--timeout` passed with the run still going; the run is untouched, wait again |
+| 124 | `--timeout` passed with the run still going; the run is untouched, wait again. A run that has ended exits with its own code, even when the timeout passes while the last of its log is still printing: the rest is left unprinted |
 | 1 | no run was seen in the worktree; a newer run holds it that the wait cannot follow; the run ended without saying how (killed or crashed: `wt sync doctor`) |
 
 ## `needs` — what a step cannot run without
