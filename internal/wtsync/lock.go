@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -273,4 +274,70 @@ func ReadLock(gitDir string) (*Lock, bool, error) {
 		}
 	}
 	return l, true, nil
+}
+
+// probeProcess reads one process: whether it exists, and when it started when
+// that can be read. Tests replace it.
+var probeProcess = osProbe
+
+// osProbe asks the kernel whether pid exists (signal 0: success, or EPERM for
+// a process of another user) and ps when it started. ps -o lstart= prints the
+// start, asked for in UTC, whole seconds, in the same fixed layout on macOS and
+// Linux (procps); a sysctl or /proc would each serve one of the two only.
+func osProbe(pid int) (exists bool, started time.Time, startKnown bool) {
+	err := syscall.Kill(pid, 0)
+	switch {
+	case errors.Is(err, syscall.ESRCH):
+		return false, time.Time{}, false
+	case err != nil && !errors.Is(err, syscall.EPERM):
+		return true, time.Time{}, false
+	}
+	out, perr := psStart(pid)
+	if perr != nil {
+		// ps exits non-zero for a pid that went since the signal.
+		if errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+			return false, time.Time{}, false
+		}
+		return true, time.Time{}, false
+	}
+	t, ok := parsePSStart(out)
+	return true, t, ok
+}
+
+// psCommand is the ps call that reads a process's start. Tests replace it.
+var psCommand = func(pid int) *exec.Cmd {
+	cmd := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid))
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+	return cmd
+}
+
+// psTimeout bounds that call.
+var psTimeout = 5 * time.Second
+
+func psStart(pid int) (string, error) {
+	out, err := psCommand(pid).Output()
+	return string(out), err
+}
+
+// parsePSStart reads what ps -o lstart= printed .
+func parsePSStart(out string) (time.Time, bool) {
+	t, err := time.ParseInLocation("Mon Jan 2 15:04:05 2006", strings.Join(strings.Fields(out), " "), time.Local)
+	return t, err == nil
+}
+
+// ProcessRunning reports whether a process with pid that started no later
+// than notAfter still runs on this machine. A process that started after
+// notAfter reused the pid and is somebody else. Whatever cannot be told (the
+// start time unreadable) counts as running: the cost is a refused run, never
+// two runs at once. notAfter is whole seconds in a lock, and ps's start is
+// too, so a second of slack is allowed.
+func ProcessRunning(pid int, notAfter time.Time) bool {
+	if pid <= 0 {
+		return false
+	}
+	exists, started, known := probeProcess(pid)
+	if !exists {
+		return false
+	}
+	return !known || !started.After(notAfter.Add(time.Second))
 }
