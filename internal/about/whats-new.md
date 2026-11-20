@@ -4,6 +4,13 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-20 12:10 — wt sync --stack leaves a dirty stray branch alone
+
+Without `--layer`, a branch that has no commits of its own (its tip is the
+line's tip or another layer's) and uncommitted changes to tracked files in
+another worktree is no longer taken as a layer and held: it is listed as not
+taken, with why. `--layer` still takes it, by name or by pattern.
+
 ## 2026-11-20 12:00 — wt sync wait: wait for a long run in the background
 
 `wt sync wait [<work>] [--timeout 9m]` waits for the `wt sync rebase`, `steps`
