@@ -1089,6 +1089,10 @@ func syncRebase(cmd *cobra.Command, works []string, ctx *kit.Context, f syncVerb
 // rebaseCommand names wt sync rebase in its --json result.
 const rebaseCommand = "sync rebase"
 
+// noRunLog is a test hook: it skips the copy, to compare a run's output with
+// and without it.
+var noRunLog bool
+
 // runLogged are the verbs whose output wt sync wait can follow.
 var runLogged = map[string]bool{rebaseCommand: true, "sync steps": true, "sync resume": true}
 
@@ -1098,7 +1102,7 @@ var runLogged = map[string]bool{rebaseCommand: true, "sync steps": true, "sync r
 // names the verb in that object.
 func withVerbContext(cmd *cobra.Command, args []string, command string, asJSON bool,
 	fn func(ctx *kit.Context, j *syncrun.RunJournal) error) error {
-	if runLogged[command] {
+	if runLogged[command] && !noRunLog {
 		// The run's log is a copy of what it prints to the person: both
 		// writers copy into it, the JSON result object (written on the
 		// original stdout below) never does.

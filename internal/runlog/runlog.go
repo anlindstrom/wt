@@ -35,6 +35,18 @@ const (
 	KeepFor = 7 * 24 * time.Hour
 )
 
+// running is wtsync.ProcessRunning; tests inject a slow or scripted one.
+var running = wtsync.ProcessRunning
+
+// afterLockCheck runs in Locked once the worktree's lock is known to be this
+// invocation's, before the pointer is written. Tests hold a write there.
+var afterLockCheck func()
+
+// Quiesce stops the pointer writes of this log for good, once any in flight
+// has finished: the signal path calls it before it releases the locks, so a
+// successor that takes a freed lock is never overwritten.
+func (l *Log) Quiesce() {}
+
 // Now is the clock the log's names and pointers use. It is the real one: a
 // pointer's start time is compared with the process table.
 var Now = time.Now
@@ -218,6 +230,9 @@ func (l *Log) Locked(commonDir, gitDir string) {
 		_ = os.Remove(filepath.Join(gitDir, PointerName))
 		return
 	}
+	if afterLockCheck != nil {
+		afterLockCheck()
+	}
 	if err := l.writePointer(gitDir); err != nil {
 		_ = os.Remove(filepath.Join(gitDir, PointerName))
 		l.warnOnce(&l.ptrOff, err)
@@ -308,7 +323,7 @@ func prune(dir string, now time.Time) {
 			continue
 		}
 		start, pid, ok := parseName(name)
-		if ok && wtsync.ProcessRunning(pid, start) {
+		if ok && running(pid, start) {
 			continue
 		}
 		path := filepath.Join(dir, name)
