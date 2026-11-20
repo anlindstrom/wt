@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/anlindstrom/wt/internal/git"
+	"github.com/anlindstrom/wt/internal/runlog"
 )
 
 // InterruptStatus is what a shell expects from a command a signal ended.
@@ -106,6 +107,9 @@ func handleSignals(ch <-chan os.Signal, done <-chan struct{}, finished chan<- st
 		if j := CurrentInterruptJournal(); j != nil {
 			j.Interrupted(inFlight, strings.TrimSpace(said.String()))
 		}
+		// The run's log is complete now: everything the interrupt callback
+		// printed is in it, and the end file says how the run ended.
+		runlog.EndActiveForExit(128 + int(sig.(syscall.Signal)))
 		os.Exit(128 + int(sig.(syscall.Signal)))
 	case <-done:
 		// The last watch stopped notifications before it closed done, so a

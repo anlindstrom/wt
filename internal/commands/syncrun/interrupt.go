@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
+	"github.com/anlindstrom/wt/internal/runlog"
 	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
@@ -84,6 +85,9 @@ func OnInterrupt(w io.Writer, locks []*wtsync.Lock, at *RebaseInFlight) {
 	// The process exits from the handler without running any deferred
 	// cleanup, so the directories go now or never.
 	wtsync.RemoveTempDirs()
+	// A pointer write in flight finishes, and no other starts, before a lock
+	// is freed for a successor to take.
+	runlog.QuiesceActive()
 	for _, l := range locks {
 		if l != nil {
 			_ = l.Release()

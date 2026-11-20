@@ -989,6 +989,7 @@ func (r *RunPlan) lockAll() error {
 			continue
 		}
 		p.lock = lock
+		r.ctx.NoteLock(gitDir)
 		// A check that cannot be run is not a passed check: this fails
 		// closed, the way the restore check in wtsync does. It says so,
 		// rather than reporting the state it never managed to read.
