@@ -923,8 +923,11 @@ func newSyncRebaseCmd() *cobra.Command {
 			"tip. The layers are the local branches whose tips are on the line, bottom\n" +
 			"first, or the ones --layer names (repeatable); a branch with a backup\n" +
 			"name (wt refs sweep's patterns) is listed and taken only by --layer\n" +
-			"naming it. --layer takes a pattern too: a value with * or ? takes every\n" +
-			"local branch it matches whose tip is on the line, matched as the backup\n" +
+			"naming it; so is a branch with no commits of its own (its tip is the\n" +
+			"line's tip or another layer's) with uncommitted changes to tracked files\n" +
+			"in another worktree, which --layer takes as well. --layer takes a\n" +
+			"pattern too: a value with * or ? takes every local branch it matches\n" +
+			"whose tip is on the line, matched as the backup\n" +
 			"patterns are (* crosses a slash, no [...]); quote it so the shell does\n" +
 			"not expand it. A pattern lists, and does not take, a backup name or a\n" +
 			"branch off the line; one that takes no layer is refused. Several layers\n" +
