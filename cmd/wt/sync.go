@@ -922,11 +922,11 @@ func newSyncRebaseCmd() *cobra.Command {
 			"itself), and the line is every commit from where it leaves trunk to its\n" +
 			"tip. The layers are the local branches whose tips are on the line, bottom\n" +
 			"first, or the ones --layer names (repeatable); a branch with a backup\n" +
-			"name (wt refs sweep's patterns) is listed and taken only by --layer\n" +
-			"naming it; so is a branch with no commits of its own (its tip is the\n" +
-			"line's tip or another layer's) with uncommitted changes to tracked files\n" +
-			"in another worktree, which --layer takes as well. --layer takes a\n" +
-			"pattern too: a value with * or ? takes every local branch it matches\n" +
+			"name (wt refs sweep's patterns and ref_keep_patterns) is listed and\n" +
+			"taken only by --layer naming it; so is a branch with no commits of its\n" +
+			"own (its tip is the line's tip or another layer's) with uncommitted\n" +
+			"changes to tracked files in another worktree, which --layer takes as\n" +
+			"well. --layer takes a pattern too: a value with * or ? takes every local branch it matches\n" +
 			"whose tip is on the line, matched as the backup\n" +
 			"patterns are (* crosses a slash, no [...]); quote it so the shell does\n" +
 			"not expand it. A pattern lists, and does not take, a backup name or a\n" +
@@ -1217,10 +1217,11 @@ func newSyncWaitCmd() *cobra.Command {
 			"and nor does a rebase across repositories. A wait only reads: it takes\n" +
 			"no lock and writes nothing, and ending it leaves the run as it is.\n\n" +
 			"Exit: the run's code (0, or 1 for a handover or a failure, with a line\n" +
-			"pointing at wt sync resume when it left a plan; 130 for Ctrl-C); 124 when\n" +
-			"--timeout passed with the run still going (a run that has ended always\n" +
-			"exits with its own code: when the timeout passes while the last of its log\n" +
-			"is still printing, the rest is left unprinted); 1 when no run was seen in\n" +
+			"pointing at wt sync resume when it left a plan; 130 for Ctrl-C, 143 for\n" +
+			"SIGTERM); 124 when --timeout passed with the run still going (a run that\n" +
+			"has ended always exits with its own code: when the timeout passes while\n" +
+			"the last of its log is still printing, the rest is left unprinted); 1\n" +
+			"when no run was seen in\n" +
 			"<work>, when a newer run holds it that wait cannot follow, or when the run\n" +
 			"ended without saying how (killed, or a crash: wt sync doctor).",
 		Example: "  wt sync rebase tmp/stack --stack --yes > run.log 2>&1 &  # in the background\n" +

@@ -255,7 +255,7 @@
         "oldTip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Its tip before the run." },
         "commits": { "type": "integer", "minimum": 1, "description": "Its commits from the line's base, its tip included." },
         "subject": { "type": "string", "description": "Its tip's subject." },
-        "foundBy": { "enum": ["tipOnLine", "named"], "description": "tipOnLine: a local branch whose tip is a commit of the line. named: named with --layer." },
+        "foundBy": { "enum": ["tipOnLine", "named"], "description": "tipOnLine: a local branch whose tip is a commit of the line. named: named with --layer, by name or by a pattern." },
         "worktree": { "type": ["string", "null"], "description": "The worktree the branch is checked out in; null when it is in none." },
         "state": { "enum": ["none", "clean", "dirty", "rebasing", "bisecting", "busy", "idle", "process", "unknown"], "description": "What holds the layer's worktree: none (in no worktree), clean (nothing), dirty (tracked changes), rebasing (a rebase in progress, there or in another worktree that will move it), bisecting (a bisect in another worktree started from it), busy or idle (an agent session), process (a process whose working directory is inside the worktree), unknown (it could not be read, which holds the layer). In a run, as read when the layer was moved." },
         "stateDetail": { "type": ["string", "null"], "description": "Who or what holds it: the session, the process, or why it could not be read." },
@@ -265,7 +265,7 @@
         "patch": { "oneOf": [{ "type": "null" }, { "enum": ["same", "changed", "unknown"] }], "description": "The run's: whether what the layer brings to the line is the same patch as before, by git's stable patch-id. Never a refusal." },
         "patchWhy": { "type": ["string", "null"], "description": "The run's: why the patch changed." },
         "result": { "oneOf": [{ "type": "null" }, { "enum": ["moved", "held", "unchanged", "planned", "moving", "needsRecovery"] }], "description": "The run's: moved (the branch is at newTip, its worktree reset with it), held (left where it was; held says why and moveCommand moves it by hand), unchanged (its new tip is its old one), planned (recorded and not moved: the moves stopped before it), moving (its move was under way when the moves stopped: undo puts its ref back), needsRecovery (a move that went part way and could not be put back: held says what to look at, the layer keeps its pins, and wt sync undo puts it back)." },
-        "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }], "description": "The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (reset --keep in its worktree, under that worktree's lock)." },
+        "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }], "description": "The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (in its worktree, under that worktree's lock: the same guarded update-ref, then its files follow with read-tree -m -u)." },
         "held": { "type": ["string", "null"], "description": "The run's: why the layer was held, or for needsRecovery what to look at." },
         "moveCommand": { "type": ["string", "null"], "description": "The run's: what moves a held layer by hand." },
         "pushCommand": { "oneOf": [{ "type": "null" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }], "description": "The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run does not push layers. Null otherwise." },
@@ -315,7 +315,7 @@
     },
     "stackSkipped": {
       "type": "object",
-      "description": "Since 1.7.0: a branch on the line not taken as a layer: a backup name (wt refs sweep's patterns), or, without --layer, a branch with no commits of its own that has uncommitted tracked changes in another worktree; --layer takes either. A branch a --layer pattern matched whose tip is not on the line is listed here too.",
+      "description": "Since 1.7.0: a branch on the line not taken as a layer: a backup name (wt refs sweep's patterns and ref_keep_patterns), or, without --layer, a branch with no commits of its own that has uncommitted tracked changes in another worktree; --layer naming it takes either, and a pattern never takes a backup name. A branch a --layer pattern matched whose tip is not on the line is listed here too.",
       "required": ["branch", "tip", "reason"],
       "properties": {
         "branch": { "type": "string" },
