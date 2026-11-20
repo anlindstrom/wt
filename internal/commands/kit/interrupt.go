@@ -109,7 +109,7 @@ func handleSignals(ch <-chan os.Signal, done <-chan struct{}, finished chan<- st
 		}
 		// The run's log is complete now: everything the interrupt callback
 		// printed is in it, and the end file says how the run ended.
-		runlog.EndActive(128 + int(sig.(syscall.Signal)))
+		runlog.EndActiveForExit(128 + int(sig.(syscall.Signal)))
 		os.Exit(128 + int(sig.(syscall.Signal)))
 	case <-done:
 		// The last watch stopped notifications before it closed done, so a

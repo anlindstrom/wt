@@ -125,6 +125,7 @@ type Log struct {
 	logWarn bool
 	ptrOff  bool
 	ended   bool
+	exiting bool // the process exits once it has ended: no write proceeds after
 	opened  bool
 }
 
@@ -172,6 +173,12 @@ type tee struct {
 // shown, and an end cannot come between a write and its copy.
 func (t *tee) Write(p []byte) (int, error) {
 	t.l.mu.Lock()
+	if t.l.exiting {
+		// The end is published and the process is about to exit: what this
+		// would show, the log would not hold.
+		t.l.mu.Unlock()
+		select {}
+	}
 	defer t.l.mu.Unlock()
 	n, err := t.w.Write(p)
 	if n > 0 {
@@ -414,9 +421,15 @@ func QuiesceActive() {
 	}
 }
 
-// EndForExit is End for a process about to exit: once it has returned, no
-// write through this log's writers proceeds. Stub.
-func (l *Log) EndForExit(code int) { l.End(code) }
+// EndForExit is End for a process about to exit: once the end is published,
+// no write through this log's writers proceeds (it waits for the exit), so
+// nothing is shown that the log does not hold.
+func (l *Log) EndForExit(code int) {
+	l.mu.Lock()
+	l.exiting = true
+	l.mu.Unlock()
+	l.End(code)
+}
 
 // EndActiveForExit is Log.EndForExit on the active log, and nothing without one.
 func EndActiveForExit(code int) {

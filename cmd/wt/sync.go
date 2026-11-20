@@ -1215,7 +1215,9 @@ func newSyncWaitCmd() *cobra.Command {
 			"no lock and writes nothing, and ending it leaves the run as it is.\n\n" +
 			"Exit: the run's code (0, or 1 for a handover or a failure, with a line\n" +
 			"pointing at wt sync resume when it left a plan; 130 for Ctrl-C); 124 when\n" +
-			"--timeout passed with the run still going; 1 when no run was seen in\n" +
+			"--timeout passed with the run still going (a run that has ended always\n" +
+			"exits with its own code: when the timeout passes while the last of its log\n" +
+			"is still printing, the rest is left unprinted); 1 when no run was seen in\n" +
 			"<work>, when a newer run holds it that wait cannot follow, or when the run\n" +
 			"ended without saying how (killed, or a crash: wt sync doctor).",
 		Example: "  wt sync rebase tmp/stack --stack --yes > run.log 2>&1 &  # in the background\n" +

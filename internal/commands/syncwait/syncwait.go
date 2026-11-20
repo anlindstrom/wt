@@ -73,10 +73,32 @@ func Wait(ctx *kit.Context, work string, opts Options, w io.Writer) error {
 			return gitDir, kit.WorktreeName(ctx, wt.Branch, wt.Path), nil
 		}
 	}
-	gitDir, name, err := resolve(target)
-	if err != nil {
-		return err
+	// Resolving runs git, so it is inside the timeout too: a lookup still
+	// going when the deadline comes is given up on.
+	type resolved struct {
+		gitDir, name string
+		err          error
 	}
+	res := make(chan resolved, 1)
+	go func() {
+		g, n, err := resolve(target)
+		res <- resolved{g, n, err}
+	}()
+	var r resolved
+	if opts.Timeout > 0 {
+		select {
+		case r = <-res:
+		case <-time.After(max(opts.Timeout-opts.Now().Sub(started), 0)):
+			fmt.Fprintf(w, "… still running after %s; %s again to keep waiting\n", opts.TimeoutLabel, againLine(work))
+			return kit.ExitError{Code: TimeoutStatus}
+		}
+	} else {
+		r = <-res
+	}
+	if r.err != nil {
+		return r.err
+	}
+	gitDir, name := r.gitDir, r.name
 	return follow(gitDir, name, work, opts, started, w)
 }
 
@@ -108,14 +130,6 @@ func follow(gitDir, name, work string, opts Options, started time.Time, w io.Wri
 		}
 		d := deadline.Sub(now())
 		return d, d > 0
-	}
-	again := "wt sync wait"
-	if work != "" {
-		again += " " + work
-	}
-	timedOut := func() error {
-		fmt.Fprintf(w, "… still running after %s; %s again to keep waiting\n", opts.TimeoutLabel, again)
-		return kit.ExitError{Code: TimeoutStatus}
 	}
 	// probe is opts.Running within the time left: a probe still going when
 	// the deadline comes is given up on, and the wait ends at 124.
@@ -152,6 +166,16 @@ func follow(gitDir, name, work string, opts Options, started time.Time, w io.Wri
 		return fmt.Errorf("cannot read the run log %s: %w", ptr.Log, err)
 	}
 	defer f.Close() //nolint:errcheck // read only
+
+	// timedOut ends a wait whose deadline passed: with 124, unless the run
+	// has ended, whose code wins however late the replay of its log was.
+	timedOut := func() error {
+		if code, ended, err := runlog.ReadEnd(ptr.Log); err == nil && ended {
+			return finish(w, gitDir, work, code)
+		}
+		fmt.Fprintf(w, "… still running after %s; %s again to keep waiting\n", opts.TimeoutLabel, againLine(work))
+		return kit.ExitError{Code: TimeoutStatus}
+	}
 
 	lastGrew := started
 	buf := make([]byte, 32*1024)
@@ -244,6 +268,14 @@ func follow(gitDir, name, work string, opts Options, started time.Time, w io.Wri
 		}
 		time.Sleep(min(opts.Poll, d))
 	}
+}
+
+// againLine is the command that waits again.
+func againLine(work string) string {
+	if work == "" {
+		return "wt sync wait"
+	}
+	return "wt sync wait " + work
 }
 
 // newerRun is the error for a worktree that a run this wait cannot follow

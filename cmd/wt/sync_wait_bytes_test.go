@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -16,15 +18,6 @@ var durations = regexp.MustCompile(`\d+(\.\d+)?(ms|s|m)\b`)
 // clocks are what a clock decides in the JSON: a safety ref's epoch in
 // nanoseconds and the millisecond timings.
 var clocks = regexp.MustCompile(`(refs/wt-sync/\S+?/)\d{10,}|("[a-zA-Z]*[mM]s": )\d+`)
-
-// slowestAt is where the slowest list of the JSON puts each check: checks
-// that all took no time are listed in no fixed order.
-var slowestAt = regexp.MustCompile(`"at": "[^"]*"`)
-
-// slowest is the lines of the timing summary's "slowest" list: checks that
-// all took 0 s are listed in no fixed order, so they are left out of the
-// comparison (the rest of the summary is compared).
-var slowest = regexp.MustCompile(`(?m)^ +<d>  (check|step) .* at .*\n`)
 
 // runIn runs wt in dir in this process with the copy on or off and returns
 // stdout and stderr apart, and the log it wrote ("" when none).
@@ -100,15 +93,70 @@ func TestTheCopyLeavesTheOutputUntouched(t *testing.T) {
 	}
 }
 
+// slowestBlock is the timing summary's list of the slowest runs in the text.
+var slowestBlock = regexp.MustCompile(`(?m)^( +slowest:\n)((?: +<d>  .*\n)+)`)
+
 // normaliseRun is what a clock or a repository decides in a run's output,
-// made the same, and nothing else.
+// made the same, and nothing else: paths, the durations, the safety ref's
+// epoch, and the order of timing entries that tie (all took no time). Each
+// entry keeps its kind, its run and where it ran.
 func normaliseRun(s string, paths ...[2]string) string {
 	for _, r := range paths {
 		s = strings.ReplaceAll(s, r[0], r[1])
 	}
+	var v any
+	if json.Unmarshal([]byte(s), &v) == nil {
+		out, _ := json.MarshalIndent(normaliseJSON(v), "", "  ")
+		return string(out)
+	}
 	s = clocks.ReplaceAllString(s, "${1}${2}<n>")
-	s = slowestAt.ReplaceAllString(s, `"at": "<at>"`)
-	return slowest.ReplaceAllString(durations.ReplaceAllString(s, "<d>"), "")
+	s = durations.ReplaceAllString(s, "<d>")
+	return slowestBlock.ReplaceAllStringFunc(s, func(block string) string {
+		m := slowestBlock.FindStringSubmatch(block)
+		lines := strings.SplitAfter(m[2], "\n")
+		sort.Strings(lines)
+		return m[1] + strings.Join(lines, "")
+	})
+}
+
+// normaliseJSON zeroes the millisecond timings and the safety ref's epoch, and
+// sorts each "slowest" list by its entries' content.
+func normaliseJSON(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		for k, e := range v {
+			switch {
+			case strings.HasSuffix(strings.ToLower(k), "ms"):
+				if _, ok := e.(float64); ok {
+					v[k] = 0.0
+					continue
+				}
+			case k == "slowest":
+				if list, ok := e.([]any); ok {
+					for i := range list {
+						list[i] = normaliseJSON(list[i])
+					}
+					sort.Slice(list, func(i, j int) bool {
+						a, _ := json.Marshal(list[i])
+						b, _ := json.Marshal(list[j])
+						return string(a) < string(b)
+					})
+					v[k] = list
+					continue
+				}
+			}
+			v[k] = normaliseJSON(e)
+		}
+		return v
+	case []any:
+		for i := range v {
+			v[i] = normaliseJSON(v[i])
+		}
+		return v
+	case string:
+		return clocks.ReplaceAllString(v, "${1}${2}<n>")
+	}
+	return v
 }
 
 // The comparison sees a timing entry that is missing, and one that names
