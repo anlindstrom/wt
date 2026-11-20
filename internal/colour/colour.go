@@ -44,7 +44,10 @@ func Enabled(w io.Writer, mode string) bool {
 	case "never":
 		return false
 	}
-	f, ok := w.(*os.File)
+	// Anything that exposes the descriptor it writes to decides as that
+	// descriptor does: a writer wrapped around the terminal's file (a copy
+	// of the output, say) must not turn colour off or on.
+	f, ok := w.(interface{ Fd() uintptr })
 	if !ok || !term.IsTerminal(int(f.Fd())) {
 		return false
 	}

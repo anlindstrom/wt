@@ -166,6 +166,9 @@ func pacedFoldLine(t *testing.T) (dir, tmp, gate string, s *gittest.FoldLine) {
 	yaml = strings.Replace(yaml, "test ! -e broken.marker", waitCheck, 1)
 	yaml = strings.Replace(yaml, "./gen.sh", waitStep, 1)
 	_, s = synccmdtest.FoldLine(t, yaml)
+	// f3 holds uncommitted work, which holds the layer back: not what these
+	// tests are about.
+	gittest.Git(t, s.Paths["f3"], "checkout", "--", ".")
 	return s.Dir, gittest.FoldTmp, t.TempDir(), s
 }
 
@@ -323,7 +326,7 @@ func TestSyncWaitOnAWriterThatIsGone(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sleeper.Process.Kill(); _ = sleeper.Wait() })
-	writePointer(t, gd, log, sleeper.Process.Pid, time.Now().Add(-time.Minute))
+	writePointer(t, gd, log, sleeper.Process.Pid, time.Now())
 	out, code = wtOut(t, dir, gate, "sync", "wait", tmp, "--timeout", "1s")
 	if code != 124 {
 		t.Fatalf("exit %d:\n%s", code, out)

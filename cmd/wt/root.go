@@ -13,6 +13,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/session"
 	"github.com/anlindstrom/wt/internal/commands/synckeep"
 	"github.com/anlindstrom/wt/internal/config"
+	"github.com/anlindstrom/wt/internal/runlog"
 )
 
 var version = "dev"
@@ -270,14 +271,27 @@ func printLine(cmd *cobra.Command, s string, err error) error {
 // Execute runs the CLI and returns the process exit code.
 func Execute() int {
 	root := newRootCmd()
-	if err := root.Execute(); err != nil {
-		fmt.Fprint(os.Stderr, errorLine(os.Stderr, err))
-		return errorStatus(err)
+	err := root.Execute()
+	code := 0
+	if err != nil {
+		code = errorStatus(err)
+		var exit kit.ExitError
+		if !errors.As(err, &exit) {
+			line := errorLine(os.Stderr, err)
+			fmt.Fprint(os.Stderr, line)
+			// The same bytes are in the run's log, so a wait shows why it failed.
+			runlog.CopyActive([]byte(line))
+		}
 	}
-	return 0
+	runlog.EndActive(code)
+	return code
 }
 
 func errorStatus(err error) int {
+	var exit kit.ExitError
+	if errors.As(err, &exit) {
+		return exit.Code
+	}
 	if errors.Is(err, synckeep.ErrNoLaunchd) {
 		return 3
 	}

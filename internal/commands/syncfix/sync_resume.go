@@ -401,6 +401,7 @@ func (r *resume) takeLock() error {
 		return fmt.Errorf("%s: %w; nothing is resumed", r.name, err)
 	}
 	r.lock = lock
+	r.ctx.NoteLock(r.gitDir)
 	// The checks ran without the lock. Another wt that ended this run in
 	// between had to hold it to do so, so with the lock in hand the handover
 	// is either still the one they read or gone.

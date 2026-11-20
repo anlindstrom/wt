@@ -14,7 +14,9 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/synckeep"
 	"github.com/anlindstrom/wt/internal/commands/synckeep/keepstate"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
+	"github.com/anlindstrom/wt/internal/commands/syncwait"
 	"github.com/anlindstrom/wt/internal/reposel"
+	"github.com/anlindstrom/wt/internal/runlog"
 	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
@@ -282,7 +284,7 @@ func newSyncCmd() *cobra.Command {
 	for _, name := range []string{"rebase", "resume", "undo", "yes", "push", "no-push", "force", "if-ready", "expect", "no-ff-trunk", "allow-diverged", "allow-owed", "allow-dropped", "edit", "each-commit"} {
 		_ = sync.Flags().MarkHidden(name)
 	}
-	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncStepsCmd(), newSyncPushToCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
+	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
 	return sync
 }
 
@@ -1087,12 +1089,25 @@ func syncRebase(cmd *cobra.Command, works []string, ctx *kit.Context, f syncVerb
 // rebaseCommand names wt sync rebase in its --json result.
 const rebaseCommand = "sync rebase"
 
+// runLogged are the verbs whose output wt sync wait can follow.
+var runLogged = map[string]bool{rebaseCommand: true, "sync steps": true, "sync resume": true}
+
 // withVerbContext runs a wt sync verb in the repository it is in. With
 // asJSON its result is one object on stdout, written however the verb ends,
 // and everything it prints, questions included, goes to stderr; command
 // names the verb in that object.
 func withVerbContext(cmd *cobra.Command, args []string, command string, asJSON bool,
 	fn func(ctx *kit.Context, j *syncrun.RunJournal) error) error {
+	if runLogged[command] {
+		// The run's log is a copy of what it prints to the person: both
+		// writers copy into it, the JSON result object (written on the
+		// original stdout below) never does.
+		log := runlog.Begin(cmd.ErrOrStderr())
+		cmd.SetErr(log.Wrap(cmd.ErrOrStderr()))
+		if !asJSON {
+			cmd.SetOut(log.Wrap(cmd.OutOrStdout()))
+		}
+	}
 	if !asJSON {
 		return withContext(func(_ *cobra.Command, _ []string, ctx *kit.Context) error {
 			return fn(ctx, nil)
@@ -1177,6 +1192,54 @@ func syncAcross(cmd *cobra.Command, args []string, verb string, sel reposel.Sele
 		}
 	}
 	return synccmd.SyncRebaseAll(u, sel, all, cmd.OutOrStdout())
+}
+
+func newSyncWaitCmd() *cobra.Command {
+	var timeout string
+	wait := &cobra.Command{
+		Use:   "wait [<work>]",
+		Short: "Wait for the run in a worktree to end, showing what it prints",
+		Long: "Follow the run in <work> (the worktree you are in by default) until it\n" +
+			"ends: print what it printed, from its start and then as it goes (the\n" +
+			"checks, the steps, the stops, the timing summary), and exit with the\n" +
+			"code the run exits with. For a run in the background: a command in an\n" +
+			"agent's shell is cut off after about ten minutes, and a rebase takes longer.\n\n" +
+			"A run keeps a copy of what it prints under the repository's .git\n" +
+			"(wt-sync-logs/), and each worktree it locks points at it: wt sync rebase,\n" +
+			"steps and resume write one, a look and a refusal before any lock do not,\n" +
+			"and nor does a rebase across repositories. A wait only reads: it takes\n" +
+			"no lock and writes nothing, and ending it leaves the run as it is.\n\n" +
+			"Exit: the run's code (0, or 1 for a handover or a failure, with a line\n" +
+			"pointing at wt sync resume when it left a plan; 130 for Ctrl-C); 124 when\n" +
+			"--timeout passed with the run still going; 1 when no run was seen in\n" +
+			"<work>, when a newer run holds it that wait cannot follow, or when the run\n" +
+			"ended without saying how (killed, or a crash: wt sync doctor).",
+		Example: "  wt sync rebase tmp/stack --stack --yes > run.log 2>&1 &  # in the background\n" +
+			"  wt sync wait tmp/stack --timeout 9m   # shows progress; 124: run again\n" +
+			"  wt sync wait                          # the worktree you are in\n" +
+			"  wt sync wait tmp/stack && wt sync tmp/stack  # then look at the line",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeWork,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts := syncwait.Options{}
+			if timeout != "" {
+				d, err := time.ParseDuration(timeout)
+				if err != nil || d <= 0 {
+					return usagef("--timeout takes a Go duration such as 9m or 90s, not %q", timeout)
+				}
+				opts.Timeout, opts.TimeoutLabel = d, timeout
+			}
+			work := ""
+			if len(args) == 1 {
+				work = args[0]
+			}
+			return withContext(func(cmd *cobra.Command, _ []string, ctx *kit.Context) error {
+				return syncwait.Wait(ctx, work, opts, cmd.OutOrStdout())
+			})(cmd, args)
+		},
+	}
+	wait.Flags().StringVar(&timeout, "timeout", "", "stop waiting after this long (a Go duration, 9m) and exit 124, the run untouched; none waits for the end")
+	return wait
 }
 
 func newSyncStepsCmd() *cobra.Command {
