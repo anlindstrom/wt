@@ -168,9 +168,18 @@ func follow(gitDir, name, work string, opts Options, started time.Time, w io.Wri
 	defer f.Close() //nolint:errcheck // read only
 
 	// timedOut ends a wait whose deadline passed: with 124, unless the run
-	// has ended, whose code wins however late the replay of its log was.
+	// has ended, whose code wins however late the replay of its log was. An
+	// end file that cannot be read is said, as a poll says it, and a newer
+	// run holding the worktree is said before any end of this one is taken.
 	timedOut := func() error {
-		if code, ended, err := runlog.ReadEnd(ptr.Log); err == nil && ended {
+		code, ended, err := runlog.ReadEnd(ptr.Log)
+		if err != nil {
+			return err
+		}
+		if ended {
+			if err := newerRun(gitDir, ptr, name, func() bool { return probe(ptr.PID, ptr.Started()) }, probe); err != nil {
+				return err
+			}
 			return finish(w, gitDir, work, code)
 		}
 		fmt.Fprintf(w, "… still running after %s; %s again to keep waiting\n", opts.TimeoutLabel, againLine(work))
