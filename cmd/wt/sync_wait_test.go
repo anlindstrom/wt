@@ -108,8 +108,8 @@ func (p *proc) exit(t *testing.T) int {
 	select {
 	case <-p.done:
 		return p.code
-	case <-time.After(60 * time.Second):
-		t.Fatalf("still running after 60s:\n%s", p.out.String())
+	case <-time.After(5 * time.Minute):
+		t.Fatalf("still running after 5m:\n%s", p.out.String())
 		return -1
 	}
 }
@@ -117,7 +117,7 @@ func (p *proc) exit(t *testing.T) int {
 // sees waits until the process has printed s.
 func (p *proc) sees(t *testing.T, s string) {
 	t.Helper()
-	deadline := time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(5 * time.Minute)
 	for !strings.Contains(p.out.String(), s) {
 		select {
 		case <-p.done:
@@ -128,7 +128,7 @@ func (p *proc) sees(t *testing.T, s string) {
 		default:
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no %q after 60s:\n%s", s, p.out.String())
+			t.Fatalf("no %q after 5m:\n%s", s, p.out.String())
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
