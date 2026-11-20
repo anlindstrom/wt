@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-20 10:30 — a long run keeps its worktree's lock
+
+A `wt sync` run's lock used to lapse after 30 minutes, so a fold that ran longer
+could be joined by a second run on the same worktree. Now a lock whose process
+still runs never expires, however old; the 30 minutes apply only once that
+process is gone. A refused run says the process is still running, and
+`wt sync doctor` names such a lock live, with no fix: stop the process to free it.
+
 ## 2026-11-19 16:10 — bullet-union: both sides' new list items, kept
 
 A new conflict strategy for a Markdown bullet list that both sides only add to,

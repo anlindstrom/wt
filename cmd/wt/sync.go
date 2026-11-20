@@ -1484,7 +1484,9 @@ func newSyncDoctorCmd() *cobra.Command {
 			"every script strategy's run exists and is executable on trunk, no\n" +
 			"pre-rebase or post-rewrite hook is active, no submodules or LFS paths\n" +
 			"are declared, Docker answers when a step declares needs: [docker], and nothing\n" +
-			"is left behind by an earlier run: no stale safety ref, no expired lock,\n" +
+			"is left behind by an earlier run: no stale safety ref, no expired lock\n" +
+			"(older than 30 minutes, its process gone: a lock whose process still\n" +
+			"runs is live however old, and stopping that process frees it),\n" +
 			"no worktree stopped mid-rebase. A worktree a run handed over is not a\n" +
 			"leftover: the plan row names it, with wt sync resume and wt sync undo.\n" +
 			"\n" +
