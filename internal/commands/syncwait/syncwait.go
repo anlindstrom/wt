@@ -33,6 +33,10 @@ type Options struct {
 	Quiet time.Duration
 	// Now is the clock; nil is the real one.
 	Now func() time.Time
+	// Running says whether the process pid, started no later than notAfter,
+	// still runs; nil is wtsync.ProcessRunning. Tests inject a slow or a
+	// scripted one.
+	Running func(pid int, notAfter time.Time) bool
 }
 
 // Wait follows the log of the latest run to take the lock of the worktree
@@ -41,16 +45,11 @@ type Options struct {
 // and TimeoutStatus when the timeout came first, and an error for the cases
 // where there is no run it can follow.
 func Wait(ctx *kit.Context, work string, opts Options, w io.Writer) error {
-	if opts.Poll <= 0 {
-		opts.Poll = 500 * time.Millisecond
+	if opts.Now == nil {
+		opts.Now = time.Now
 	}
-	if opts.Quiet <= 0 {
-		opts.Quiet = time.Minute
-	}
-	now := opts.Now
-	if now == nil {
-		now = time.Now
-	}
+	// The timeout bounds the whole wait, resolving the worktree included.
+	started := opts.Now()
 	target := work
 	if target == "" {
 		target = "."
@@ -63,7 +62,25 @@ func Wait(ctx *kit.Context, work string, opts Options, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	name := kit.WorktreeName(ctx, wt.Branch, wt.Path)
+	return follow(gitDir, kit.WorktreeName(ctx, wt.Branch, wt.Path), work, opts, started, w)
+}
+
+// follow is Wait once the worktree is resolved: gitDir is its own git dir,
+// name what the person called it and started when the wait began.
+func follow(gitDir, name, work string, opts Options, started time.Time, w io.Writer) error {
+	if opts.Poll <= 0 {
+		opts.Poll = 500 * time.Millisecond
+	}
+	if opts.Quiet <= 0 {
+		opts.Quiet = time.Minute
+	}
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
+	if opts.Running == nil {
+		opts.Running = wtsync.ProcessRunning
+	}
+	now := opts.Now
 	ptr, ok, err := runlog.ReadPointer(gitDir)
 	if err != nil {
 		return fmt.Errorf("cannot read the run pointer of %s: %w", name, err)
@@ -77,7 +94,6 @@ func Wait(ctx *kit.Context, work string, opts Options, w io.Writer) error {
 	}
 	defer f.Close() //nolint:errcheck // read only
 
-	started := now()
 	lastGrew := started
 	buf := make([]byte, 32*1024)
 	// drain prints what the log has gained since the last call.
@@ -107,7 +123,7 @@ func Wait(ctx *kit.Context, work string, opts Options, w io.Writer) error {
 		if err := drain(); err != nil {
 			return err
 		}
-		if err := newerRun(gitDir, ptr, name); err != nil {
+		if err := newerRun(gitDir, ptr, name, opts.Running); err != nil {
 			return err
 		}
 		code, ended, err := runlog.ReadEnd(ptr.Log)
@@ -121,7 +137,7 @@ func Wait(ctx *kit.Context, work string, opts Options, w io.Writer) error {
 			}
 			return finish(w, gitDir, work, code)
 		}
-		if !wtsync.ProcessRunning(ptr.PID, ptr.Started()) {
+		if !opts.Running(ptr.PID, ptr.Started()) {
 			// It may have ended between the two looks above.
 			if err := drain(); err != nil {
 				return err
@@ -148,12 +164,12 @@ func Wait(ctx *kit.Context, work string, opts Options, w io.Writer) error {
 // newerRun is the error for a worktree that a run this wait cannot follow
 // holds now: a process other than the log's writer that took the lock after
 // the writer started and still runs.
-func newerRun(gitDir string, ptr runlog.Pointer, name string) error {
+func newerRun(gitDir string, ptr runlog.Pointer, name string, running func(int, time.Time) bool) error {
 	lock, ok, err := wtsync.ReadLock(gitDir)
 	if err != nil || !ok {
 		return nil //nolint:nilerr // a lock that cannot be read is not a reason to stop following the log
 	}
-	if lock.PID == ptr.PID || lock.Started.Before(ptr.Started()) || !wtsync.ProcessRunning(lock.PID, lock.Started) {
+	if lock.PID == ptr.PID || lock.Started.Before(ptr.Started()) || !running(lock.PID, lock.Started) {
 		return nil
 	}
 	return fmt.Errorf("a newer run (pid %d) holds %s that wt sync wait cannot follow: its log could not be written, or it rebases across repositories", lock.PID, name)
