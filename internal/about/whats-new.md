@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-20 12:00 — wt sync wait: wait for a long run in the background
+
+`wt sync wait [<work>] [--timeout 9m]` waits for the `wt sync rebase`, `steps`
+or `resume` running in a worktree, shows what the run prints (the checks, the
+steps, the stops, the timing summary) as it goes, and exits with the run's own
+code. On `--timeout` it exits 124 and the run carries on; run it again. Each
+run now keeps a copy of its output under `.git/wt-sync-logs/` for it to follow.
+
 ## 2026-11-20 10:30 — a long run keeps its worktree's lock
 
 A `wt sync` run's lock used to lapse after 30 minutes, so a fold that ran longer

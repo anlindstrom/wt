@@ -31,9 +31,9 @@ func TestLogHoldsEverythingFromBeforeTheFirstLock(t *testing.T) {
 	l, _, common, gitDir := newLog(t)
 	var out bytes.Buffer
 	w := l.Wrap(&out)
-	w.Write([]byte("before\n"))
+	_, _ = w.Write([]byte("before\n"))
 	l.Locked(common, gitDir)
-	w.Write([]byte("after\n"))
+	_, _ = w.Write([]byte("after\n"))
 	l.End(3)
 	l.End(0) // the first end counts
 
@@ -57,7 +57,7 @@ func TestLogHoldsEverythingFromBeforeTheFirstLock(t *testing.T) {
 func TestNoLockNoLog(t *testing.T) {
 	l, _, common, _ := newLog(t)
 	var out bytes.Buffer
-	l.Wrap(&out).Write([]byte("a look\n"))
+	_, _ = l.Wrap(&out).Write([]byte("a look\n"))
 	l.End(0)
 	if _, err := os.Stat(filepath.Join(common, LogsDir)); err == nil {
 		t.Error("a log directory was made")
@@ -72,9 +72,9 @@ func TestAnUnwritableLogWarnsOnce(t *testing.T) {
 	}
 	var out bytes.Buffer
 	w := l.Wrap(&out)
-	w.Write([]byte("one\n"))
+	_, _ = w.Write([]byte("one\n"))
 	l.Locked(common, gitDir)
-	w.Write([]byte("two\n"))
+	_, _ = w.Write([]byte("two\n"))
 	l.Locked(common, gitDir)
 	l.End(0)
 	if out.String() != "one\ntwo\n" {

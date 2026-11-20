@@ -563,6 +563,41 @@ tip of the line. The JSON says, per layer and step, whether it ran and why,
 the commit it folded into, its commit, what is owed, and the proof
 (`layerSteps`, docs/json.md).
 
+## Waiting for a run in the background
+
+A shell tool of an agent cuts a foreground command off after about ten
+minutes, and a fold of a long line takes longer, so the run goes to the
+background. `wt sync wait [<work>] [--timeout D]` waits for it: it prints what
+the run prints (`▸ check n/N`, `▸ step … layer n/N`, the stops, the handover,
+the timing summary), from the start of the run and then as it goes, and exits
+with the run's own code.
+
+```
+wt sync rebase tmp/stack --stack --autosquash --yes > /dev/null 2>&1 &   # the run
+wt sync wait tmp/stack --timeout 9m    # shows progress; exit 124: run it again
+```
+
+`wt sync rebase`, `wt sync --rebase`, `wt sync steps` and `wt sync resume` copy
+what they print into a log of their own, `wt-sync-logs/<start>-<pid>.log` under
+the repository's git dir (the person's output is as it was; with `--json` the
+copy holds what goes to stderr, never the result object). The log is made when
+the run takes its first lock. A worktree whose lock the run takes gets a
+`wt-sync-run.json` in its own git dir that names the log; a later run in the
+worktree replaces it. The exit code goes in `<log>.end` when the command ends.
+A look (`wt sync <work>`), a refusal before any lock, `wt sync undo` and a
+rebase across repositories (`--all`, `--roots`, `--profile`) write none, and a
+wait on their worktree finds no run. Logs older than 7 days whose process is
+gone are removed when a new one is made. A log that cannot be written is one
+warning and never changes the run.
+
+A wait only reads. Its exit codes:
+
+| code | meaning |
+|---|---|
+| the run's | 0 done; 1 a handover or a failure (with a line pointing at `wt sync resume <work>` when the run left a plan); 130 Ctrl-C, 143 SIGTERM |
+| 124 | `--timeout` passed with the run still going; the run is untouched, wait again |
+| 1 | no run was seen in the worktree; a newer run holds it that the wait cannot follow; the run ended without saying how (killed or crashed: `wt sync doctor`) |
+
 ## `needs` — what a step cannot run without
 
 A step under `defer` or `each_commit` may name what it cannot run without. The

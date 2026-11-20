@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,7 +62,8 @@ func split(t *testing.T, dir, gate string, args ...string) (stdout, stderr strin
 	cmd.Stdout, cmd.Stderr = &o, &e
 	err := cmd.Run()
 	if err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) {
 			t.Fatal(err)
 		}
 	}

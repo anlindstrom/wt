@@ -50,7 +50,8 @@ func newRootCmd(args ...string) *cobra.Command {
 			"repositories under your roots: every one, the ones under the roots\n" +
 			"named, or the ones a profile names (wt repos lists them).\n" +
 			"Run `wt <command> --help` for that command's own examples.\n\n" +
-			"Exit: 0 done, 1 failed, 2 usage error, 3 no launchd, 130 SIGINT, 143 SIGTERM.",
+			"Exit: 0 done, 1 failed, 2 usage error, 3 no launchd, 124 wt sync wait timed out,\n" +
+			"130 SIGINT, 143 SIGTERM; wt sync wait otherwise exits with the run's own code.",
 		Example: "  wt new fix/login-crash    # branch, worktree and provisioning in one\n" +
 			"  wt cd login-crash         # work in it (needs wt's shell layer)\n" +
 			"  wt up                     # onto trunk, if that goes through cleanly\n" +
