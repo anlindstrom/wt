@@ -30,8 +30,10 @@ var (
 func builtWt(t *testing.T) string {
 	t.Helper()
 	builtOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "wt-bin")
-		if err != nil {
+		// Under the suite's own temporary directory, which testkit.Main
+		// removes when the tests end.
+		dir := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "wt-bin")
+		if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // G703: under the XDG_CONFIG_HOME testkit.Main made
 			builtErr = err
 			return
 		}

@@ -30,6 +30,7 @@ func newLog(t *testing.T) (*Log, *bytes.Buffer, string, string) {
 // follows, and the end file holds the code.
 func TestLogHoldsEverythingFromBeforeTheFirstLock(t *testing.T) {
 	l, _, common, gitDir := newLog(t)
+	holds(t, gitDir)
 	var out bytes.Buffer
 	w := l.Wrap(&out)
 	_, _ = w.Write([]byte("before\n"))
@@ -68,6 +69,7 @@ func TestNoLockNoLog(t *testing.T) {
 // A log that cannot be opened warns once, and the output is not touched.
 func TestAnUnwritableLogWarnsOnce(t *testing.T) {
 	l, warn, common, gitDir := newLog(t)
+	holds(t, gitDir)
 	if err := os.WriteFile(filepath.Join(common, LogsDir), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -90,6 +92,7 @@ func TestAnUnwritableLogWarnsOnce(t *testing.T) {
 // older run.
 func TestAPointerThatCannotBeReplacedIsRemoved(t *testing.T) {
 	l, warn, common, gitDir := newLog(t)
+	holds(t, gitDir)
 	if err := os.WriteFile(filepath.Join(gitDir, PointerName), []byte(`{"log":"/old","pid":1,"start":1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -110,6 +113,7 @@ func TestAPointerThatCannotBeReplacedIsRemoved(t *testing.T) {
 // files when a log is created; younger ones stay.
 func TestHousekeepingRemovesOldLogsOfEndedWriters(t *testing.T) {
 	l, _, common, gitDir := newLog(t)
+	holds(t, gitDir)
 	dir := filepath.Join(common, LogsDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

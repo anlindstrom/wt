@@ -45,7 +45,11 @@ var afterLockCheck func()
 // Quiesce stops the pointer writes of this log for good, once any in flight
 // has finished: the signal path calls it before it releases the locks, so a
 // successor that takes a freed lock is never overwritten.
-func (l *Log) Quiesce() {}
+func (l *Log) Quiesce() {
+	l.ptrMu.Lock()
+	l.frozen = true
+	l.ptrMu.Unlock()
+}
 
 // Now is the clock the log's names and pointers use. It is the real one: a
 // pointer's start time is compared with the process table.
@@ -101,10 +105,18 @@ func ReadEnd(log string) (code int, ok bool, err error) {
 
 // Log is the copy of one invocation's output.
 type Log struct {
-	mu    sync.Mutex
-	warn  io.Writer
-	start time.Time
-	pid   int
+	// mu guards the log file and what is copied into it, and is held across
+	// a write to the person and its copy, so the copy is in the order shown.
+	// Nothing that waits on a process (housekeeping's probes) runs under it.
+	mu sync.Mutex
+	// ptrMu serialises pointer writes with Quiesce; frozen, guarded by it,
+	// says the signal path has begun releasing locks. A pointer is written
+	// or removed only under ptrMu, while this process holds the lock.
+	ptrMu  sync.Mutex
+	frozen bool
+	warn   io.Writer
+	start  time.Time
+	pid    int
 
 	buf     []byte // what was printed before the first lock
 	f       *os.File
@@ -155,10 +167,15 @@ type tee struct {
 	w io.Writer
 }
 
+// Write shows p to the person and copies what was shown, under one lock: two
+// writers (the run and the signal handler) are copied in the order they were
+// shown, and an end cannot come between a write and its copy.
 func (t *tee) Write(p []byte) (int, error) {
+	t.l.mu.Lock()
+	defer t.l.mu.Unlock()
 	n, err := t.w.Write(p)
 	if n > 0 {
-		t.l.Copy(p[:n])
+		t.l.copyLocked(p[:n])
 	}
 	return n, err
 }
@@ -176,6 +193,10 @@ func (t *fdTee) Fd() uintptr { return t.fd() }
 func (l *Log) Copy(p []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.copyLocked(p)
+}
+
+func (l *Log) copyLocked(p []byte) {
 	if l.ended {
 		return
 	}
@@ -214,29 +235,63 @@ func (l *Log) warnOnce(flag *bool, err error) {
 // Locked records that this invocation has taken the lock of the worktree whose
 // own git dir is gitDir: the log is opened if this is the first lock, and the
 // worktree's pointer names it. commonDir is the repository's common git dir.
+// Housekeeping runs last, with no lock of the log held: it asks the process
+// table, which a signal must not be kept waiting for.
 func (l *Log) Locked(commonDir, gitDir string) {
+	if dir := l.locked(commonDir, gitDir); dir != "" {
+		prune(dir, l.start)
+	}
+}
+
+// locked is Locked without the housekeeping; it returns the directory to
+// prune when this call created the log.
+func (l *Log) locked(commonDir, gitDir string) (pruneDir string) {
+	l.ptrMu.Lock()
+	defer l.ptrMu.Unlock()
+	if l.frozen {
+		return ""
+	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	if l.ended {
-		return
+		l.mu.Unlock()
+		return ""
 	}
 	if !l.opened {
 		l.opened = true
 		l.open(commonDir)
+		if l.path != "" {
+			pruneDir = filepath.Dir(l.path)
+		}
 	}
-	if l.path == "" || l.logOff {
+	path, off := l.path, l.logOff
+	l.mu.Unlock()
+	// A pointer is only ever written, or removed, while the worktree's lock
+	// is this process's: after that the worktree is another run's.
+	if !l.holds(gitDir) {
+		return pruneDir
+	}
+	if path == "" || off {
 		// No log to point at: an older pointer would send a wait to an older
 		// run, so it goes.
 		_ = os.Remove(filepath.Join(gitDir, PointerName))
-		return
+		return pruneDir
 	}
 	if afterLockCheck != nil {
 		afterLockCheck()
 	}
 	if err := l.writePointer(gitDir); err != nil {
 		_ = os.Remove(filepath.Join(gitDir, PointerName))
+		l.mu.Lock()
 		l.warnOnce(&l.ptrOff, err)
+		l.mu.Unlock()
 	}
+	return pruneDir
+}
+
+// holds reports whether the lock file of the worktree is this process's.
+func (l *Log) holds(gitDir string) bool {
+	lock, ok, err := wtsync.ReadLock(gitDir)
+	return err == nil && ok && lock.PID == l.pid
 }
 
 func (l *Log) open(commonDir string) {
@@ -246,7 +301,6 @@ func (l *Log) open(commonDir string) {
 		l.buf = nil
 		return
 	}
-	prune(dir, l.start)
 	path := filepath.Join(dir, l.start.UTC().Format("20060102T150405Z")+"-"+strconv.Itoa(l.pid)+".log")
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644) //nolint:gosec // G304: in the repository's own git dir
 	if err != nil {
@@ -350,6 +404,13 @@ func parseName(name string) (start time.Time, pid int, ok bool) {
 func Locked(commonDir, gitDir string) {
 	if l := Active(); l != nil {
 		l.Locked(commonDir, gitDir)
+	}
+}
+
+// QuiesceActive is Log.Quiesce on the active log, and nothing without one.
+func QuiesceActive() {
+	if l := Active(); l != nil {
+		l.Quiesce()
 	}
 }
 
