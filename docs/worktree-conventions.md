@@ -99,7 +99,9 @@ carry are shims that call `wt`.
    `wt sync undo <work>` puts a run back. `wt up` is the same for the worktree you
    are in, only when it goes through without you. A stack held on one line is
    `wt sync rebase <work> --stack`, with `--autosquash` to fold its fixups in place (and `--onto <trunk>` to fold and move in one run),
-   and `wt sync steps <work>` runs the steps a run left owed. `wt sync --rebase` does
+   and `wt sync steps <work>` runs the steps a run left owed. A run left in the
+   background is followed with `wt sync wait <work>`, which prints what it
+   prints and exits with its code. `wt sync --rebase` does
    every worktree the table calls ready except `recipe?`. Without a terminal, a run
    with nothing named rebases nothing unless `--yes` says so, and nothing is pushed
    without `--push` or `--yes`. Each verb is also a flag on the line you just
@@ -410,7 +412,7 @@ copy for the purpose it serves.
 a name both match is kept. Those four are the commands that keep them; `wt
 remove` on the branch's worktree and `git branch -D` are yours to run. One
 exception: `wt sync --stack --layer <backup>` names a backup on purpose, and
-the run may move it.
+the run may move it; a `--layer` pattern never takes one.
 
 ## More
 
@@ -419,3 +421,5 @@ the run may move it.
 - [Configuration](configuration.md): `worktree.conf`, branch names, your own settings.
 - [Removing a worktree](remove.md): what becomes of the branch, and every refusal.
 - [JSON output](json.md): `--json`, for tools that drive wt.
+- [The sync declaration](sync-declaration.md): `.wt-sync.yaml`, and what a `wt sync` run does with it.
+- [Architecture](architecture.md): how the code is laid out, for changing wt.

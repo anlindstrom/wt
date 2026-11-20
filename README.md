@@ -164,6 +164,8 @@ How each integration behaves, and what happens when one fails:
   your own settings, roots and profiles.
 - [docs/remove.md](docs/remove.md): what `wt remove` does with a branch, and
   every check before it removes.
+- [docs/sync-declaration.md](docs/sync-declaration.md): `.wt-sync.yaml`, the
+  strategies and steps a repository declares for `wt sync` and `wt up`.
 - [docs/json.md](docs/json.md): `--json` output and its schemas, for tools that
   drive wt.
 
@@ -171,8 +173,10 @@ How each integration behaves, and what happens when one fails:
 
 ```sh
 make build
-make check      # lint, go test and bats
+make check      # lint, go test, bats and the mod's tests
 ```
 
-What to run for which change: [docs/testing.md](docs/testing.md). Cutting a
-release: [docs/releasing.md](docs/releasing.md).
+How the code is laid out, before you change it:
+[docs/architecture.md](docs/architecture.md). What to run for which change:
+[docs/testing.md](docs/testing.md). Cutting a release:
+[docs/releasing.md](docs/releasing.md).
