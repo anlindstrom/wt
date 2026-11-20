@@ -1,6 +1,7 @@
 # wt's JSON output
 
-`wt config`, `wt status`, `wt up`, `wt sweep`, `wt sync` and its verbs, `wt new`,
+`wt config`, `wt status`, `wt up`, `wt sweep`, `wt sync` and its verbs `rebase`,
+`resume`, `undo` and `steps`, `wt new`,
 `wt checkout`, `wt remove`, `wt restore`, `wt purge`, `wt refs` and
 `wt session list`, `send` and `stop` print JSON on stdout when given `--json`,
 for tools that drive wt (a git client, an editor, a script). Their human output is
@@ -43,7 +44,9 @@ of 1.4.2 or later means `--move-to` and `wt purge` exist.
 
 Exit 0 means success, 1 a runtime failure, and 2 a usage mistake (arguments
 or flags). Exit 3 means launchd is unavailable for `wt sync keep start` or
-`stop`; use `wt sync keep once` from cron instead.
+`stop`; use `wt sync keep once` from cron instead. `wt sync wait`, which has no
+`--json`, exits with the code of the run it follows, and 124 when its `--timeout`
+passed with that run still going.
 
 ## Signals and what wt starts
 
@@ -1707,7 +1710,7 @@ what it sees; a run (`wt sync rebase <work> --stack --json`) fills the rest.
 | `autosquash` | bool | a fold of the line's fixups (`--autosquash`): onto its own base, or, with `--onto`, as the line moves onto the target |
 | `layers` | array | the layer branches, bottom first (below): what a run moves once its rebase has finished. The line's own branch is never one of them |
 | `top` | object | since `sync` 1.13.0 and `sync-run` 1.17.0: the line's own branch, the top of the stack, which the rebase itself moves: `branch`, `oldTip` (`head`), `commits` (from the line's base, its tip included; 0 for a branch with nothing ahead of trunk), `subject` (its tip's), `worktree` (where it is checked out). The look's text lists it as the last row of the layer table |
-| `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name; a branch with no commits of its own that has uncommitted tracked changes in another worktree, without `--layer`; `--layer` naming either takes it; or, matched by a `--layer` pattern, a tip not on the line) |
+| `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name, unless `--layer` names it, which a pattern never does; without `--layer`, a branch with no commits of its own that has uncommitted tracked changes in another worktree, which `--layer` by name or by pattern takes; or a branch a `--layer` pattern matched whose tip is not on the line) |
 | `sideBranches` | array | since `sync` 1.12.0 and `sync-run` 1.16.0: the [side branches](#side-branches--what-hangs-off-the-line) that hang off the line, parents first; `[]` with `--no-side-branches` |
 | `refusal` | string \| null | the run's: why no layer moved, a new tip that failed its check, or a fold that changed the line's content; the line itself is left rebased, and `wt sync undo` puts it back. Null in the look, and when each layer was moved or held |
 | `edit` | object \| null | since 1.9.0: what a run with `--edit <rev>` did to that commit (below); null in the look and for any other run |
@@ -1722,7 +1725,7 @@ Each layer:
 | `oldTip` | string | its tip before the run |
 | `commits` | int | its commits from the line's base, its tip included |
 | `subject` | string | its tip's subject |
-| `foundBy` | `tipOnLine` \| `named` | a local branch whose tip is on the line, or one `--layer` named |
+| `foundBy` | `tipOnLine` \| `named` | a local branch whose tip is on the line, or one `--layer` named or a `--layer` pattern matched |
 | `worktree` | string \| null | where it is checked out; null for none |
 | `state` | `none` \| `clean` \| `dirty` \| `rebasing` \| `bisecting` \| `busy` \| `idle` \| `process` \| `unknown` | what holds that worktree: nothing, tracked changes, a rebase (there, or a stopped one in another worktree that will move the branch), a bisect in another worktree started from the branch, an agent session busy or idle, a process whose working directory is inside it (any process, a dev server in a terminal tab included), or `unknown` when it could not be read, which holds the layer |
 | `stateDetail` | string \| null | the session, the process (`pid 123 npm run dev`), or why it could not be read |
@@ -1732,7 +1735,7 @@ Each layer:
 | `patch`, `patchWhy` | `same` \| `changed` \| `unknown`, string \| null | the run's: whether the change the layer brings is the same patch (git's stable patch-id), and why not; never a refusal |
 | `result` | `moved` \| `held` \| `unchanged` \| `planned` \| `moving` \| `needsRecovery` \| null | the run's: at `newTip` (its worktree with it); left where it was; its new tip is its old one; recorded but not reached, because the moves stopped; under way when the moves stopped (undo puts its ref back); a move that went part way and could not be put back, so `held` says what to look at, the layer keeps its pins, the run fails and `wt sync undo <line>` puts it back |
 | `how` | `ref` \| `worktree` \| null | the run's: `update-ref` guarded by its old tip, for a branch in no worktree; the same `update-ref`, then `read-tree -m -u <old> <new>`, under that worktree's lock |
-| `held`, `moveCommand` | string \| null | the run's: why it was held (tracked changes, a rebase, a session, a process, a tip that moved during the run, a lock), and the command that moves it by hand |
+| `held`, `moveCommand` | string \| null | the run's: why it was held (tracked changes, a rebase, a session, a process, a tip that moved during the run, another run's lock on its worktree, which holds while that run's process runs, however long, and otherwise until the lock is 30 minutes old), and the command that moves it by hand |
 | `pushCommand` | array of string \| null | the run's: for a moved layer, its push to its own remote as an argv, with `--force-with-lease` on the commit wt last fetched there. The run pushes the line's branch only |
 | `noPushReason` | string \| null | the run's: for a moved layer with no safe push, why: no remote branch of its own yet, or the remote has commits the branch never had |
 | `note` | string \| null | the run's: what else happened to a moved layer, such as a checkout of it that landed during its move, at its new tip |
@@ -2422,6 +2425,7 @@ change made it.
 | `sync` 1.11.0, `sync-run` 1.14.0 | `contextGaps` and `contextUnchecked` on [`stack`](#stack--a-stack-held-on-one-line): for a fold, the hunks of fixups that lack their context behind their target, each with the later commit that carries it; a `wt sync resume` refused for a resolution that drops such a hunk is `refused` with the lines in `reason` |
 | `up` 1.7.0, `sync-run` 1.15.0, `status` 1.12.0 | [`layers`](#layers--branches-in-no-worktree) on each participant of `up` and `sync-run`: the branches in no worktree on its line that the run moved with its rebase or left, and why; `layers` on each `stack` member of `status`, which its token covers |
 | `sync` 1.12.0, `sync-run` 1.16.0 | [`sideBranches`](#side-branches--what-hangs-off-the-line) on `stack`: the branches forked from the line or above its top, which a `--stack` run carries with it, and what came of each |
+| `new` 1.2.0 | `addresses` on `wt new --json`: where the new worktree's dev servers are reached, one `{app, url}` per app devports gives a domain; `[]` without devports |
 | `sync` 1.13.0, `sync-run` 1.17.0 | `top` on [`stack`](#stack--a-stack-held-on-one-line): the line's own branch, the last row of the look's layer table; `sameTip` on each side branch: branches at one tip are siblings, carried or held together, and none is `on` another |
 | `sync-run` 1.18.0 | [`fold`](#fold--what-a-fold-compared) on each participant: for a fold of the line, whether it is in place and on which base, and what its tree guard compared and found |
 | `sync-run` 1.19.0 | `eachCommit` gains `targets`: the run's `--each-commit=targets` mode, checks at each layer's tip and at each commit a fixup folded into |
