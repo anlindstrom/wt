@@ -603,8 +603,8 @@ func twinHeld(branch string, worktrees repo.Worktrees, opts MoveOptions) string 
 	// branch it moves with is held before either moves.
 	if l, ok, err := ReadLock(gitDir); err != nil {
 		return "its lock could not be read: " + err.Error()
-	} else if ok && opts.Now.Sub(l.Started) < LockExpiry {
-		return "locked: " + (&LockHeld{*l}).Error()
+	} else if ok && LockLive(l, opts.Now) {
+		return "locked: " + lockHeld(l, opts.Now).Error()
 	}
 	h := holderAt(LayerHolder{Branch: branch, Path: use.Path}, gitDir, opts.Listed, opts.Scan, opts.ScanErr)
 	switch {

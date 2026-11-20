@@ -1,9 +1,11 @@
 package wtsync
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -11,14 +13,18 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/anlindstrom/wt/internal/git"
 )
 
 // LockName is the file a run holds in the worktree's own git dir
 // (.git/worktrees/<name>/), so a second run, or the watcher, sees it.
 const LockName = "wt-sync.lock"
 
-// LockExpiry is how long a lock is believed. A run that died without
-// releasing must not block its worktree forever.
+// LockExpiry is how long a lock is believed while its process is gone. A run
+// that died without releasing must not block its worktree forever. A lock
+// whose process still runs never expires (see LockLive): a long fold holds
+// its worktree for as long as it runs.
 const LockExpiry = 30 * time.Minute
 
 // Lock is a held or observed lock.
@@ -54,11 +60,112 @@ func HeldLocks() []*Lock {
 	return out
 }
 
-// LockHeld is the error for a live lock held by someone else.
-type LockHeld struct{ Lock }
+// LockHeld is the error for a live lock held by someone else. Running is set
+// when the lock is older than LockExpiry and held only because its process
+// still runs.
+type LockHeld struct {
+	Lock
+	Running bool
+}
 
 func (e *LockHeld) Error() string {
-	return fmt.Sprintf("locked by pid %d (%s) since %s", e.PID, e.Owner, e.Started.Format(time.RFC3339))
+	msg := fmt.Sprintf("locked by pid %d (%s) since %s", e.PID, e.Owner, e.Started.Format(time.RFC3339))
+	if e.Running {
+		msg += "; that process is still running, and stopping it frees the worktree"
+	}
+	return msg
+}
+
+// probeProcess reads one process: whether it exists, and when it started when
+// that can be read. Tests replace it.
+var probeProcess = osProbe
+
+// osProbe asks the kernel whether pid exists (signal 0: success, or EPERM for
+// a process of another user) and ps when it started. ps -o lstart= prints the
+// start, asked for in UTC, whole seconds, in the same fixed layout on macOS and
+// Linux (procps); a sysctl or /proc would each serve one of the two only.
+func osProbe(pid int) (exists bool, started time.Time, startKnown bool) {
+	err := syscall.Kill(pid, 0)
+	switch {
+	case errors.Is(err, syscall.ESRCH):
+		return false, time.Time{}, false
+	case err != nil && !errors.Is(err, syscall.EPERM):
+		return true, time.Time{}, false
+	}
+	out, perr := psStart(pid)
+	if perr != nil {
+		// ps exits non-zero for a pid that went since the signal.
+		if errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+			return false, time.Time{}, false
+		}
+		return true, time.Time{}, false
+	}
+	t, ok := parsePSStart(out)
+	return true, t, ok
+}
+
+// psCommand is the ps call that reads a process's start. Tests replace it.
+var psCommand = func(pid int) *exec.Cmd {
+	cmd := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid))
+	// ps prints local time with no offset, and an hour that occurs twice
+	// when the clocks go back cannot be told apart: ask for UTC.
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C", "TZ=UTC")
+	return cmd
+}
+
+// psTimeout bounds that call.
+var psTimeout = 5 * time.Second
+
+// psStart runs ps under psTimeout: it runs under the git dir's flock, which a
+// hung ps would hold against every Acquire, TakeOver, Release and doctor. A
+// timeout is an error, so the start counts as unknown.
+func psStart(pid int) (string, error) {
+	cmd := psCommand(pid)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	timedOut, _, err := git.RunBounded(psTimeout, cmd)
+	if timedOut {
+		return "", errors.New("ps timed out")
+	}
+	return stdout.String(), err
+}
+
+// parsePSStart reads what ps -o lstart= printed under TZ=UTC.
+func parsePSStart(out string) (time.Time, bool) {
+	t, err := time.ParseInLocation("Mon Jan 2 15:04:05 2006", strings.Join(strings.Fields(out), " "), time.UTC)
+	return t, err == nil
+}
+
+// ProcessRunning reports whether a process with pid that started no later
+// than notAfter still runs on this machine. A process that started after
+// notAfter reused the pid and is somebody else. Whatever cannot be told (the
+// start time unreadable) counts as running: the cost is a refused run, never
+// two runs at once. notAfter is whole seconds in a lock, and ps's start is
+// too, so a second of slack is allowed.
+func ProcessRunning(pid int, notAfter time.Time) bool {
+	if pid <= 0 {
+		return false
+	}
+	exists, started, known := probeProcess(pid)
+	if !exists {
+		return false
+	}
+	return !known || !started.After(notAfter.Add(time.Second))
+}
+
+// LockLive reports whether the lock still holds its worktree at now: it is
+// younger than LockExpiry, or its process still runs, whatever its age. A
+// lock that names no process is never probed and keeps the age-only rule.
+func LockLive(l *Lock, now time.Time) bool {
+	if now.Sub(l.Started) < LockExpiry {
+		return true
+	}
+	return ProcessRunning(l.PID, l.Started)
+}
+
+// lockHeld is the LockHeld for a lock LockLive found live at now.
+func lockHeld(l *Lock, now time.Time) *LockHeld {
+	return &LockHeld{Lock: *l, Running: now.Sub(l.Started) >= LockExpiry}
 }
 
 // GitDir is the worktree's own git dir, absolute.
@@ -110,8 +217,8 @@ func Acquire(gitDir string, now time.Time) (*Lock, error) {
 			// Gone between the link and the read: link again.
 			continue
 		}
-		if now.Sub(existing.Started) < LockExpiry {
-			return nil, &LockHeld{*existing}
+		if LockLive(existing, now) {
+			return nil, lockHeld(existing, now)
 		}
 		if afterExpiredRead != nil {
 			afterExpiredRead()
@@ -119,7 +226,7 @@ func Acquire(gitDir string, now time.Time) (*Lock, error) {
 		// Expired. Another contender may have broken it since the read and
 		// linked a fresh one, which breakLock judges again and leaves; the
 		// next link then finds it.
-		if _, err := breakLock(gitDir, func(cur *Lock) bool { return now.Sub(cur.Started) >= LockExpiry }); err != nil {
+		if _, err := breakLock(gitDir, func(cur *Lock) bool { return !LockLive(cur, now) }); err != nil {
 			return nil, err
 		}
 	}

@@ -464,14 +464,16 @@ func readLockHeld(gitDir string) (*Lock, bool, error) {
 }
 
 // locksCheck flags every wt-sync.lock found in any worktree's git dir: an
-// expired one (older than LockExpiry) gets a Fix that removes it; a live one
-// is only named, since it belongs to a run that may still be in progress.
+// expired one (older than LockExpiry, its process gone) gets a Fix that
+// removes it; a live one, young or whose process still runs, is only named,
+// since it belongs to a run still in progress.
 func locksCheck(worktrees []repo.Worktree, gitDirs map[string]string, now time.Time) (Check, error) {
 	type held struct {
 		label   string
 		gitDir  string
 		lock    *Lock
 		expired bool
+		running bool // old, held only by its process
 	}
 	var found []held
 	for _, wt := range worktrees {
@@ -487,7 +489,7 @@ func locksCheck(worktrees []repo.Worktree, gitDirs map[string]string, now time.T
 		if label == "" {
 			label = wt.Path
 		}
-		found = append(found, held{label: label, gitDir: gitDir, lock: lock, expired: now.Sub(lock.Started) >= LockExpiry})
+		found = append(found, held{label: label, gitDir: gitDir, lock: lock, expired: !LockLive(lock, now), running: now.Sub(lock.Started) >= LockExpiry && LockLive(lock, now)})
 	}
 	if len(found) == 0 {
 		return Check{Name: "locks", OK: true}, nil
@@ -500,7 +502,11 @@ func locksCheck(worktrees []repo.Worktree, gitDirs map[string]string, now time.T
 			state = "expired"
 			expired = append(expired, h)
 		}
-		parts = append(parts, fmt.Sprintf("%s (%s, pid %d since %s)", h.label, state, h.lock.PID, h.lock.Started.Format(time.RFC3339)))
+		note := ""
+		if h.running {
+			note = "; the process is still running, and stopping it frees the worktree"
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s, pid %d since %s%s)", h.label, state, h.lock.PID, h.lock.Started.Format(time.RFC3339), note))
 	}
 	var fix func() error
 	if len(expired) > 0 {
@@ -509,7 +515,7 @@ func locksCheck(worktrees []repo.Worktree, gitDirs map[string]string, now time.T
 			// and taken a fresh one, which is not this fix's to remove.
 			for _, h := range expired {
 				if _, err := breakLock(h.gitDir, func(cur *Lock) bool {
-					return cur.PID == h.lock.PID && cur.Started.Equal(h.lock.Started)
+					return cur.PID == h.lock.PID && cur.Started.Equal(h.lock.Started) && !LockLive(cur, now)
 				}); err != nil {
 					return err
 				}
