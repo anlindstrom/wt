@@ -68,13 +68,8 @@ func TestTheCopyLeavesTheOutputUntouched(t *testing.T) {
 			onDir, onPaths := twoBranches(t, failCheck)
 			offDir, offPaths := twoBranches(t, failCheck)
 			norm := func(s string) string {
-				for _, r := range [][2]string{{onDir, "<repo>"}, {offDir, "<repo>"},
-					{filepath.Dir(onPaths["feat/a"]), "<wts>"}, {filepath.Dir(offPaths["feat/a"]), "<wts>"}} {
-					s = strings.ReplaceAll(s, r[0], r[1])
-				}
-				s = clocks.ReplaceAllString(s, "${1}${2}<n>")
-				s = slowestAt.ReplaceAllString(s, `"at": "<at>"`)
-				return slowest.ReplaceAllString(durations.ReplaceAllString(s, "<d>"), "")
+				return normaliseRun(s, [2]string{onDir, "<repo>"}, [2]string{offDir, "<repo>"},
+					[2]string{filepath.Dir(onPaths["feat/a"]), "<wts>"}, [2]string{filepath.Dir(offPaths["feat/a"]), "<wts>"})
 			}
 			args := append([]string{"sync", "rebase", "feat/a", "--yes", "--no-push", "--no-fetch"}, tc.extra...)
 			onOut, onErr, log := runIn(t, onDir, false, args...)
@@ -102,5 +97,41 @@ func TestTheCopyLeavesTheOutputUntouched(t *testing.T) {
 				t.Errorf("the log is not stderr\nlog:\n%s\nstderr:\n%s", log, want)
 			}
 		})
+	}
+}
+
+// normaliseRun is what a clock or a repository decides in a run's output,
+// made the same, and nothing else.
+func normaliseRun(s string, paths ...[2]string) string {
+	for _, r := range paths {
+		s = strings.ReplaceAll(s, r[0], r[1])
+	}
+	s = clocks.ReplaceAllString(s, "${1}${2}<n>")
+	s = slowestAt.ReplaceAllString(s, `"at": "<at>"`)
+	return slowest.ReplaceAllString(durations.ReplaceAllString(s, "<d>"), "")
+}
+
+// The comparison sees a timing entry that is missing, and one that names
+// another commit.
+func TestTheComparisonSeesAChangedTimingEntry(t *testing.T) {
+	text := "    slowest:\n      3s  check  make  at aacaf52 feat: a1.txt\n      2s  check  make  at 9f931f1 feat: a2.txt\n"
+	for name, other := range map[string]string{
+		"a missing entry": "    slowest:\n      3s  check  make  at aacaf52 feat: a1.txt\n",
+		"another commit":  strings.Replace(text, "9f931f1 feat: a2.txt", "1111111 feat: other", 1),
+		"another kind":    strings.Replace(text, "2s  check", "2s  step", 1),
+	} {
+		if normaliseRun(text) == normaliseRun(other) {
+			t.Errorf("%s was not seen", name)
+		}
+	}
+	json := `{"slowest": [{"kind": "check", "run": "make", "at": "aacaf52 feat: a1.txt", "ms": 3}, {"kind": "check", "run": "make", "at": "9f931f1 feat: a2.txt", "ms": 2}]}`
+	if normaliseRun(json) == normaliseRun(strings.Replace(json, "9f931f1 feat: a2.txt", "1111111 feat: other", 1)) {
+		t.Error("a changed JSON entry was not seen")
+	}
+	// Entries that tie are in no fixed order: that is not a difference.
+	tied := "    slowest:\n      0s  check  make  at aacaf52 feat: a1.txt\n      0s  check  make  at 9f931f1 feat: a2.txt\n"
+	swapped := "    slowest:\n      0s  check  make  at 9f931f1 feat: a2.txt\n      0s  check  make  at aacaf52 feat: a1.txt\n"
+	if normaliseRun(tied) != normaliseRun(swapped) {
+		t.Error("the order of tied entries counted as a difference")
 	}
 }

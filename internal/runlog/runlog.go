@@ -414,6 +414,17 @@ func QuiesceActive() {
 	}
 }
 
+// EndForExit is End for a process about to exit: once it has returned, no
+// write through this log's writers proceeds. Stub.
+func (l *Log) EndForExit(code int) { l.End(code) }
+
+// EndActiveForExit is Log.EndForExit on the active log, and nothing without one.
+func EndActiveForExit(code int) {
+	if l := Active(); l != nil {
+		l.EndForExit(code)
+	}
+}
+
 // EndActive is Log.End on the active log, and nothing without one.
 func EndActive(code int) {
 	if l := Active(); l != nil {

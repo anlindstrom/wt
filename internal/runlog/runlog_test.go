@@ -345,3 +345,37 @@ func TestNoPointerIsWrittenWithoutTheLock(t *testing.T) {
 		t.Error("a pointer was written without the lock")
 	}
 }
+
+// On a signal the end is final: a write queued on the copy when the end is
+// published never reaches the person, so nothing is shown that the log does
+// not hold.
+func TestNothingIsShownAfterTheEndOfAnInterruptedRun(t *testing.T) {
+	l, _, common, gitDir := newLog(t)
+	holds(t, gitDir)
+	l.Locked(common, gitDir)
+	bw := &blockingWriter{started: make(chan struct{}), release: make(chan struct{})}
+	w := l.Wrap(bw)
+
+	go func() { _, _ = w.Write([]byte("A")) }()
+	<-bw.started
+	ended := make(chan struct{})
+	go func() { l.EndForExit(130); close(ended) }() // the handler, first in the queue
+	time.Sleep(50 * time.Millisecond)
+	go func() { _, _ = w.Write([]byte("B")) }() // the run's own write, behind it
+	time.Sleep(50 * time.Millisecond)
+	close(bw.release)
+	within(t, "the end", 3*time.Second, ended)
+	time.Sleep(200 * time.Millisecond) // the process would have exited by now
+
+	p, _, _ := ReadPointer(gitDir)
+	got, _ := os.ReadFile(p.Log)
+	bw.mu.Lock()
+	shown := bw.shown.String()
+	bw.mu.Unlock()
+	if string(got) != shown {
+		t.Errorf("the log holds %q but %q was shown", got, shown)
+	}
+	if code, ok, _ := ReadEnd(p.Log); !ok || code != 130 {
+		t.Errorf("end %d %v", code, ok)
+	}
+}

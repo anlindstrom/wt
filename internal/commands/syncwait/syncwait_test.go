@@ -141,3 +141,54 @@ func TestTheWritersOwnLockIsNotANewerRun(t *testing.T) {
 		t.Errorf("got %v, want the run's 0", err)
 	}
 }
+
+// waits runs Wait and returns what it returned within d, or fails.
+func waits(t *testing.T, d time.Duration, work string, opts Options, w io.Writer) error {
+	t.Helper()
+	res := make(chan error, 1)
+	go func() { res <- Wait(nil, work, opts, w) }()
+	select {
+	case err := <-res:
+		return err
+	case <-time.After(d):
+		t.Fatalf("Wait did not end within %s", d)
+		return nil
+	}
+}
+
+func exitCode(err error) int {
+	var e kit.ExitError
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return -1
+}
+
+// Resolving the worktree is inside the timeout: a lookup that does not come
+// back ends the wait at 124.
+func TestTheTimeoutBoundsResolvingTheWorktree(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	opts := Options{Timeout: 300 * time.Millisecond, TimeoutLabel: "300ms",
+		Resolve: func(string) (string, string, error) { <-release; return "", "", errors.New("late") }}
+	if err := waits(t, 3*time.Second, "w", opts, io.Discard); !is124(err) {
+		t.Errorf("got %v, want exit 124", err)
+	}
+}
+
+// A run that has ended exits with its own code even when the timeout passes
+// while its log is still being replayed.
+func TestAFinishedRunIsNeverReportedAs124(t *testing.T) {
+	log := logFile(t, strings.Repeat("x", 8*1024*1024))
+	if err := os.WriteFile(runlog.EndPath(log), []byte("7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitDir := run(t, 4242, time.Now().Add(-time.Hour), log)
+	opts := Options{Timeout: 200 * time.Millisecond, TimeoutLabel: "200ms", Poll: 10 * time.Millisecond,
+		Resolve: func(string) (string, string, error) { return gitDir, "w", nil },
+		Running: func(int, time.Time) bool { return false }}
+	err := waits(t, 5*time.Second, "w", opts, slowWriter{20 * time.Millisecond})
+	if got := exitCode(err); got != 7 {
+		t.Errorf("exit %d (%v), want the run's 7", got, err)
+	}
+}

@@ -38,6 +38,10 @@ type Options struct {
 	// still runs; nil is wtsync.ProcessRunning. Tests inject a slow or a
 	// scripted one.
 	Running func(pid int, notAfter time.Time) bool
+	// Resolve finds the worktree's own git dir and the name to call it by;
+	// nil is the kit's lookup of <work> in the repository. Tests inject a
+	// slow one.
+	Resolve func(target string) (gitDir, name string, err error)
 }
 
 // Wait follows the log of the latest run to take the lock of the worktree
@@ -55,15 +59,25 @@ func Wait(ctx *kit.Context, work string, opts Options, w io.Writer) error {
 	if target == "" {
 		target = "."
 	}
-	wt, err := kit.Locate(ctx, target)
+	resolve := opts.Resolve
+	if resolve == nil {
+		resolve = func(target string) (string, string, error) {
+			wt, err := kit.Locate(ctx, target)
+			if err != nil {
+				return "", "", err
+			}
+			gitDir, err := wtsync.GitDir(wt.Path)
+			if err != nil {
+				return "", "", err
+			}
+			return gitDir, kit.WorktreeName(ctx, wt.Branch, wt.Path), nil
+		}
+	}
+	gitDir, name, err := resolve(target)
 	if err != nil {
 		return err
 	}
-	gitDir, err := wtsync.GitDir(wt.Path)
-	if err != nil {
-		return err
-	}
-	return follow(gitDir, kit.WorktreeName(ctx, wt.Branch, wt.Path), work, opts, started, w)
+	return follow(gitDir, name, work, opts, started, w)
 }
 
 // follow is Wait once the worktree is resolved: gitDir is its own git dir,
