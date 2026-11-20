@@ -591,6 +591,12 @@ func (d *driver) foldInto(r *LayerStep, run, files []string, head string) error 
 	if _, err := d.git("reset", "-q", "--hard", tip); err != nil {
 		return err
 	}
+	d.foldTargets = nil
+	if d.req.EachCommit == EachTargets && !d.resumed {
+		if d.foldTargets, err = d.targetsAmong(run); err != nil {
+			return err
+		}
+	}
 	if f, err := d.recheckFold(rewritten, files); err != nil {
 		return err
 	} else if f != nil {
@@ -599,6 +605,18 @@ func (d *driver) foldInto(r *LayerStep, run, files []string, head string) error 
 	subject, err := d.git("log", "-1", "--format=%s", rewritten[0])
 	if err != nil {
 		return err
+	}
+	if d.req.EachCommit == EachTargets && d.foldTargets != nil {
+		// The fold recommitted run: the targets and the owner, which is one
+		// too, are known by their new ids to the folds that come after.
+		if d.targetShas == nil {
+			d.targetShas = map[string]bool{}
+		}
+		for i, c := range rewritten {
+			if i == 0 || d.foldTargets[i] {
+				d.targetShas[c] = true
+			}
+		}
 	}
 	r.Result, r.Owner, r.OwnerSubject, r.Proof = LayerFolded, rewritten[0], subject, ProofHeld
 	return nil
@@ -633,9 +651,15 @@ func (d *driver) recheckFold(rewritten, files []string) (*CheckFailure, error) {
 	if len(steps) == 0 || d.req.EachCommit == EachOff {
 		return nil, nil
 	}
-	if d.req.EachCommit == EachTips {
+	switch d.req.EachCommit {
+	case EachTips:
 		// Only the layer's tip is a place a run under tips checks.
 		rewritten = rewritten[len(rewritten)-1:]
+	case EachTargets:
+		// The places a run under targets checks: the fold targets (a commit a
+		// fixup folded into, and the owner a step folded its output into) and
+		// the tip.
+		rewritten = d.targetsOf(rewritten)
 	}
 	tip := rewritten[len(rewritten)-1]
 	defer func() { _, _ = d.git("reset", "-q", "--hard", tip) }()

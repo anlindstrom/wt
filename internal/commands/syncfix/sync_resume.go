@@ -550,6 +550,9 @@ func (r *resume) complete(res wtsync.Result) error {
 	if note := wtsync.EachCommitNote(res.EachCommit, res.Layered); note != "" {
 		fmt.Fprintf(r.w, "    %s\n", note)
 	}
+	if res.EachCommit == wtsync.EachTargets {
+		fmt.Fprintf(r.w, "    after a fold the checks cover every rewritten commit: a resumed run does not know the fold targets of the run before it\n")
+	}
 	if a := res.Adopted; a != nil {
 		for _, c := range a.Commits {
 			fmt.Fprintf(r.w, "  + %s %s  adopted: made after the rebase\n", git.ShortID(c.SHA, 7), c.Subject)
@@ -699,6 +702,8 @@ func (r *resume) checkAdoptedTips(res wtsync.Result, head string, cerr error) []
 		return nil
 	case wtsync.EachAll:
 		fmt.Fprintf(r.w, "    each_commit checks run at each layer's tip only: the rebase was finished by hand, so the commits between are not checked\n")
+	case wtsync.EachTargets:
+		fmt.Fprintf(r.w, "    each_commit checks run at each layer's tip only: the rebase was finished by hand, so the commits a fixup folded into are not known, and are not checked\n")
 	}
 	// The line is finished, its result pinned and its layers moved: what an
 	// interrupt now leaves is checks owed, which it says, and undo's way

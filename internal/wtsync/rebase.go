@@ -346,6 +346,22 @@ type driver struct {
 	callSteps map[string][]int
 	layerIDs  []string
 	layerEdit bool
+	// foldTargets says, for each commit of the run a per-layer step folds its
+	// output into (the owner and the commits after it), whether a fixup or
+	// squash had been folded into it; set only under --each-commit=targets.
+	foldTargets []bool
+	// targetShas is every commit of the line known to be a target, by the id
+	// it has now: a fold recommits the commits it rewrites, so what the
+	// sequencer recorded for a target no longer names it, and the next fold
+	// that reaches it takes it from here. Set only under targets.
+	targetShas map[string]bool
+	// resumed is a driver made by Resume: it has no record of the targets
+	// the run before it found, so under targets a fold's rechecks cover
+	// every rewritten commit, the safe side.
+	resumed bool
+	// tipStop is whether the check stop checkAt found ends a layer, as
+	// opposed to closing a fold target.
+	tipStop bool
 	// checkTail is the abbreviated id of the last fixup or squash folded
 	// into the commit at a check stop, as the sequencer's done list names
 	// it; empty for a pick with none.
@@ -480,6 +496,9 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 	if err != nil {
 		return Result{Branch: req.Branch}, err
 	}
+	if mode == EachTargets && (req.Stack == nil || !req.Stack.Autosquash || req.Edit != nil || req.Onto != req.Stack.Line.Base) {
+		return Result{Branch: req.Branch}, errors.New(TargetsRefusal(req.Edit != nil))
+	}
 	if mode == EachTips && req.Edit != nil {
 		return Result{Branch: req.Branch}, errors.New("--each-commit=tips cannot be combined with --edit: the checks of an edit run sit at the commits above the edit")
 	}
@@ -550,7 +569,7 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 		return early(err)
 	}
 	d.liftMarks = lift.marks
-	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: req.EachCommit == EachTips}
+	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: atTips(req.EachCommit), targets: req.EachCommit == EachTargets}
 	plan.stops, plan.tail = d.layerStops()
 	plan.edit, plan.final = d.editMarks()
 	if req.Stack != nil {
@@ -729,7 +748,7 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		return Result{Branch: req.Branch}, err
 	}
 	req.EachCommit = mode
-	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true,
+	d := &driver{mainRoot: mainRoot, cfg: cfg, req: req, log: log, old: old, keep: true, resumed: true,
 		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, Edit: req.Edit, EachCommit: mode, Layered: req.Stack != nil || req.ReportLine != nil}, stepFailed: map[string]int{}, made: map[string]bool{}}
 	d.restoreLayers(req.Resumed)
 	d.res.Unchecked = slices.Clone(req.UncheckedBefore)
@@ -915,10 +934,10 @@ func (d *driver) markTodo() error {
 		return err
 	}
 	d.liftMarks = lift.marks
-	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: d.req.EachCommit == EachTips}
+	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: atTips(d.req.EachCommit), targets: d.req.EachCommit == EachTargets}
 	plan.stops, plan.tail = d.layerStops()
 	plan.edit, plan.final = d.editMarks()
-	if plan.open, plan.due, err = d.stoppedGroup(); err != nil {
+	if plan.open, plan.due, plan.folded, err = d.stoppedGroup(); err != nil {
 		return err
 	}
 	if plan.carry, err = d.tipCarry(); err != nil {

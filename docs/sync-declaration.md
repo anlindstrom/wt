@@ -209,7 +209,7 @@ rest. A check must not change tracked files: one that does has failed.
 
 ### `--each-commit` — where the checks run, for one run
 
-`wt sync rebase --each-commit=all|tips|off` says where this run's checks run.
+`wt sync rebase --each-commit=all|tips|targets|off` says where this run's checks run.
 `.wt-sync.yaml` has no key for it: the declaration stays what every run is
 held to, and the flag is a person's choice for one.
 
@@ -217,6 +217,7 @@ held to, and the flag is a person's choice for one.
 |---|---|
 | `all` | the default: at every replayed commit that touches a step's `paths` |
 | `tips` | only at a layer's tip with `--stack` (each layer branch the line moves, and the line's own tip), and at the branch's tip without it |
+| `targets` | at every layer's tip as `tips` does, and at each commit a `fixup!`, `squash!` or `amend!` folded into, once folded: for `--stack --autosquash` in place |
 | `off` | nowhere |
 
 Use `tips` for a line whose commits do not compile one by one: trunk removed
@@ -239,6 +240,20 @@ build. They are not owed, since leaving them out was the person's choice; the
 plan file and the end of the run say which mode ran, and so does `--json`
 (`eachCommit`). `off` runs no `each_commit` check at all and says so the same
 way.
+
+Use `targets` for a fold in place (`--stack --autosquash`, without `--onto`)
+over a long line: there the commits that are not targets keep their own
+changes, so the targets and the tips are the commits whose change differs, and
+a fold that only touches string literals compiles about once per layer plus
+once per target, not once per commit. At a target the check is due when the
+folded commit (the target, with what folded into it) touches the step's
+`paths`, as `all` judges each commit; at a tip it is due as under `tips`. A
+commit a per-layer step folds generated output into is a target too, and the
+rechecks after such a fold are at the targets and the tips only. The commits
+between are not checked and not owed, as under `tips`, and `retry`, a script the
+commit predates and `--allow-owed` work as there. `targets` is refused, before
+anything moves, for a run that is not an in-place fold (no `--autosquash`,
+`--onto`, or `--edit`): use `tips` there.
 
 A resume takes no `--each-commit`: it goes on with the mode its run was
 given, which the handover records. `--each-commit=tips` with `--edit` is

@@ -272,7 +272,7 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&alone, "alone", false, "rebase, or look at, the one worktree named without the rest of its stack; the others are left as they are")
 	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: name the fixups a fold moves ahead of their context; with --rebase, fold them")
 	sync.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave out the branches that fork from the line or sit above its top; a run then never moves them")
-	sync.Flags().StringVar(&eachCommit, "each-commit", "", "with --rebase: where the each_commit checks run: all (default), tips or off")
+	sync.Flags().StringVar(&eachCommit, "each-commit", "", "with --rebase: where the each_commit checks run: all (default), tips, targets or off")
 	sync.Flags().StringVar(&edit, "edit", "", "with --rebase --stack: stop at this commit of the line for you to amend, in place")
 	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk; with --rebase, rebase onto it")
 	sel.add(sync, true)
@@ -644,9 +644,11 @@ func (f syncVerbFlags) check() error {
 	case f.edit != "" && f.onto != "":
 		return usagef("--edit and --onto are two runs: edit in place first (--stack --edit <rev>), then move (--stack --onto <ref>)")
 	case f.eachCommit != "" && !validEachCommit(f.eachCommit):
-		return usagef("--each-commit takes all, tips or off, not %q", f.eachCommit)
+		return usagef("--each-commit takes all, tips, targets or off, not %q", f.eachCommit)
 	case f.eachCommit != "" && verb != "rebase":
 		return usagef("--each-commit needs --rebase: a resume goes on with the mode its run was given")
+	case f.eachCommit == wtsync.EachTargets && (!f.autosquash || f.onto != "" || f.edit != ""):
+		return usagef("%s", wtsync.TargetsRefusal(f.edit != ""))
 	case f.eachCommit == wtsync.EachTips && f.edit != "":
 		return usagef("--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after")
 	case f.alone && verb != "" && verb != "rebase":
@@ -785,6 +787,10 @@ func newSyncRebaseCmd() *cobra.Command {
 			"pass. A check is due at a tip when any commit replayed in that layer\n" +
 			"touched its paths. It gives up bisectability for the run; the commits\n" +
 			"between are not owed, and the plan and the end of the run say so.\n" +
+			"--each-commit=targets checks at the tips and at each commit a fixup,\n" +
+			"squash or amend! folded into: for a fold in place (--stack --autosquash,\n" +
+			"without --onto) over a long line, where only the targets and the tips\n" +
+			"differ from what was checked before; it is refused for any other run.\n" +
 			"--each-commit=off runs no check. all is the default. A resume goes on\n" +
 			"with its run's mode. With --edit, tips is refused.\n\n" +
 			"A step with a retry: command runs it at the same commit when its run\n" +
@@ -1006,6 +1012,7 @@ func newSyncRebaseCmd() *cobra.Command {
 			"  wt sync rebase login-crash --alone  # only this one; its stack is left as it is\n" +
 			"  wt sync rebase tmp/ref --alone --stack --autosquash  # fold a copy; no layer moves\n" +
 			"  wt sync rebase tmp/stack --stack --each-commit=tips  # check each layer's tip only\n" +
+			"  wt sync rebase tmp/stack --stack --autosquash --each-commit=targets  # fold in place; check the targets and the tips\n" +
 			"  wt sync rebase tmp/stack --stack   # the whole line once, then every layer\n" +
 			"  wt sync rebase tmp/stack --stack --layer 'tmp/layer/*'   # the pattern selects the layers; side branches still ride along (--no-side-branches stops that)\n" +
 			"  wt sync rebase tmp/stack --stack --layer ui --layer api   # two layers, as repeated flags\n" +
@@ -1059,8 +1066,8 @@ func newSyncRebaseCmd() *cobra.Command {
 	rebase.Flags().BoolVar(&alone, "alone", false, "rebase the one worktree named without the rest of its stack: the others are not refused on, moved or touched")
 	rebase.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: fold the line's fixups, in place; with --onto <ref>, as the line moves onto it")
 	rebase.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave the branches that fork from the line or sit above its top where they are, unread")
-	rebase.Flags().StringVar(&eachCommit, "each-commit", "", "where the each_commit checks run: all (every commit that touches a step's paths, the default), tips (only each layer's tip) or off")
-	_ = rebase.RegisterFlagCompletionFunc("each-commit", cobra.FixedCompletions([]string{"all", "tips", "off"}, cobra.ShellCompDirectiveNoFileComp))
+	rebase.Flags().StringVar(&eachCommit, "each-commit", "", "where the each_commit checks run: all (every commit that touches a step's paths, the default), tips (only each layer's tip), targets (the tips, and each commit a fixup folds into: for --stack --autosquash in place) or off")
+	_ = rebase.RegisterFlagCompletionFunc("each-commit", cobra.FixedCompletions([]string{"all", "tips", "targets", "off"}, cobra.ShellCompDirectiveNoFileComp))
 	rebase.Flags().StringVar(&edit, "edit", "", "with --stack: stop at this commit of the line for you to amend, and replay the rest onto it, in place")
 	addOntoFlags(rebase, &onto, &upstream, "rebase the worktrees named onto <ref> instead of trunk: a branch, origin/<branch>, a tag or a commit")
 	sel.add(rebase, true)
