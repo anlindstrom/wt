@@ -152,6 +152,10 @@ type SyncParticipant struct {
 	// Stack is the stack held on this worktree's line, for a --stack run:
 	// its layers and what came of each. Null for any other run.
 	Stack *Stack `json:"stack"`
+	// Fold is, for a --stack run that folds the line in place or with
+	// --autosquash, what it folded on and what its tree guard compared. Null
+	// for any other run.
+	Fold *StackFold `json:"fold"`
 	// LayerSteps is what each per-layer step came to at each layer's end,
 	// bottom first; empty when none ran or was due.
 	LayerSteps []LayerStepJSON `json:"layerSteps"`

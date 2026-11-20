@@ -154,6 +154,45 @@ type Stack struct {
 	// Restored says an edit run's line was put back at the tip the run
 	// found, its layers refused: the participant is restored, not rebased.
 	Restored bool `json:"-"`
+	// Fold is what a fold's tree guard compared, for the run's own
+	// `fold` field; it is not part of the look, so it is not serialized here.
+	Fold *StackFold `json:"-"`
+}
+
+// StackFold is, for a run that folds the line (--autosquash, --edit or
+// wt sync steps --stack), what it folded and what its tree guard held it
+// to; the run's participant carries it as `fold`.
+type StackFold struct {
+	// InPlace says the line is folded on its own base, not moved onto a
+	// target: the run's `target` then says only where the declaration was
+	// read from and what the line was assessed against.
+	InPlace bool `json:"inPlace"`
+	// Base is the line's own base: the commit it is folded on when InPlace.
+	Base string `json:"base"`
+	// Guard is the tree guard's comparison; null when none ran (the run has
+	// not finished, or it was an edit).
+	Guard *FoldGuard `json:"guard"`
+}
+
+// FoldGuard is what the guard compared and how it came out.
+type FoldGuard struct {
+	// OldTip and NewTip are the line's tips before and after the rebase.
+	OldTip string `json:"oldTip"`
+	NewTip string `json:"newTip"`
+	// Onto is the commit a moving fold's old line was merged onto to compare;
+	// null for a fold in place, which is compared with the old tip itself.
+	Onto *string `json:"onto"`
+	// ExcludedGlobs is the declared per-layer step paths a changed file
+	// matched, which the guard left out of the comparison.
+	ExcludedGlobs []string `json:"excludedGlobs"`
+	// ConflictAllowed is, for a moving fold, the files that conflicted when
+	// merged and were resolved at a stop: only the lines of the merge outside
+	// the conflicting regions must still be in them, in order.
+	ConflictAllowed []string `json:"conflictAllowed"`
+	// Outcome is passed or failed; Reason is why it failed, null when it
+	// passed.
+	Outcome string  `json:"outcome"`
+	Reason  *string `json:"reason"`
 }
 
 // StackContextGap is one hunk of a fixup a fold moves ahead of its
@@ -532,10 +571,20 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 			return refuse(why)
 		}
 	}
+	s.Fold = FoldOf(rec)
 	if (rec.Autosquash || rec.InPlace) && rec.Edit == nil {
-		if why := foldChanged(main, rec.Line.Base, in.Onto, in.OldTip, in.NewTip, in.Folds, in.Stopped); why != "" {
-			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", why, rec.Work))
+		res := foldCheck(main, rec.Line.Base, in.Onto, in.OldTip, in.NewTip, in.Folds, in.Stopped)
+		g := &FoldGuard{OldTip: in.OldTip, NewTip: in.NewTip, ExcludedGlobs: nonNil(res.Excluded),
+			ConflictAllowed: nonNil(res.ConflictAllowed), Outcome: "passed"}
+		if !s.Fold.InPlace {
+			g.Onto = jsonout.Strp(in.Onto)
 		}
+		s.Fold.Guard = g
+		if res.Why != "" {
+			g.Outcome, g.Reason = "failed", jsonout.Strp(res.Why)
+			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", res.Why, rec.Work))
+		}
+		fmt.Fprintf(w, "  ✓ %s\n", guardPassed(g))
 	}
 	// The fork plans follow what the rebase dropped, as the layers' do below,
 	// for the commands --alone prints as much as for the carry.
@@ -748,49 +797,97 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 // merge must still be in it. The steps' own paths are the steps'. A moving
 // fold is never accepted on the old tree alone.
 func foldChanged(main, base, onto, oldTip, newTip string, folds, stopped []string) string {
+	return foldCheck(main, base, onto, oldTip, newTip, folds, stopped).Why
+}
+
+// foldResult is what foldChanged found and what it let through to find it:
+// Why is the difference it could not account for, "" when there is none;
+// Excluded the declared step paths a changed file matched, and
+// ConflictAllowed the conflicted files a stop resolved that differ from the
+// merge, which it held only to keeping the merge's lines outside the conflict.
+type foldResult struct {
+	Why             string
+	Excluded        []string
+	ConflictAllowed []string
+}
+
+func foldCheck(main, base, onto, oldTip, newTip string, folds, stopped []string) (res foldResult) {
+	excluded := func(p string) bool {
+		g := globMatching(folds, p)
+		if g != "" && !slices.Contains(res.Excluded, g) {
+			res.Excluded = append(res.Excluded, g)
+		}
+		return g != ""
+	}
 	was, err1 := git.Run(main, "rev-parse", oldTip+"^{tree}")
 	is, err2 := git.Run(main, "rev-parse", newTip+"^{tree}")
 	if onto == base && err1 == nil && err2 == nil && was == is {
-		return ""
+		return res
 	}
 	tree := fmt.Sprintf("tree %s before, %s after", git.ShortID(was, 7), git.ShortID(is, 7))
 	if err1 != nil || err2 != nil {
-		return tree
+		res.Why = tree
+		return res
 	}
 	if onto == base {
 		paths, err := wtsync.ChangedPaths(main, was, newTip)
 		if err != nil {
-			return tree + ": " + err.Error()
+			res.Why = tree + ": " + err.Error()
+			return res
 		}
 		for _, p := range paths {
-			if !matchesAnyGlob(folds, p) {
-				return tree + ", " + p + " among them"
+			if !excluded(p) {
+				res.Why = tree + ", " + p + " among them"
+				return res
 			}
 		}
-		return ""
+		return res
 	}
 	ref, conflicted, err := wtsync.MergedTree(main, base, onto, oldTip)
 	if err != nil {
-		return tree + ": the old line merged onto the target could not be read: " + err.Error()
+		res.Why = tree + ": the old line merged onto the target could not be read: " + err.Error()
+		return res
 	}
 	paths, err := wtsync.ChangedPaths(main, ref, newTip)
 	if err != nil {
-		return tree + ": " + err.Error()
+		res.Why = tree + ": " + err.Error()
+		return res
 	}
 	for _, p := range paths {
 		switch {
-		case matchesAnyGlob(folds, p):
+		case excluded(p):
 		case slices.Contains(conflicted, p) && slices.Contains(stopped, p):
 			// A stop resolved this file: its conflicting region is the
 			// stop's, the rest of the merge must still be there.
 			if why := lostMergedLines(main, ref, newTip, p); why != "" {
-				return tree + ", " + p + ": " + why
+				res.Why = tree + ", " + p + ": " + why
+				return res
 			}
+			res.ConflictAllowed = append(res.ConflictAllowed, p)
 		default:
-			return tree + ", " + p + " differs from the old line merged onto the target"
+			res.Why = tree + ", " + p + " differs from the old line merged onto the target"
+			return res
 		}
 	}
-	return ""
+	return res
+}
+
+// guardPassed is what a passed tree guard compared, as one line: the old
+// tip, or for a fold that moved the line the old line merged onto its
+// target; the step paths it left out, apart from the conflicted files it
+// held only to keeping the merge's lines outside the conflict.
+func guardPassed(g *FoldGuard) string {
+	line := "tip tree equal to " + git.ShortID(g.OldTip, 7)
+	if g.Onto != nil {
+		line = "tip tree equal to the old line merged onto " + git.ShortID(*g.Onto, 7)
+	}
+	if len(g.ExcludedGlobs) > 0 {
+		line += " outside " + strings.Join(g.ExcludedGlobs, ", ")
+	}
+	if len(g.ConflictAllowed) > 0 {
+		line += "; " + strings.Join(g.ConflictAllowed, ", ") + " resolved at a stop, with every line of the merge outside the conflict kept"
+	}
+	return line
 }
 
 // lostMergedLines is why newTip's p lost something of ref's p outside the
@@ -826,13 +923,16 @@ func lostMergedLines(main, ref, newTip, p string) string {
 	return ""
 }
 
-func matchesAnyGlob(patterns []string, path string) bool {
+func matchesAnyGlob(patterns []string, path string) bool { return globMatching(patterns, path) != "" }
+
+// globMatching is the first pattern that matches path, "" for none.
+func globMatching(patterns []string, path string) string {
 	for _, g := range patterns {
 		if wtsync.MatchGlob(g, path) {
-			return true
+			return g
 		}
 	}
-	return false
+	return ""
 }
 
 // layerPush is the push of a moved layer: to the branch's own remote, with a
@@ -906,4 +1006,29 @@ func emptiedClause(main string, t wtsync.LayerTip, tips []wtsync.LayerTip, i int
 // commit of it was left out or dropped.
 func foldedOnly(t wtsync.LayerTip, rec *wtsync.StackRecord) bool {
 	return rec.Edit == nil && rec.Autosquash && t.Mapped == wtsync.MappedEmptied && t.LeftOut == 0 && len(t.Emptied) == 0 && len(t.Picks) == 0
+}
+
+// FoldOf is the fold a stack record is of, before its guard has run; nil
+// for a record of a run that does not fold the line.
+func FoldOf(rec *wtsync.StackRecord) *StackFold {
+	if !rec.Autosquash && !rec.InPlace && rec.Edit == nil {
+		return nil
+	}
+	return &StackFold{InPlace: rec.Onto == rec.Line.Base, Base: rec.Line.Base}
+}
+
+// SetFold gives the participant the fold the finished stack reports; a
+// stack that did not fold leaves what the run recorded as it was.
+func SetFold(p *SyncParticipant, s *Stack) {
+	if s != nil && s.Fold != nil {
+		p.Fold = s.Fold
+	}
+}
+
+// nonNil is l, or an empty list for none, so --json says [] and not null.
+func nonNil(l []string) []string {
+	if l == nil {
+		return []string{}
+	}
+	return l
 }

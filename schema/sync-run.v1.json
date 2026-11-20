@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.17.0",
+  "x-version": "1.18.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync [<work>...] --rebase --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -73,7 +73,7 @@
     },
     "participant": {
       "type": "object",
-      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "layers", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "layerSteps", "emptied", "testsOnly", "adopted"],
+      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "layers", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "fold", "layerSteps", "emptied", "testsOnly", "adopted"],
       "properties": {
         "work": { "type": "string" },
         "branch": { "type": "string" },
@@ -130,6 +130,7 @@
           ]
         },
         "stack": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stack" }], "description": "Since 1.6.0: for a --stack run, the stack held on this worktree's line: its layers and what came of each. Null for any other run." },
+        "fold": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/fold" }], "description": "Since 1.18.0: for a --stack run that folds the line (--autosquash, --edit, or wt sync steps), what it folded on and what its tree guard compared. Null for any other run." },
         "layerSteps": { "type": "array", "items": { "$ref": "#/$defs/layerStep" }, "description": "Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish." },
         "emptied": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit a finished rebase set out to replay that left no commit in the result: trunk already had its change, or a conflict was resolved to trunk's side. Oldest first. Fixups and squashes folded by --autosquash and the commit --edit amends are not listed. Empty when none, and when the rebase did not finish." },
         "testsOnly": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit whose replay changed only paths matching the declaration's test_paths while the original changed others too. Empty when none, when no test_paths is declared, and when the rebase did not finish." },
@@ -190,6 +191,32 @@
           "oneOf": [{ "type": "null" }, { "enum": ["diverged", "operation", "dirty", "session", "failed", "fetchFailed"] }],
           "description": "Why the own remote refuses the participant; null when it does not. diverged: --allow-diverged goes on. operation, dirty, session: behind, and it cannot be fast-forwarded. failed: the fast-forward itself did not go through; nothing of this participant was touched. fetchFailed: the branch's own remote could not be fetched, so the run could not look; trunk's fetch failing is the run's error instead."
         }
+      }
+    },
+    "fold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inPlace", "base", "guard"],
+      "description": "Since 1.18.0: a fold of the line. For a fold in place, the run's `target` and `onto` say only where the declaration is read from and what the line was assessed against: the rebase goes onto `base`.",
+      "properties": {
+        "inPlace": { "type": "boolean", "description": "The line is folded on its own base, not moved onto a target." },
+        "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's own base: what an in-place fold rebases onto." },
+        "guard": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/foldGuard" }], "description": "What the tree guard compared once the rebase finished. Null while the run has not finished, and for an edit." }
+      }
+    },
+    "foldGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["oldTip", "newTip", "onto", "excludedGlobs", "conflictAllowed", "outcome", "reason"],
+      "description": "Since 1.18.0: the check that the folded line's tree is the old line's, outside what the per-layer steps may change.",
+      "properties": {
+        "oldTip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "newTip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "onto": { "$ref": "#/$defs/shaOrNull", "description": "For a fold that moves the line: the commit the old line was merged onto to compare. Null for a fold in place, which compares with the old tip itself." },
+        "excludedGlobs": { "type": "array", "items": { "type": "string" }, "description": "The declared per-layer step paths a changed file matched, left out of the comparison." },
+        "conflictAllowed": { "type": "array", "items": { "type": "string" }, "description": "For a fold that moves the line: the files that conflicted when merged and were resolved at a stop; every line of the merge outside the conflicting regions must still be in them, in order. Not step paths." },
+        "outcome": { "enum": ["passed", "failed"] },
+        "reason": { "type": ["string", "null"], "description": "Why it failed; null when it passed." }
       }
     },
     "stack": {

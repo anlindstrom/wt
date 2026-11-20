@@ -170,7 +170,14 @@ func (r *resume) joinJournal() {
 	// The journal's record: a tip git cannot read is recorded as none.
 	found, _, _ := r.ctx.Repo.ResolveRef("refs/heads/" + st.Branch)
 	r.j.Join(r.name, st.Branch, r.target.Path, found, nil)
+	// The fold as the stack's record has it, so a resume that stops again,
+	// is refused or is interrupted still says what the line is folded on.
+	var fold *syncrun.StackFold
+	if rec, ok, err := wtsync.ReadStackRecord(r.ctx.Repo.MainRoot, st.Epoch); err == nil && ok {
+		fold = syncrun.FoldOf(rec)
+	}
 	r.j.SetSync(st.Branch, func(p *syncrun.SyncParticipant) {
+		p.Fold = fold
 		p.SafetyRef, p.PlanFile = jsonout.Strp(st.Safety), syncrun.PlanFileOf(r.target.Path)
 		// The run's own mode, also for a resume refused or interrupted
 		// before its rebase says it.
@@ -854,7 +861,7 @@ func (r *resume) finishStack(res wtsync.Result) string {
 		Onto: rec.Onto, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch), Listed: listed, ListErr: lerr,
 		Force: rec.Force, Now: r.opts.Clock(), Folds: syncrun.FoldPaths(r.cfg), Stopped: append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...),
 		Dropped: res.Emptied, Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked})
-	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s })
+	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s; syncrun.SetFold(p, s) })
 	r.restored = s != nil && s.Restored
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, r.name)
