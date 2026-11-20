@@ -323,8 +323,9 @@ held on one line is rebased with the same declaration as any branch.
 Without `--layer`, a branch with no commits of its own (its tip is the line's
 tip or another layer's) that has uncommitted changes to tracked files in
 another worktree is listed as not taken, not held as a layer: it is probably a
-spike on the same commit. `--layer` taking it by name or by pattern moves it
-as before.
+spike on the same commit. `--layer` takes it by name or by pattern as before, and its dirty
+worktree then holds it: it stays on the old commits until those changes are
+committed or stashed.
 
 A `--stack` run also carries the line's side branches: the local branches cut
 from a commit of the line that are not on it, those stacked on them, and those

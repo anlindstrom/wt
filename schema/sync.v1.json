@@ -315,7 +315,7 @@
     },
     "stackSkipped": {
       "type": "object",
-      "description": "Since 1.7.0: a branch on the line not taken as a layer: a backup name (wt refs sweep's patterns), or, without --layer, a branch with no commits of its own that has uncommitted tracked changes in another worktree; --layer takes either.",
+      "description": "Since 1.7.0: a branch on the line not taken as a layer: a backup name (wt refs sweep's patterns), or, without --layer, a branch with no commits of its own that has uncommitted tracked changes in another worktree; --layer takes either. A branch a --layer pattern matched whose tip is not on the line is listed here too.",
       "required": ["branch", "tip", "reason"],
       "properties": {
         "branch": { "type": "string" },
