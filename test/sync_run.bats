@@ -262,7 +262,7 @@ setup() {
 @test "sync run is not a verb, and rebases nothing" {
     tip=$(git -C "$BUMP" rev-parse HEAD)
 
-    run --separate-stderr wt sync run bump --if-ready --yes --no-push --no-fetch --json
+    run --separate-stderr wt sync run bump --no-fetch --json
     [ "$status" -ne 0 ]
     [[ "$output" == "" ]]
     [[ "$stderr" == *"accepts at most 1 arg(s), received 2"* ]]
