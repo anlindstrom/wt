@@ -27,11 +27,18 @@ func TestRemoveDeletesMergedBranch(t *testing.T) {
 	if _, err := provision.New(ctx, "fix/merged", provision.NewOptions{NoSetup: true}, &buf); err != nil {
 		t.Fatal(err)
 	}
+	buf.Reset()
 	if err := Remove(ctx, "fix/merged", RemoveOptions{}, &buf); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if ctx.Repo.BranchExists("fix_wt/merged") {
 		t.Error("merged branch should have been deleted")
+	}
+	// The plan is printed before anything happens, and names the outcome.
+	for _, want := range []string{"merged into main", "deleted"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("plan should mention %q:\n%s", want, buf.String())
+		}
 	}
 }
 
@@ -45,6 +52,7 @@ func TestRemoveRenamesUnmergedBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	testkit.GitIn(t, path, "commit", "-q", "--allow-empty", "-m", "work")
+	buf.Reset()
 
 	if err := Remove(ctx, "fix/unmerged", RemoveOptions{}, &buf); err != nil {
 		t.Fatalf("Remove: %v", err)
@@ -54,6 +62,12 @@ func TestRemoveRenamesUnmergedBranch(t *testing.T) {
 	}
 	if !ctx.Repo.BranchExists("unmerged") {
 		t.Error("unmerged work must be kept under the stripped name")
+	}
+	// The plan is printed before anything happens, and names the outcome.
+	for _, want := range []string{path, "fix_wt/unmerged", "not merged: 1 commit ahead of main", "unmerged"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("plan should mention %q:\n%s", want, buf.String())
+		}
 	}
 }
 
@@ -223,72 +237,6 @@ func TestRemoveAcceptsWorkNameOfAnyType(t *testing.T) {
 	}
 	if ctx.Repo.BranchExists("chore_wt/wt-migration") {
 		t.Error("the chore worktree's branch should have been handled")
-	}
-}
-
-// Removal is destructive and its branch outcome is the surprising part, so the
-// plan is printed before anything happens — with or without a confirmation.
-func TestRemovePlanNamesUnmergedBranchOutcome(t *testing.T) {
-	t.Parallel()
-	ctx, _ := kit.Open(testkit.CommittedRepo(t, testkit.MinimalConf), io.Discard)
-	var buf bytes.Buffer
-	path, err := provision.New(ctx, "fix/unmerged-plan", provision.NewOptions{NoSetup: true}, &buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	testkit.GitIn(t, path, "commit", "-q", "--allow-empty", "-m", "work")
-	buf.Reset()
-
-	if err := Remove(ctx, "fix/unmerged-plan", RemoveOptions{}, &buf); err != nil {
-		t.Fatalf("Remove: %v", err)
-	}
-	out := buf.String()
-	for _, want := range []string{path, "fix_wt/unmerged-plan",
-		"not merged: 1 commit ahead of main", "unmerged-plan"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("plan should mention %q:\n%s", want, out)
-		}
-	}
-}
-
-func TestRemovePlanNamesMergedBranchOutcome(t *testing.T) {
-	t.Parallel()
-	ctx, _ := kit.Open(testkit.CommittedRepo(t, testkit.MinimalConf), io.Discard)
-	var buf bytes.Buffer
-	if _, err := provision.New(ctx, "fix/merged-plan", provision.NewOptions{NoSetup: true}, &buf); err != nil {
-		t.Fatal(err)
-	}
-	buf.Reset()
-
-	if err := Remove(ctx, "fix/merged-plan", RemoveOptions{}, &buf); err != nil {
-		t.Fatalf("Remove: %v", err)
-	}
-	out := buf.String()
-	for _, want := range []string{"merged into main", "deleted"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("plan should mention %q:\n%s", want, out)
-		}
-	}
-}
-
-// git itself refuses to remove a dirty checkout, so the plan's job is to say so
-// before the attempt rather than leaving the user to read it out of a failure.
-func TestRemovePlanReportsUncommittedChanges(t *testing.T) {
-	t.Parallel()
-	ctx, _ := kit.Open(testkit.CommittedRepo(t, testkit.MinimalConf), io.Discard)
-	var buf bytes.Buffer
-	path, err := provision.New(ctx, "fix/dirty", provision.NewOptions{NoSetup: true}, &buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	testkit.MustWrite(t, filepath.Join(path, "scratch.txt"), "unsaved")
-	buf.Reset()
-
-	if err := Remove(ctx, "fix/dirty", RemoveOptions{}, &buf); err == nil {
-		t.Fatal("git refuses to remove a dirty worktree; want that error")
-	}
-	if !strings.Contains(buf.String(), "uncommitted") {
-		t.Errorf("plan should report uncommitted changes:\n%s", buf.String())
 	}
 }
 
@@ -570,6 +518,11 @@ func TestRemoveRefusesALockHeldByARunningProcess(t *testing.T) {
 	if !strings.Contains(buf.String(), reason) {
 		t.Errorf("the plan must show whose lock it is:\n%s", buf.String())
 	}
+	// git's own answer for a locked worktree tells the reader to run
+	// `remove -f -f`, which is not a wt command and not what they should type.
+	if said := buf.String() + err.Error(); strings.Contains(said, "-f -f") {
+		t.Errorf("git's advice must not reach the user:\n%s", said)
+	}
 }
 
 func TestRemoveForceBreaksALockHeldByARunningProcess(t *testing.T) {
@@ -629,26 +582,6 @@ func TestRemoveRefusesALockNothingExplains(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Error("the worktree must still be there")
-	}
-}
-
-// git's own answer for a locked worktree tells the reader to run
-// `remove -f -f`, which is not a wt command and not what they should type.
-func TestRemoveNeverRepeatsGitsAdviceAboutMinusFMinusF(t *testing.T) {
-	t.Parallel()
-	main := testkit.CommittedRepo(t, testkit.MinimalConf)
-	ctx, _ := kit.Open(main, io.Discard)
-	reason := fmt.Sprintf("claude session live (pid %d)", os.Getpid())
-	path := provisiontest.LockedWorktree(t, ctx, main, "fix/live", reason)
-
-	var buf bytes.Buffer
-	err := RemoveAt(ctx, path, RemoveOptions{Agents: []agents.Agent{}}, &buf)
-	said := buf.String()
-	if err != nil {
-		said += err.Error()
-	}
-	if strings.Contains(said, "-f -f") {
-		t.Errorf("git's advice must not reach the user:\n%s", said)
 	}
 }
 

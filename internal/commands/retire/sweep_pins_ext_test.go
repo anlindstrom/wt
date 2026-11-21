@@ -95,7 +95,7 @@ func TestSweepInterruptedAfterAMoveNamesThePin(t *testing.T) {
 		}
 	}
 	r, human, _ := retiretest.SweepJSON(t, ctx, retire.SweepOptions{NoFetch: true, Agents: []agents.Agent{}, PRs: map[string]github.PR{}})
-	if r.Outcome != jsonout.OutcomeInterrupted || r.RunID == nil {
+	if r.Outcome != jsonout.OutcomeInterrupted || r.RunID == nil || r.Recovery == nil {
 		t.Fatalf("%+v\n%s", r, human)
 	}
 	it := retiretest.ResultItem(t, r, "one")
