@@ -264,8 +264,7 @@ func newSyncRebaseCmd() *cobra.Command {
 			"refs/wt-sync-kept/<branch>/<epoch>. The end names the commit and the\n" +
 			"paths its amend changed. wt sync undo <work> from the edit stop or any\n" +
 			"later one puts everything back and keeps the amend under a safety ref.\n" +
-			"One --edit per run; to fold or move the line too, run that after.\n\n" +
-			"Also spelled wt sync <work>... --rebase, with the same flags.",
+			"One --edit per run; to fold or move the line too, run that after.",
 		Example: "  wt sync rebase login-crash api-tidy --yes --json --expect 1:0123abcd # a tool\n" +
 			"  wt sync rebase login-crash --alone  # only this one; its stack is left as it is\n" +
 			"  wt sync rebase tmp/ref --alone --stack --autosquash  # fold a copy; no layer moves\n" +
@@ -283,14 +282,14 @@ func newSyncRebaseCmd() *cobra.Command {
 			"  wt sync rebase ui --onto origin/main --upstream feat_wt/api  # move a layer\n" +
 			"  wt sync rebase --all --no-fetch --push  # every ready one, everywhere, pushed\n" +
 			"  wt sync rebase --profile api --if-ready --no-ff-trunk  # trunk left as it is\n" +
-			"  wt sync --roots work --rebase --no-push  # spelled on wt sync; print pushes",
+			"  wt sync rebase --roots work --no-push  # a few roots; print the pushes",
 		Args:              cobra.ArbitraryArgs,
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			f := syncVerbFlags{rebase: true, yes: yes, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, force: force,
+			f := runFlags{yes: yes, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, force: force,
 				allowDiverged: allowDiverged, allowOwed: allowOwed, push: push(), json: asJSON, expect: expect,
 				stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream, alone: alone, noSides: noSides}
-			if err := f.check(); err != nil {
+			if err := f.check(false); err != nil {
 				return err
 			}
 			if err := f.checkOnto(args, sel.selection()); err != nil {
@@ -303,7 +302,7 @@ func newSyncRebaseCmd() *cobra.Command {
 				return usagef("--stack rebases the line of one worktree: name the one at its top")
 			}
 			if sel.selection().Any() {
-				return syncAcross(cmd, args, "rebase", sel.selection(), f)
+				return syncAcross(cmd, args, true, sel.selection(), f)
 			}
 			return withVerbContext(cmd, args, rebaseCommand, asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				return syncRebase(cmd, args, ctx, f, j)
@@ -334,9 +333,9 @@ func newSyncRebaseCmd() *cobra.Command {
 	return rebase
 }
 
-// syncRebase is wt sync rebase, whichever way it was spelled. j, when not nil,
+// syncRebase is wt sync rebase. j, when not nil,
 // gets its result for --json.
-func syncRebase(cmd *cobra.Command, works []string, ctx *kit.Context, f syncVerbFlags, j *syncrun.RunJournal) error {
+func syncRebase(cmd *cobra.Command, works []string, ctx *kit.Context, f runFlags, j *syncrun.RunJournal) error {
 	opts, _ := runOptions(cmd, f, len(works) == 0)
 	opts.Journal, opts.Expect, opts.Stack, opts.Alone = j, f.expect, f.stackOptions(), f.alone
 	return synccmd.SyncRebase(ctx, works, opts, cmd.OutOrStdout())

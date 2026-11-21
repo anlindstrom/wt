@@ -14,7 +14,7 @@ func newSyncKeepCmd() *cobra.Command {
 	keep := &cobra.Command{
 		Use:   "keep",
 		Short: "Keep the ready worktrees rebased on trunk, unattended",
-		Long: "A keeper is wt sync --rebase --yes --push on a timer, with nobody\n" +
+		Long: "A keeper is wt sync rebase --yes --push on a timer, with nobody\n" +
 			"watching. Each pass fetches trunk and, when its tip has moved since the\n" +
 			"last pass, rebases every worktree the table calls ready, pushes what\n" +
 			"finished with nothing owed (--force-with-lease --force-if-includes), and\n" +
@@ -65,7 +65,7 @@ func newSyncKeepRunCmd() *cobra.Command {
 		Long: "What the keeper's job runs every interval, and what to run from cron\n" +
 			"where there is no launchd. Fetch trunk; when its tip is the one the last\n" +
 			"pass recorded, say so and exit 0. Otherwise rebase every ready worktree\n" +
-			"as wt sync --rebase --yes would, except that a worktree with any Claude\n" +
+			"as wt sync rebase --yes would, except that a worktree with any Claude\n" +
 			"session in it is left alone and named with the session as the reason,\n" +
 			"and push each worktree that finished with nothing owed, with\n" +
 			"--force-with-lease --force-if-includes. A branch behind its own remote\n" +

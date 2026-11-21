@@ -102,7 +102,7 @@ func (t tagWriter) Write(p []byte) (int, error) {
 	return len(p), err
 }
 
-// wt sync --rebase --all watches for the whole run and each repository's
+// wt sync rebase --all watches for the whole run and each repository's
 // rebase watches again inside it. Only the innermost acts on a signal: the
 // outer one has no tracker, and exiting first it would cut off the way back
 // for the worktree mid-rebase.

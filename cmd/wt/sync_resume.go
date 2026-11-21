@@ -80,15 +80,14 @@ func newSyncResumeCmd() *cobra.Command {
 			"it refuses, puts the rebase back and keeps what it came to under\n" +
 			"refs/wt-sync-kept/<branch>/<epoch>.\n\n" +
 			"--json prints one result object on stdout and the rest on stderr, as\n" +
-			"wt sync rebase --json does.\n\n" +
-			"Also spelled wt sync <work> --resume, with the same flags.",
+			"wt sync rebase --json does.",
 		Example: "  wt sync resume login-crash            # continue what the run handed you\n" +
 			"  wt sync resume fix/login-crash --json # by branch; the result as JSON\n" +
 			"  wt sync resume login-crash --no-push  # then print the push command\n" +
 			"  wt sync resume login-crash --yes      # yes to everything, push included\n" +
 			"  wt sync resume login-crash --adopt    # take over a rebase finished by hand\n" +
 			"  wt sync resume tmp/stack --allow-dropped  # past a fixup hunk dropped on purpose\n" +
-			"  wt sync login-crash --resume --push   # resume --push, spelled on wt sync",
+			"  wt sync resume login-crash --push     # then push, without asking",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -107,7 +106,7 @@ func newSyncResumeCmd() *cobra.Command {
 	return resume
 }
 
-// syncResume is wt sync resume, whichever way it was spelled.
+// syncResume is wt sync resume.
 func syncResume(cmd *cobra.Command, work string, ctx *kit.Context, yes, allowOwed, adopt, allowDropped bool, push syncrun.PushMode, j *syncrun.RunJournal) error {
 	opts := syncfix.ResumeOptions{Journal: j, Adopt: adopt, AllowDropped: allowDropped}
 	opts.AllowOwed = allowOwed

@@ -485,7 +485,7 @@ func SectionHeading(s Section, declared bool) string {
 		if !declared {
 			return "ready, once trunk declares " + wtsync.ConfigFile
 		}
-		return "ready · wt sync rebase <work>, or wt sync --rebase for all of them"
+		return "ready · wt sync rebase <work>, or wt sync rebase for all of them"
 	case SectionNeedsYou:
 		return "needs you · wt sync <work> for the detail"
 	}

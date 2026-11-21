@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-21 19:05 — wt sync no longer takes --rebase, --resume or --undo
+
+The verbs spelled as flags at the end of a `wt sync` line are gone, with the
+flags only they read (`--yes`, `--push`, `--force`, `--expect` and the rest):
+`wt sync --rebase` is an unknown flag now. Type `wt sync rebase`, `wt sync resume`
+or `wt sync undo`, which take every flag they took. gittree drives the
+subcommands since its PR #74.
+
 ## 2026-11-20 12:10 — wt sync --stack leaves a dirty stray branch alone
 
 Without `--layer`, a branch that has no commits of its own (its tip is the

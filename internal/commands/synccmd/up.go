@@ -22,7 +22,7 @@ func Up(ctx *kit.Context, arg string, opts RunOptions, w io.Writer) error {
 func up(ctx *kit.Context, arg string, opts RunOptions, w io.Writer) error {
 	if arg == "/" || (arg == "." && repo.SamePath(ctx.Repo.Root, ctx.Repo.MainRoot)) {
 		return fmt.Errorf("wt up brings a worktree onto trunk, and %s is the main checkout: "+
-			"git pull there, or wt sync --rebase for every worktree", ctx.Repo.MainRoot)
+			"git pull there, or wt sync rebase for every worktree", ctx.Repo.MainRoot)
 	}
 	wt, err := kit.Locate(ctx, arg)
 	if err != nil {

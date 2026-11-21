@@ -40,12 +40,10 @@ func newSyncUndoCmd() *cobra.Command {
 			"under one ends with a wt: line to pass on to it. The session wt itself\n" +
 			"runs under is not counted.\n\n" +
 			"--json prints one result object on stdout and the rest on stderr, as\n" +
-			"wt sync rebase --json does.\n\n" +
-			"Also spelled wt sync <work> --undo, with the same flags.",
+			"wt sync rebase --json does.",
 		Example: "  wt sync undo login-crash            # back to the safety refs\n" +
 			"  wt sync undo login-crash --force    # even if the branch moved since\n" +
-			"  wt sync login-crash --undo --force  # the same, spelled on wt sync\n" +
-			"  wt sync login-crash --undo --yes    # undo --yes, spelled on wt sync\n" +
+			"  wt sync undo login-crash --yes      # without asking about an idle session\n" +
 			"  wt sync undo login-crash --json     # the result as one JSON object",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
@@ -61,7 +59,7 @@ func newSyncUndoCmd() *cobra.Command {
 	return undo
 }
 
-// syncUndo is wt sync undo, whichever way it was spelled.
+// syncUndo is wt sync undo.
 func syncUndo(cmd *cobra.Command, work string, ctx *kit.Context, force, yes bool, j *syncrun.RunJournal) error {
 	opts := syncfix.UndoOptions{Force: force, Journal: j}
 	if canAsk(cmd) && !yes {
