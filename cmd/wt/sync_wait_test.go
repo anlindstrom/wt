@@ -306,16 +306,6 @@ func writePointer(t *testing.T, gitDir, log string, pid int, start time.Time) {
 	}
 }
 
-// deadPid is the pid of a process that has ended.
-func deadPid(t *testing.T) int {
-	t.Helper()
-	cmd := exec.Command("true")
-	if err := cmd.Run(); err != nil {
-		t.Fatal(err)
-	}
-	return cmd.Process.Pid
-}
-
 // A pointer whose log never grows: --timeout ends the wait with 124.
 // A pointer whose writer is gone with no end file: ended without saying how.
 func TestSyncWaitOnAWriterThatIsGone(t *testing.T) {
@@ -327,7 +317,7 @@ func TestSyncWaitOnAWriterThatIsGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writePointer(t, gd, log, deadPid(t), time.Now().Add(-time.Hour))
+	writePointer(t, gd, log, gittest.DeadPID(t), time.Now().Add(-time.Hour))
 	out, code := wtOut(t, dir, gate, "sync", "wait", tmp)
 	if code != 1 || !strings.Contains(out, "ended without saying how") || !strings.Contains(out, "wt sync doctor") {
 		t.Fatalf("exit %d:\n%s", code, out)
@@ -353,7 +343,7 @@ func TestSyncWaitOnAWriterThatIsGone(t *testing.T) {
 	if err := os.WriteFile(log+".end", []byte("0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writePointer(t, gd, log, deadPid(t), time.Now().Add(-time.Hour))
+	writePointer(t, gd, log, gittest.DeadPID(t), time.Now().Add(-time.Hour))
 	lock := "pid=" + strconv.Itoa(sleeper.Process.Pid) + "\nstart=" + strconv.FormatInt(time.Now().Unix(), 10) + "\nowner=x\n"
 	if err := os.WriteFile(filepath.Join(gd, "wt-sync.lock"), []byte(lock), 0o644); err != nil {
 		t.Fatal(err)

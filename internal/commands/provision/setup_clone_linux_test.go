@@ -5,13 +5,13 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/anlindstrom/wt/internal/commands/testkit"
+	"github.com/anlindstrom/wt/internal/gittest"
 )
 
 // withFileCloner stands in for the FICLONE of one file: a byte copy, which is
@@ -110,25 +110,15 @@ func TestCloneTreeFailureLeavesNothing(t *testing.T) {
 	}
 }
 
-// deadPID is the pid of a process that has exited.
-func deadPID(t *testing.T) string {
-	t.Helper()
-	cmd := exec.Command("true")
-	if err := cmd.Run(); err != nil {
-		t.Fatal(err)
-	}
-	return strconv.Itoa(cmd.Process.Pid)
-}
-
 // A tree a killed run left behind is removed; one named for a running
 // process, or this one, is another setup's and stays.
 func TestRemoveStaleClonesKeepsTheLiveOnes(t *testing.T) {
-	// Not parallel: fewer processes starting lowers the chance of reusing deadPID's pid.
+	// Not parallel: fewer processes starting lowers the chance of reusing gittest.DeadPID's pid.
 	parent := t.TempDir()
-	stale := ".node_modules.wt-clone-" + deadPID(t) + "-1234"
+	stale := ".node_modules.wt-clone-" + strconv.Itoa(gittest.DeadPID(t)) + "-1234"
 	old := ".node_modules.wt-clone-nopid"
 	live := ".node_modules.wt-clone-" + strconv.Itoa(os.Getpid()) + "-4321"
-	other := ".gradle.wt-clone-" + deadPID(t) + "-1234"
+	other := ".gradle.wt-clone-" + strconv.Itoa(gittest.DeadPID(t)) + "-1234"
 	for _, n := range []string{stale, old, live, other} {
 		testkit.MustWrite(t, filepath.Join(parent, n, "half.js"), "half")
 	}
@@ -167,7 +157,7 @@ func TestSetupSweepsStaleClonesBesideAnExistingCache(t *testing.T) {
 	// Not parallel: swaps cloneDir.
 	ctx, main, target := cacheFixture(t)
 	testkit.MustMkdir(t, filepath.Join(target, "node_modules"))
-	stale := filepath.Join(target, ".node_modules.wt-clone-"+deadPID(t)+"-1")
+	stale := filepath.Join(target, ".node_modules.wt-clone-"+strconv.Itoa(gittest.DeadPID(t))+"-1")
 	testkit.MustWrite(t, filepath.Join(stale, "half.js"), "half")
 	WithCloner(t, func(_, to string) error { return os.Mkdir(to, 0o755) })
 	var buf bytes.Buffer

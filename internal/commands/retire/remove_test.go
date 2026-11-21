@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/provision"
 	"github.com/anlindstrom/wt/internal/commands/provision/provisiontest"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
+	"github.com/anlindstrom/wt/internal/gittest"
 	"github.com/anlindstrom/wt/internal/repo"
 )
 
@@ -448,18 +448,6 @@ func TestRemoveDoesNotDeleteWhenTheMainBranchDisappears(t *testing.T) {
 	}
 }
 
-// deadPid returns a pid that has certainly exited: a process run to
-// completion. Nothing else can be assumed dead, and inventing a number risks
-// naming somebody else's process.
-func deadPid(t *testing.T) int {
-	t.Helper()
-	cmd := exec.Command("true")
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("running true: %v", err)
-	}
-	return cmd.Process.Pid
-}
-
 // Claude Code locks the worktree its session lives in and names the session
 // and its pid in the reason. Once that session is over the lock is litter,
 // and nobody should have to learn `git worktree unlock` to get past it.
@@ -467,7 +455,7 @@ func TestRemoveReleasesAStaleLockAndRemoves(t *testing.T) {
 	t.Parallel()
 	main := testkit.CommittedRepo(t, testkit.MinimalConf)
 	ctx, _ := kit.Open(main, io.Discard)
-	pid := deadPid(t)
+	pid := gittest.DeadPID(t)
 	reason := fmt.Sprintf("claude session gone (pid %d start Thu Sep 10 04:58:38 2026)", pid)
 	path := provisiontest.LockedWorktree(t, ctx, main, "fix/gone", reason)
 
