@@ -45,16 +45,6 @@ func TestAskAnswersAbortsOnEndOfInput(t *testing.T) {
 	}
 }
 
-func TestRootListsInit(t *testing.T) {
-	out, err := runCmd(t, "--help")
-	if err != nil {
-		t.Fatalf("--help: %v", err)
-	}
-	if !strings.Contains(out, "init") {
-		t.Errorf("--help does not mention init:\n%s", out)
-	}
-}
-
 // Init re-asks after a rejected answer, so the prompt function is called more
 // than once against one stream. A reader built per call would buffer past its
 // own line and drop the answers meant for the second round.

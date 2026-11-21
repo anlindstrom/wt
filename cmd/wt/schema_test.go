@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,18 @@ func TestSchemaListNamesEachCommand(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "wt sync-run") {
 		t.Errorf("a command that does not exist:\n%s", out.String())
+	}
+	// Each line is the schema's name and the command line whose output it is.
+	for _, want := range []string{
+		`(?m)^sweep-plan +wt sweep --dry-run --json `,
+		`(?m)^sweep +wt sweep --yes --json `,
+		`(?m)^refs-sweep-plan +wt refs sweep --dry-run --json `,
+		`(?m)^refs-swept +wt refs swept --json `,
+		`(?m)^config +wt config --json`,
+	} {
+		if !regexp.MustCompile(want).MatchString(out.String()) {
+			t.Errorf("want %q in:\n%s", want, out.String())
+		}
 	}
 }
 

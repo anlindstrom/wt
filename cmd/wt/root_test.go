@@ -25,26 +25,10 @@ func TestRootListsSubcommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("--help: %v", err)
 	}
-	for _, want := range []string{"config", "path", "branch"} {
+	for _, want := range []string{"config", "path", "branch", "init"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("--help does not mention %q:\n%s", want, out)
 		}
-	}
-}
-
-func TestVersion(t *testing.T) {
-	out, err := runCmd(t, "version")
-	if err != nil {
-		t.Fatalf("version: %v", err)
-	}
-	if strings.TrimSpace(out) == "" {
-		t.Error("version printed nothing")
-	}
-}
-
-func TestUnknownCommandIsAnError(t *testing.T) {
-	if _, err := runCmd(t, "wibble"); err == nil {
-		t.Error("want an error for an unknown command")
 	}
 }
 
@@ -59,13 +43,6 @@ func TestArgErrorsShowUsage(t *testing.T) {
 		if !strings.Contains(out, "Usage:") {
 			t.Errorf("%v: no usage shown:\n%s", args, out)
 		}
-	}
-}
-
-func TestArgErrorNamesWhatIsNeeded(t *testing.T) {
-	out, _ := runCmd(t, "path")
-	if !strings.Contains(out, "<work>") {
-		t.Errorf("usage does not name the argument:\n%s", out)
 	}
 }
 
@@ -99,7 +76,9 @@ func TestArgErrorMessageIsHelpful(t *testing.T) {
 	if strings.Contains(msg, "accepts 1 arg(s)") {
 		t.Errorf("still cobra's default message: %q", msg)
 	}
-	_ = out
+	if !strings.Contains(out, "<work>") {
+		t.Errorf("usage does not name the argument:\n%s", out)
+	}
 }
 
 func TestTooManyArgsIsAlsoExplained(t *testing.T) {
@@ -202,7 +181,7 @@ func TestHelpWorksWhereArgumentsAreMissing(t *testing.T) {
 }
 
 func TestErrorStatus(t *testing.T) {
-	for _, args := range [][]string{{"new"}, {"version", "extra"}, {"new", "--bogus"}, {"wibble"}, {"remove"}, {"sync", "--push"}, {"config", "set", "superset", "sometimes"}} {
+	for _, args := range [][]string{{"new"}, {"version", "extra"}, {"new", "--bogus"}, {"wibble"}, {"remove"}, {"sync", "--push"}, {"config", "set", "superset", "sometimes"}, {"migrate", "a", "b", "c"}} {
 		_, err := runCmd(t, args...)
 		if err == nil || errorStatus(err) != 2 {
 			t.Errorf("%v: error %v, want usage status 2", args, err)

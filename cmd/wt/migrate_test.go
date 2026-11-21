@@ -32,12 +32,6 @@ func TestMigrateArgErrorNamesWhatIsNeeded(t *testing.T) {
 	}
 }
 
-func TestMigrateRefusesMoreThanADestination(t *testing.T) {
-	if _, err := runCmd(t, "migrate", "a", "b", "c"); err == nil {
-		t.Error("want an error for a third argument")
-	}
-}
-
 // "move" is what this does; the verb should not be the thing standing between
 // a user and it.
 func TestMoveIsAnAliasForMigrate(t *testing.T) {
