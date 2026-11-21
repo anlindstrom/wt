@@ -12,27 +12,6 @@ import (
 	"github.com/anlindstrom/wt/internal/gittest"
 )
 
-// Behind, fast-forwarded and rebased by a run, then undone.
-func TestAFastForwardThatWasUndoneLeavesNoFormerTip(t *testing.T) {
-	t.Parallel()
-	if testing.Short() {
-		t.Skip("integration: real repositories with an origin to push to")
-	}
-	f := synccmdtest.NewTrunkFixture(t)
-	x, opts := f.PushedWork(t)
-	before := testkit.GitOut(t, x, "rev-parse", "HEAD")
-	theirs := f.Theirs(t, "feat_wt/x", "t.txt", "t\n")
-	f.AdvanceOrigin(t, 1)
-	if r, human, err := synccmdtest.UpOut(t, f.Ctx, "x", opts); err != nil || !r.Worktrees[0].OwnRemoteSync.FastForwarded {
-		t.Fatalf("%v\n%s", err, human)
-	}
-	var out bytes.Buffer
-	if err := SyncUndo(f.Ctx, "x", UndoOptions{VerbOptions: opts.VerbOptions}, &out); err != nil || testkit.GitOut(t, x, "rev-parse", "HEAD") != before {
-		t.Fatalf("undo: %v\n%s", err, out.String())
-	}
-	synccmdtest.MustBeDiverged(t, f, x, opts, theirs)
-}
-
 // The same for the fast-forward that is all a run did.
 func TestAFastForwardAloneThatWasUndoneLeavesNoFormerTip(t *testing.T) {
 	t.Parallel()

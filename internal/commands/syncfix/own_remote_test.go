@@ -58,6 +58,8 @@ func TestUpFastForwardsABranchBehindItsRemoteThenRebases(t *testing.T) {
 	if got := testkit.GitOut(t, x, "rev-parse", "HEAD"); got != before {
 		t.Fatalf("undo left the branch at %s, want %s as before the fast-forward\n%s", got, before, out.String())
 	}
+	// The remote's commit reads as nothing the branch once had.
+	synccmdtest.MustBeDiverged(t, f, x, opts, theirs)
 }
 
 // wt up promises a rebase that goes through without anybody: a branch that
