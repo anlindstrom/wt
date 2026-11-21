@@ -197,6 +197,12 @@ A test's own fakes go with the call, not into a package variable:
 - the roots `kit.Find` scans go in `ctx.Roots`, so `wt attach` finds a
   test's own fixture without WT_ROOTS; a command across repositories
   (`--all`) still reads WT_ROOTS, and its test is serial;
+- a docker that answers, for a step that declares `needs: [docker]`, goes in
+  the run's options as `Probes` (`synccmdtest.DockerUp()`, already in
+  `synccmdtest.NoAgents()` and `syncfix`'s `noResumeAgents`); `DockerDown()`
+  is the one that fails. A wt run in a child process takes its docker from the
+  child's own PATH: `synccmdtest.WriteFakeDocker(t, dir)` and `cmd.Env`, as
+  cmd/wt's sync-wait tests do;
 - the claude `wt session stop` runs goes in the session env's `claude`
   (`fakeClaudeStop`), not on the PATH;
 - a keeper pass turns commit signing off with `git.NeverSign`, on the
