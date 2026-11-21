@@ -32,6 +32,12 @@ type stray struct{ name, at, state string }
 // commits are a, b, x, c, and the strays.
 func strayLine(t *testing.T, strays ...stray) (ctx *kit.Context, paths map[string]string) {
 	t.Helper()
+	return layeredLine(t, true, strays...)
+}
+
+// layeredLine is strayLine, with the commit x between b and c only when withX.
+func layeredLine(t *testing.T, withX bool, strays ...stray) (ctx *kit.Context, paths map[string]string) {
+	t.Helper()
 	main := testkit.CommittedRepo(t, testkit.MinimalConf)
 	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
 	wtDir, err := filepath.EvalSymlinks(t.TempDir())
@@ -46,6 +52,9 @@ func strayLine(t *testing.T, strays ...stray) (ctx *kit.Context, paths map[strin
 	commit("base.txt")
 	gittest.Git(t, main, "checkout", "-q", "-b", "tmp/line")
 	for _, l := range []string{"a", "b", "x", "c"} {
+		if l == "x" && !withX {
+			continue
+		}
 		commit(l + ".txt")
 		if l != "x" {
 			gittest.Git(t, main, "branch", "tmp/layer/"+l)
