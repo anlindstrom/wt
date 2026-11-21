@@ -551,8 +551,6 @@ func StackFinishFor(rec *wtsync.StackRecord, res wtsync.Result, cfg *wtsync.Conf
 // disk then says what moved.
 func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failure string, err error) {
 	rec, main := in.Record, ctx.Repo.MainRoot
-	// What the line was rebased onto, as a layer it carries is said to be on.
-	carrier := cmp.Or(rec.OntoRef, "trunk")
 	holders := make([]wtsync.LayerHolder, len(rec.Line.Layers))
 	for i, l := range rec.Line.Layers {
 		holders[i] = wtsync.LayerHolder{Branch: l.Branch, State: wtsync.HolderNone}
@@ -561,125 +559,205 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	SetSides(s, rec.Sides, nil, "")
 	s.ContextGaps = GapsJSON(in.Gaps)
 	s.ContextUnchecked = append(s.ContextUnchecked, in.Unchecked...)
-	refuse := func(why string) (*Stack, string, error) {
-		if rec.Edit != nil {
-			// An edit run is never left rebased under layers that did not
-			// follow: the line goes back where the run found it.
-			why, s.Restored = putBackLine(main, rec, why)
-		}
-		fmt.Fprintf(w, "  ✗ no layer moved: %s\n", why)
-		s.Refusal = jsonout.Strp(why)
-		sidesNotMoved(w, s, "no layer moved, and no side branch")
-		if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
-			fmt.Fprintf(w, "  ✗ the stack's record could not be removed (%v): wt sync undo %s removes it\n", ferr, rec.Work)
-		}
-		return s, "no layer moved", nil
-	}
-	if rec.Edit != nil {
-		// What the edit did, whatever comes of the layers; its content was
-		// held to the old line with the amend merged in inside the rebase,
-		// before the line's branch moved.
-		e, eerr := stackEdit(main, rec, in.OldTip, in.NewTip)
-		s.Edit = e
-		printEdit(w, e)
-		if eerr != nil {
-			fmt.Fprintf(w, "      note: what the amend changed could not all be read: %v\n", eerr)
-		}
-	}
-	if e := rec.Edit; e != nil {
-		// Held inside the rebase already, before the line's branch moved;
-		// held again here for a rebase a person finished by hand, which
-		// never reached that check, before any layer moves.
-		if e.Amended == "" {
-			return refuse(fmt.Sprintf("the rebase went on from the edit stop by hand, so what %s was amended to is not known and the line cannot be checked", git.ShortID(e.Commit, 7)))
-		}
-		if why := EditContent(main, in.OldTip, in.Folds, nil)(in.NewTip, *e, in.Stopped); why != "" {
-			return refuse(why)
-		}
+	f := &stackFinisher{w: w, main: main, rec: rec, in: in, s: s}
+	if why := f.guardEdit(); why != "" {
+		return f.refuse(why)
 	}
 	s.Fold = FoldOf(rec)
-	if (rec.Autosquash || rec.InPlace) && rec.Edit == nil {
-		res := foldCheck(main, rec.Line.Base, in.Onto, in.OldTip, in.NewTip, in.Folds, in.Stopped)
-		g := &FoldGuard{OldTip: in.OldTip, NewTip: in.NewTip, ExcludedGlobs: nonNil(res.Excluded),
-			ConflictAllowed: nonNil(res.ConflictAllowed), Outcome: "passed"}
-		if !s.Fold.InPlace {
-			g.Onto = jsonout.Strp(in.Onto)
-		}
-		s.Fold.Guard = g
-		if res.Why != "" {
-			g.Outcome, g.Reason = "failed", jsonout.Strp(res.Why)
-			return refuse(fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", res.Why, rec.Work))
-		}
-		fmt.Fprintf(w, "  ✓ %s\n", guardPassed(g))
+	if why := f.guardFold(); why != "" {
+		return f.refuse(why)
 	}
+	forks := f.followDrops(rec.Forks)
+	if IsAlone(main, rec.Epoch) {
+		return f.alone(forks)
+	}
+	plans, why := f.followPlans()
+	if why != "" {
+		return f.refuse(why)
+	}
+	tips, why := f.verifyTips(plans)
+	if why != "" {
+		return f.refuse(why)
+	}
+	merr := f.moveLayers(tips)
+	held, moved := f.reportLayers(tips)
+	return f.moveSides(forks, merr, held, moved)
+}
+
+// stackFinisher is what FinishStack's phases share: the run's record and
+// what the rebase came to, the report being built, and where it prints.
+type stackFinisher struct {
+	w    io.Writer
+	main string
+	rec  *wtsync.StackRecord
+	in   StackFinish
+	s    *Stack
+}
+
+// refuse ends the finish with no layer moved. An edit run is never left
+// rebased under layers that did not follow: the line goes back where the run
+// found it.
+func (f *stackFinisher) refuse(why string) (*Stack, string, error) {
+	w, s, rec, main := f.w, f.s, f.rec, f.main
+	if rec.Edit != nil {
+		why, s.Restored = putBackLine(main, rec, why)
+	}
+	fmt.Fprintf(w, "  ✗ no layer moved: %s\n", why)
+	s.Refusal = jsonout.Strp(why)
+	sidesNotMoved(w, s, "no layer moved, and no side branch")
+	if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
+		fmt.Fprintf(w, "  ✗ the stack's record could not be removed (%v): wt sync undo %s removes it\n", ferr, rec.Work)
+	}
+	return s, "no layer moved", nil
+}
+
+// guardEdit reports what an edit run's amend did and holds the line to it;
+// the reason it cannot be accepted, "" for accepted or not an edit run.
+func (f *stackFinisher) guardEdit() string {
+	w, s, rec, main, in := f.w, f.s, f.rec, f.main, f.in
+	if rec.Edit == nil {
+		return ""
+	}
+	// What the edit did, whatever comes of the layers; its content was
+	// held to the old line with the amend merged in inside the rebase,
+	// before the line's branch moved.
+	e, eerr := stackEdit(main, rec, in.OldTip, in.NewTip)
+	s.Edit = e
+	printEdit(w, e)
+	if eerr != nil {
+		fmt.Fprintf(w, "      note: what the amend changed could not all be read: %v\n", eerr)
+	}
+	// Held inside the rebase already, before the line's branch moved;
+	// held again here for a rebase a person finished by hand, which
+	// never reached that check, before any layer moves.
+	stop := rec.Edit
+	if stop.Amended == "" {
+		return fmt.Sprintf("the rebase went on from the edit stop by hand, so what %s was amended to is not known and the line cannot be checked", git.ShortID(stop.Commit, 7))
+	}
+	return EditContent(main, in.OldTip, in.Folds, nil)(in.NewTip, *stop, in.Stopped)
+}
+
+// guardFold holds a fold's result to the line's content, the tree guard, and
+// records it as fold.guard; the reason it failed, "" for passed or no fold.
+func (f *stackFinisher) guardFold() string {
+	w, s, rec, main, in := f.w, f.s, f.rec, f.main, f.in
+	if (!rec.Autosquash && !rec.InPlace) || rec.Edit != nil {
+		return ""
+	}
+	res := foldCheck(main, rec.Line.Base, in.Onto, in.OldTip, in.NewTip, in.Folds, in.Stopped)
+	g := &FoldGuard{OldTip: in.OldTip, NewTip: in.NewTip, ExcludedGlobs: nonNil(res.Excluded),
+		ConflictAllowed: nonNil(res.ConflictAllowed), Outcome: "passed"}
+	if !s.Fold.InPlace {
+		g.Onto = jsonout.Strp(in.Onto)
+	}
+	s.Fold.Guard = g
+	if res.Why != "" {
+		g.Outcome, g.Reason = "failed", jsonout.Strp(res.Why)
+		return fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", res.Why, rec.Work)
+	}
+	fmt.Fprintf(w, "  ✓ %s\n", guardPassed(g))
+	return ""
+}
+
+// followDrops is a set of plans as they are once the rebase dropped what
+// it dropped: an edit's emptied commits, or the drops wt is certain of. Plans
+// that cannot be followed come back nil.
+func (f *stackFinisher) followDrops(plans []wtsync.LayerPlan) []wtsync.LayerPlan {
+	rec, main, in := f.rec, f.main, f.in
 	// The fork plans follow what the rebase dropped, as the layers' do below,
 	// for the commands --alone prints as much as for the carry.
-	forks := rec.Forks
 	if rec.Edit != nil {
-		if got, rerr := wtsync.ReconcileEdit(main, in.Onto, forks, *rec.Edit); rerr == nil {
-			forks = got
-		} else {
-			forks = nil
+		if got, rerr := wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit); rerr == nil {
+			return got
 		}
-	} else if got, rerr := wtsync.ApplyDrops(main, in.Onto, forks, in.Dropped, in.Confirmed); rerr == nil {
-		forks = got
-	} else {
-		forks = nil
+		return nil
 	}
-	if IsAlone(main, rec.Epoch) {
-		// --alone: the line is rebased, and no layer is checked, moved or
-		// held. Each was named when the run began.
-		defer ClearAlone(main, rec.Epoch)
-		leave := "--alone leaves every side branch on the old commits"
-		if _, serr := carrySides(main, w, s, rec, in, forks, leave); serr != nil {
-			fmt.Fprintf(w, "  note: the side branches could not be read against the rebase: %v\n", serr)
-		}
-		if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
-			fmt.Fprintf(w, "  ✗ the stack's record could not be removed (%v): wt sync undo %s removes it\n", ferr, rec.Work)
-		}
-		fmt.Fprintf(w, "  no layer moved: --alone leaves every layer on the old commits; wt sync undo %s puts the line back\n", rec.Work)
-		return s, "", nil
+	if got, rerr := wtsync.ApplyDrops(main, in.Onto, plans, in.Dropped, in.Confirmed); rerr == nil {
+		return got
 	}
-	plans := rec.Plans
+	return nil
+}
+
+// alone ends the finish of an --alone run: the line is rebased, and no layer
+// is checked, moved or held. Each was named when the run began.
+func (f *stackFinisher) alone(forks []wtsync.LayerPlan) (*Stack, string, error) {
+	w, s, rec, main := f.w, f.s, f.rec, f.main
+	defer ClearAlone(main, rec.Epoch)
+	leave := "--alone leaves every side branch on the old commits"
+	if _, serr := carrySides(main, w, s, rec, f.in, forks, leave); serr != nil {
+		fmt.Fprintf(w, "  note: the side branches could not be read against the rebase: %v\n", serr)
+	}
+	if ferr := wtsync.ForgetStack(main, rec.Epoch); ferr != nil {
+		fmt.Fprintf(w, "  ✗ the stack's record could not be removed (%v): wt sync undo %s removes it\n", ferr, rec.Work)
+	}
+	fmt.Fprintf(w, "  no layer moved: --alone leaves every layer on the old commits; wt sync undo %s puts the line back\n", rec.Work)
+	return s, "", nil
+}
+
+// followPlans is the layers' plans as they are once the rebase dropped what
+// it dropped; the reason they cannot be followed otherwise.
+func (f *stackFinisher) followPlans() ([]wtsync.LayerPlan, string) {
+	rec, main, in := f.rec, f.main, f.in
 	if rec.Edit != nil {
 		// The commits the amend emptied were dropped: the plan follows.
-		var rerr error
-		if plans, rerr = wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit); rerr != nil {
-			return refuse(rerr.Error())
+		plans, rerr := wtsync.ReconcileEdit(main, in.Onto, rec.Plans, *rec.Edit)
+		if rerr != nil {
+			return nil, rerr.Error()
 		}
-	} else {
-		// git empties the picks the target already has (above an upstream)
-		// and the ones a conflict rule resolved to trunk's side: the plan
-		// follows the drops wt is certain of.
-		var rerr error
-		if plans, rerr = wtsync.ApplyDrops(main, in.Onto, plans, in.Dropped, in.Confirmed); rerr != nil {
-			return refuse(rerr.Error())
-		}
+		return plans, ""
 	}
+	// git empties the picks the target already has (above an upstream)
+	// and the ones a conflict rule resolved to trunk's side: the plan
+	// follows the drops wt is certain of.
+	plans, rerr := wtsync.ApplyDrops(main, in.Onto, rec.Plans, in.Dropped, in.Confirmed)
+	if rerr != nil {
+		return nil, rerr.Error()
+	}
+	return plans, ""
+}
+
+// verifyTips checks every layer's new tip against its plan; the reason one
+// does not hold, "".
+func (f *stackFinisher) verifyTips(plans []wtsync.LayerPlan) ([]wtsync.LayerTip, string) {
+	rec, main, in := f.rec, f.main, f.in
 	tips, cerr := wtsync.CheckLayers(main, in.NewTip, in.Onto, plans)
-	if cerr != nil {
-		why := cerr.Error()
-		if !in.Confirmed && rec.Edit == nil && len(in.Dropped) > 0 {
-			why += "; the replay was advanced by hand past the run's stop, or the remaining replay was edited by hand, so no dropped commit is taken out of the plan"
-		}
-		if unclear := wtsync.UnclearDrops(plans, in.Dropped); len(unclear) > 0 && rec.Edit == nil {
-			var names []string
-			for _, d := range unclear {
-				names = append(names, git.ShortID(d.Commit, 7)+" "+d.Subject)
-			}
-			why += "; the rebase dropped " + strings.Join(names, ", ") + ", which wt cannot tell from another commit with the same author, date and subject, so no layer's count was lowered for it"
-		}
-		return refuse(why)
+	if cerr == nil {
+		return tips, ""
 	}
+	why := cerr.Error()
+	if !in.Confirmed && rec.Edit == nil && len(in.Dropped) > 0 {
+		why += "; the replay was advanced by hand past the run's stop, or the remaining replay was edited by hand, so no dropped commit is taken out of the plan"
+	}
+	if unclear := wtsync.UnclearDrops(plans, in.Dropped); len(unclear) > 0 && rec.Edit == nil {
+		var names []string
+		for _, d := range unclear {
+			names = append(names, git.ShortID(d.Commit, 7)+" "+d.Subject)
+		}
+		why += "; the rebase dropped " + strings.Join(names, ", ") + ", which wt cannot tell from another commit with the same author, date and subject, so no layer's count was lowered for it"
+	}
+	return nil, why
+}
+
+// moveLayers moves the layers to their new tips, once the sessions in their
+// worktrees are known; the error is a move that stopped or could not be
+// recorded.
+func (f *stackFinisher) moveLayers(tips []wtsync.LayerTip) error {
+	main, rec, in := f.main, f.rec, f.in
 	scan, scanErr := agents.ScanHolders(in.Listed)
 	if in.ListErr != nil {
 		scanErr = in.ListErr
 	}
-	merr := wtsync.MoveLayers(main, rec, tips, wtsync.MoveOptions{Listed: in.Listed, Scan: scan, ScanErr: scanErr,
+	return wtsync.MoveLayers(main, rec, tips, wtsync.MoveOptions{Listed: in.Listed, Scan: scan, ScanErr: scanErr,
 		Force: in.Force, Now: in.Now, AfterMove: in.AfterMove, Between: in.Between})
-	// A move that stopped, or needs recovery, still reports every layer:
-	// what moved, what did not, and what to look at.
-	held, moved := 0, 0
+}
+
+// reportLayers says what came of each layer and records it in the report.
+// A move that stopped, or needs recovery, still reports every layer: what
+// moved, what did not, and what to look at.
+func (f *stackFinisher) reportLayers(tips []wtsync.LayerTip) (held, moved int) {
+	w, s, rec, main, in := f.w, f.s, f.rec, f.main, f.in
+	// What the line was rebased onto, as a layer it carries is said to be on.
+	carrier := cmp.Or(rec.OntoRef, "trunk")
 	oldBase, newBase := rec.Line.Base, in.Onto
 	for i, t := range tips {
 		m := rec.Moves[i]
@@ -779,12 +857,19 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		}
 		oldBase, newBase = t.Old, t.New
 	}
+	return held, moved
+}
+
+// moveSides carries the side branches, forgets the record and says how to
+// put it all back; the failure the run ends with is what stayed held.
+func (f *stackFinisher) moveSides(forks []wtsync.LayerPlan, merr error, held, moved int) (*Stack, string, error) {
+	w, s, rec, main := f.w, f.s, f.rec, f.main
 	if merr != nil {
 		// The record stays: it says what moved, and undo reads it.
 		sidesNotMoved(w, s, "the layer moves stopped before it")
 		return s, "", merr
 	}
-	sides, serr := carrySides(main, w, s, rec, in, forks, "")
+	sides, serr := carrySides(main, w, s, rec, f.in, forks, "")
 	if serr != nil {
 		// The record stays: it says what moved, and undo reads it.
 		return s, "", serr
