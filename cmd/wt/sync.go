@@ -16,7 +16,7 @@ import (
 )
 
 func newSyncCmd() *cobra.Command {
-	var noFetch, noFFTrunk bool
+	var noFetch bool
 	sync := &cobra.Command{
 		Use:   "sync [<work>]",
 		Short: "Show what a rebase onto trunk would do to each worktree",
@@ -49,10 +49,9 @@ func newSyncCmd() *cobra.Command {
 			"                                    deferred steps; asks once when more\n" +
 			"                                    than one worktree is involved or a\n" +
 			"                                    session is idle in one (--yes skips)\n" +
-			"          wt sync <work>... --rebase\n" +
-			"          wt sync --rebase          every worktree the table calls ready,\n" +
+			"          wt sync rebase            every worktree the table calls ready,\n" +
 			"                                    asked first\n" +
-			"          wt sync <work> --rebase --if-ready\n" +
+			"          wt sync rebase <work> --if-ready\n" +
 			"          wt up                     the same for the worktree you are in\n" +
 			"                                    only if it goes through without\n" +
 			"                                    needing you; else say why, touch\n" +
@@ -60,41 +59,30 @@ func newSyncCmd() *cobra.Command {
 			"  finish  wt sync resume <work>     continue the rebase a run left at a\n" +
 			"                                    conflict that is yours, then push,\n" +
 			"                                    asked first as for rebase\n" +
-			"          wt sync <work> --resume\n" +
 			"          wt sync undo <work>       put back every ref that run moved\n" +
 			"          wt sync steps <work>      run the steps a run left owed, in\n" +
 			"                                    place, without rebasing onto trunk\n" +
-			"          wt sync <work> --undo\n" +
 			"          wt sync doctor            what a run needs, and --fix / --prune\n" +
 			"  keep    wt sync keep start        a launchd job that runs wt sync keep\n" +
 			"                                    once every 30m: every ready worktree\n" +
 			"                                    with nobody in it, then push\n" +
 			"Nobody means no agent session, Claude's or Codex's.\n" +
 			"\n" +
-			"--rebase, --resume and --undo are those same three commands, spelled so\n" +
-			"a recalled wt sync <work> line is finished by adding the verb at the end.\n" +
-			"A verb's own flags go with it: --yes (-y), --push and --no-push with\n" +
-			"--rebase or --resume, --force with --undo. --rebase with no worktree\n" +
-			"named takes every worktree under ready except recipe?, lists what it\n" +
-			"leaves alone, and asks before moving even one (--yes skips).\n" +
-			"\n" +
-			"--if-ready with --rebase means: rebase what is ready, and fail if anything\n" +
-			"was not. Ready here is conflict-free, or every stop resolved by a\n" +
-			"strategy the simulation verified: recipe? is listed under ready but\n" +
-			"does not count. A named worktree that is not ready is refused with its\n" +
-			"stack and left untouched. With nothing named a run takes only the\n" +
-			"ready ones anyway, so --if-ready changes one thing there: a worktree\n" +
-			"left behind trunk fails the run (stale and detached ones do not),\n" +
-			"where without it the run succeeds.\n" +
+			"wt sync rebase with no worktree named takes every worktree under ready\n" +
+			"except recipe?, lists what it leaves alone, and asks before moving even\n" +
+			"one (--yes skips). --if-ready rebases what is ready and fails if anything\n" +
+			"was not (wt sync rebase --help). Each verb's own flags, --yes (-y), --push,\n" +
+			"--no-push and --force among them, are its own: wt sync rebase --help, wt\n" +
+			"sync resume --help, wt sync undo --help.\n" +
 			"\n" +
 			"--all, --roots or --profile cover many repositories from anywhere: the\n" +
-			"overview of each, or with --rebase every ready worktree in each, planned\n" +
+			"overview of each; wt sync rebase takes every ready worktree in each, planned\n" +
 			"a few repositories at a time, asked once for all of them, then rebased\n" +
 			"one repository after another. A repository whose trunk declares no\n" +
 			".wt-sync.yaml is listed, not failed.\n" + selectionHelp + "\n" +
 			"\n" +
 			"--onto <ref> looks at the worktree named against <ref> instead of\n" +
-			"trunk, and with --rebase rebases it onto <ref>: an integration branch,\n" +
+			"trunk, and wt sync rebase --onto rebases it onto <ref>: an integration branch,\n" +
 			"origin/<branch>, a tag or a commit. A remote-tracking ref is fetched\n" +
 			"with trunk (--no-fetch takes it as last fetched); anything else is\n" +
 			"used as it stands. --upstream <ref> with it takes only the commits\n" +
@@ -105,7 +93,7 @@ func newSyncCmd() *cobra.Command {
 			"\n" +
 			"Groups:\n" +
 			"  ready      conflict-free or recipe, with nothing in the way: wt sync\n" +
-			"             rebase <work>, or wt sync --rebase for all of them but\n" +
+			"             rebase <work>, or wt sync rebase for all of them but\n" +
 			"             recipe?.\n" +
 			"             Also one behind its own remote with nothing to rebase\n" +
 			"             there: a run fast-forwards it\n" +
@@ -163,44 +151,29 @@ func newSyncCmd() *cobra.Command {
 			"wt: every worktree with its group, class, stack and stops, current ones\n" +
 			"included, the deferred and each_commit steps trunk declares, which a run\n" +
 			"may perform, the commits a run would check, what each need's probe\n" +
-			"answered, and a token for --rebase --expect. With --all, --roots or\n" +
+			"answered, and a token for wt sync rebase --expect. With --all, --roots or\n" +
 			"--profile it is an array, one object per repository. With a verb it is\n" +
 			"that verb's result instead (wt sync rebase --help). wt schema sync and\n" +
 			"wt schema sync-run print their JSON Schemas; docs/json.md explains them.",
 		Example: "  wt sync --no-fetch --json     # every worktree as JSON, trunk as last fetched\n" +
 			"  wt sync login-crash           # that worktree in full\n" +
-			"  wt sync . --rebase --if-ready # rebase it only if it needs nothing from you\n" +
+			"  wt sync rebase . --if-ready   # rebase it only if it needs nothing from you\n" +
 			"  wt sync login-crash --onto test_wt/integration  # against another branch\n" +
-			"  wt sync --all --rebase --if-ready  # every ready worktree, every repository\n" +
+			"  wt sync rebase --all --if-ready  # every ready worktree, every repository\n" +
 			"  wt sync --profile api         # the overview of a profile's repositories",
 		ValidArgsFunction: completeWork,
 	}
-	var rebase, resume, undo, yes, force, ifReady, allowDiverged, allowOwed, adopt, allowDropped, asJSON, stack, autosquash, alone, noSides bool
-	var expect, onto, upstream, edit, eachCommit string
+	var asJSON, stack, autosquash, alone, noSides bool
+	var onto, upstream string
 	var layers []string
 	var sel selectionFlags
-	var push func() syncrun.PushMode
-	flags := func() syncVerbFlags {
-		return syncVerbFlags{rebase: rebase, resume: resume, undo: undo,
-			yes: yes, force: force, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, push: push(),
-			allowDiverged: allowDiverged, allowOwed: allowOwed, adopt: adopt, allowDropped: allowDropped, json: asJSON, expect: expect,
-			stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream, alone: alone, noSides: noSides}
-	}
-	// The count rule is the verb's own. Two verbs at once is a flag mistake,
-	// which RunE reports the way --push with --no-push is reported.
-	sync.Args = func(cmd *cobra.Command, args []string) error {
-		verb, err := flags().verb()
-		if err != nil {
-			return nil //nolint:nilerr // a flag mistake, which RunE reports
-		}
-		return syncArgs(verb)(cmd, args)
-	}
+	sync.Args = cobra.MaximumNArgs(1)
 	sync.RunE = func(cmd *cobra.Command, args []string) error {
-		f := flags()
-		if err := f.check(); err != nil {
+		f := runFlags{noFetch: noFetch, json: asJSON, stack: stack, layers: layers, autosquash: autosquash,
+			onto: onto, upstream: upstream, alone: alone, noSides: noSides}
+		if err := f.check(true); err != nil {
 			return err
 		}
-		verb, _ := f.verb()
 		if err := f.checkOnto(args, sel.selection()); err != nil {
 			return err
 		}
@@ -210,25 +183,11 @@ func newSyncCmd() *cobra.Command {
 		if f.stack && (sel.selection().Any() || len(args) != 1) {
 			return usagef("--stack reads the line of one worktree: name the one at its top (wt sync <work> --stack)")
 		}
-		if f.json && verb == "" {
+		if f.json {
 			return syncOverviewJSON(cmd, args, sel.selection(), f)
 		}
 		if sel.selection().Any() {
-			return syncAcross(cmd, args, verb, sel.selection(), f)
-		}
-		switch verb {
-		case "rebase":
-			return withVerbContext(cmd, args, rebaseCommand, f.json, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				return syncRebase(cmd, args, ctx, f, j)
-			})
-		case "resume":
-			return withVerbContext(cmd, args, "sync resume", f.json, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				return syncResume(cmd, args[0], ctx, f.yes, f.allowOwed, f.adopt, f.allowDropped, f.push, j)
-			})
-		case "undo":
-			return withVerbContext(cmd, args, "sync undo", f.json, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				return syncUndo(cmd, args[0], ctx, f.force, f.yes, j)
-			})
+			return syncAcross(cmd, args, false, sel.selection(), f)
 		}
 		// Lenient: a repository without worktree.conf still has worktrees
 		// worth reporting on, and the trunk name falls back to origin/HEAD.
@@ -248,68 +207,41 @@ func newSyncCmd() *cobra.Command {
 		}
 		return synccmd.Sync(ctx, opts, cmd.OutOrStdout())
 	}
-	sync.Flags().BoolVar(&noFetch, "no-fetch", false, "compare with origin/<trunk> as last fetched; with --rebase, rebase onto it")
-	sync.Flags().BoolVar(&rebase, "rebase", false, "wt sync rebase <work>..., spelled at the end; alone, every ready worktree")
-	sync.Flags().BoolVar(&resume, "resume", false, "wt sync resume <work>, spelled at the end of the line")
-	sync.Flags().BoolVar(&undo, "undo", false, "wt sync undo <work>, spelled at the end of the line")
-	sync.Flags().BoolVarP(&yes, "yes", "y", false, "with a verb: do not ask first")
-	push = addPushFlags(sync, "with --rebase or --resume: push when done, without asking",
-		"with --rebase or --resume: neither push nor ask; print the push command")
-	sync.Flags().BoolVarP(&force, "force", "f", false, "with --rebase: past an agent session in it; with --undo: past a moved branch")
-	sync.Flags().BoolVar(&ifReady, "if-ready", false, "with --rebase: rebase only what will go through without needing you, and fail on the rest")
-	sync.Flags().BoolVar(&asJSON, "json", false, "print the overview as one JSON object on stdout; with a verb, its result")
-	sync.Flags().StringVar(&expect, "expect", "", "with --rebase: refuse unless the overview still matches this token from wt sync --json")
-	sync.Flags().BoolVar(&noFFTrunk, "no-ff-trunk", false, "with --rebase: leave local <trunk> where it is after the fetch")
-	sync.Flags().BoolVar(&allowDiverged, "allow-diverged", false, "with --rebase: rebase a branch that has diverged from its own remote")
-	sync.Flags().BoolVar(&allowOwed, "allow-owed", false, "with --rebase or --resume: rebase now even when a step's need does not answer; the step is owed")
-	sync.Flags().BoolVar(&adopt, "adopt", false, "with --resume: take over a rebase finished by hand with commits made on top (see wt sync resume --help)")
-	sync.Flags().BoolVar(&allowDropped, "allow-dropped", false, "with --resume: go on past a resolution that drops lines of a fixup moved ahead of its context")
+	sync.Flags().BoolVar(&noFetch, "no-fetch", false, "compare with origin/<trunk> as last fetched")
+	sync.Flags().BoolVar(&asJSON, "json", false, "print the overview as one JSON object on stdout")
 	sync.Flags().BoolVar(&stack, "stack", false, "list the layer branches on the line of the worktree named, and what holds each")
 	sync.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer, or every branch a pattern with * or ? matches (quote it); repeatable; none takes every branch on the line but those listed as skipped (backup names, and a branch with no commits of its own that has uncommitted changes in another worktree)")
-	sync.Flags().BoolVar(&alone, "alone", false, "rebase, or look at, the one worktree named without the rest of its stack; the others are left as they are")
-	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: name the fixups a fold moves ahead of their context; with --rebase, fold them")
+	sync.Flags().BoolVar(&alone, "alone", false, "look at the one worktree named without the rest of its stack: which of it a run of it alone would leave")
+	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: name the fixups a fold moves ahead of their context")
 	sync.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave out the branches that fork from the line or sit above its top; a run then never moves them")
-	sync.Flags().StringVar(&eachCommit, "each-commit", "", "with --rebase: where the each_commit checks run: all (default), tips, targets or off")
-	sync.Flags().StringVar(&edit, "edit", "", "with --rebase --stack: stop at this commit of the line for you to amend, in place")
-	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk; with --rebase, rebase onto it")
+	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk")
 	sel.add(sync, true)
-	// The verbs spelled as flags, and their own flags, work on this line but
-	// belong to the verbs: their help is wt sync rebase, resume and undo --help,
-	// and the table here keeps to what the overview itself takes.
-	for _, name := range []string{"rebase", "resume", "undo", "yes", "push", "no-push", "force", "if-ready", "expect", "no-ff-trunk", "allow-diverged", "allow-owed", "allow-dropped", "edit", "each-commit"} {
-		_ = sync.Flags().MarkHidden(name)
-	}
 	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
 	return sync
 }
 
-// syncVerbFlags is what wt sync's own flags say: at most one verb, spelled at
-// the end of a recalled `wt sync <work>` line, with that verb's own flags.
-type syncVerbFlags struct {
-	rebase, resume, undo bool
-	yes, force, noFetch  bool
-	ifReady, noFFTrunk   bool
+// runFlags is what a wt sync rebase or steps run, or the overview of wt sync,
+// takes from its flags; the overview sets only the few it has.
+type runFlags struct {
+	yes, force, noFetch bool
+	ifReady, noFFTrunk  bool
 	// allowDiverged rebases a branch that has diverged from its own remote.
 	allowDiverged bool
 	// allowOwed rebases even when a step's need does not answer its probe:
 	// that step is owed.
 	allowOwed bool
-	// adopt takes over a rebase finished by hand with commits made on top.
-	adopt bool
 	// alone rebases the one worktree named without the rest of its stack.
 	alone bool
 	push  syncrun.PushMode
-	// json prints one object on stdout: the overview, or the verb's result.
+	// json prints one object on stdout: the overview, or the run's result.
 	json bool
 	// expect is the overview's token a run must still match.
 	expect string
 	// stack is a stack held on the named worktree's line: its layers, and
-	// with --rebase the one rebase of the line that moves them all.
+	// for a run the one rebase of the line that moves them all.
 	stack      bool
 	layers     []string
 	autosquash bool
-	// allowDropped is resume's --allow-dropped.
-	allowDropped bool
 	// noSides leaves the branches that hang off a --stack line alone.
 	noSides bool
 	// edit is the commit of the line a --stack run stops at for a person.
@@ -322,62 +254,10 @@ type syncVerbFlags struct {
 	onto, upstream string
 }
 
-// verb is the one verb given, "" for the overview, or an error naming the
-// verbs given together.
-func (f syncVerbFlags) verb() (string, error) {
-	var verbs []string
-	for _, v := range []struct {
-		name string
-		set  bool
-	}{{"rebase", f.rebase}, {"resume", f.resume}, {"undo", f.undo}} {
-		if v.set {
-			verbs = append(verbs, "--"+v.name)
-		}
-	}
-	switch len(verbs) {
-	case 0:
-		return "", nil
-	case 1:
-		return verbs[0][2:], nil
-	}
-	return "", usagef("%s and %s cannot both be given",
-		strings.Join(verbs[:len(verbs)-1], ", "), verbs[len(verbs)-1])
-}
-
-// check refuses a verb's flag given without its verb.
-func (f syncVerbFlags) check() error {
-	verb, err := f.verb()
-	if err != nil {
-		return err
-	}
-	rebases := verb == "rebase" || verb == "resume"
+// check refuses flags that do not go together. look is the overview of wt
+// sync, which has no run to give --edit, --each-commit and the rest to.
+func (f runFlags) check(look bool) error {
 	switch {
-	case f.push == syncrun.PushAlways && !rebases:
-		return usagef("--push needs --rebase or --resume")
-	case f.push == syncrun.PushNever && !rebases:
-		return usagef("--no-push needs --rebase or --resume")
-	case f.ifReady && verb != "rebase":
-		return usagef("--if-ready needs --rebase")
-	case f.force && verb != "undo" && verb != "rebase":
-		return usagef("--force needs --rebase or --undo")
-	case f.yes && verb == "":
-		return usagef("--yes needs --rebase, --resume or --undo")
-	case f.noFetch && verb != "" && verb != "rebase":
-		return usagef("--no-fetch needs --rebase, or no verb")
-	case f.expect != "" && verb != "rebase":
-		return usagef("--expect needs --rebase")
-	case f.noFFTrunk && verb != "rebase":
-		return usagef("--no-ff-trunk needs --rebase")
-	case f.allowDiverged && verb != "rebase":
-		return usagef("--allow-diverged needs --rebase")
-	case f.allowOwed && !rebases:
-		return usagef("--allow-owed needs --rebase or --resume")
-	case f.adopt && verb != "resume":
-		return usagef("--adopt needs --resume")
-	case f.allowDropped && verb != "resume":
-		return usagef("--allow-dropped needs --resume")
-	case f.stack && verb != "" && verb != "rebase":
-		return usagef("--stack needs --rebase, or no verb")
 	case len(f.layers) > 0 && !f.stack:
 		return usagef("--layer needs --stack")
 	case f.autosquash && !f.stack:
@@ -386,32 +266,24 @@ func (f syncVerbFlags) check() error {
 		return usagef("--no-side-branches needs --stack")
 	case f.edit != "" && !f.stack:
 		return usagef("--edit needs --stack")
-	case f.edit != "" && verb != "rebase":
-		return usagef("--edit needs --rebase")
 	case f.edit != "" && f.autosquash:
 		return usagef("--edit and --autosquash are two runs: edit in place first (--stack --edit <rev>), then fold (--stack --autosquash)")
 	case f.edit != "" && f.onto != "":
 		return usagef("--edit and --onto are two runs: edit in place first (--stack --edit <rev>), then move (--stack --onto <ref>)")
 	case f.eachCommit != "" && !validEachCommit(f.eachCommit):
 		return usagef("--each-commit takes all, tips, targets or off, not %q", f.eachCommit)
-	case f.eachCommit != "" && verb != "rebase":
-		return usagef("--each-commit needs --rebase: a resume goes on with the mode its run was given")
 	case f.eachCommit == wtsync.EachTargets && (!f.autosquash || f.onto != "" || f.edit != ""):
 		return usagef("%s", wtsync.TargetsRefusal(f.edit != ""))
 	case f.eachCommit == wtsync.EachTips && f.edit != "":
 		return usagef("--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after")
-	case f.alone && verb != "" && verb != "rebase":
-		return usagef("--alone needs --rebase, or no verb")
-	case f.alone && f.json && verb == "":
-		return usagef("--alone with --json needs --rebase: the look has no JSON of it")
+	case look && f.alone && f.json:
+		return usagef("--alone with --json needs wt sync rebase: the look has no JSON of it")
 	case f.alone && f.edit != "":
 		return usagef("--alone and --edit: --edit moves the layers by the amend, and --alone moves none; edit first without --alone")
 	case f.alone && f.onto != "":
 		return usagef("--alone and --onto: --onto already moves exactly the worktrees named and none of their stack; leave --alone out")
 	case f.upstream != "" && f.onto == "":
 		return usagef("--upstream needs --onto: it says where the commits rebased onto --onto's ref start")
-	case f.onto != "" && verb != "" && verb != "rebase":
-		return usagef("--onto needs --rebase, or no verb")
 	}
 	return nil
 }
@@ -424,7 +296,7 @@ func validEachCommit(mode string) bool {
 
 // checkOnto refuses --onto where it has no piece of work to go with: a
 // target is chosen per piece of work.
-func (f syncVerbFlags) checkAlone(args []string, sel reposel.Selection) error {
+func (f runFlags) checkAlone(args []string, sel reposel.Selection) error {
 	switch {
 	case !f.alone:
 		return nil
@@ -436,7 +308,7 @@ func (f syncVerbFlags) checkAlone(args []string, sel reposel.Selection) error {
 	return nil
 }
 
-func (f syncVerbFlags) checkOnto(args []string, sel reposel.Selection) error {
+func (f runFlags) checkOnto(args []string, sel reposel.Selection) error {
 	switch {
 	case f.onto == "":
 		return nil
@@ -455,7 +327,7 @@ func addOntoFlags(cmd *cobra.Command, onto, upstream *string, ontoUsage string) 
 }
 
 // stackOptions is the --stack run the flags ask for, nil for any other.
-func (f syncVerbFlags) stackOptions() *synccmd.StackOptions {
+func (f runFlags) stackOptions() *synccmd.StackOptions {
 	if !f.stack {
 		return nil
 	}
@@ -464,7 +336,7 @@ func (f syncVerbFlags) stackOptions() *synccmd.StackOptions {
 
 // syncOverviewJSON is wt sync --json: the overview as one object, or with
 // --all, --roots or --profile an array of one per repository.
-func syncOverviewJSON(cmd *cobra.Command, args []string, sel reposel.Selection, f syncVerbFlags) error {
+func syncOverviewJSON(cmd *cobra.Command, args []string, sel reposel.Selection, f runFlags) error {
 	opts := synccmd.SyncOptions{NoFetch: f.noFetch, Onto: f.onto, Upstream: f.upstream}
 	if f.stack {
 		opts.Stack = &synccmd.StackLook{Work: args[0], Layers: f.layers, Autosquash: f.autosquash, NoSideBranches: f.noSides}
@@ -486,19 +358,6 @@ func syncOverviewJSON(cmd *cobra.Command, args []string, sel reposel.Selection, 
 		return kit.ErrNotInRepo
 	}
 	return synccmd.SyncJSON(ctx, opts, cmd.OutOrStdout())
-}
-
-// syncArgs is the argument count wt sync takes for verb: the rule the verb's
-// subcommand declares, so both spellings refuse the same counts with the same
-// words. rebase takes any number, none meaning every ready worktree.
-func syncArgs(verb string) cobra.PositionalArgs {
-	switch verb {
-	case "rebase":
-		return cobra.ArbitraryArgs
-	case "resume", "undo":
-		return cobra.ExactArgs(1)
-	}
-	return cobra.MaximumNArgs(1)
 }
 
 // rebaseCommand names wt sync rebase in its --json result.
@@ -551,7 +410,7 @@ func withVerbContext(cmd *cobra.Command, args []string, command string, asJSON b
 // repositories — with nobody at a terminal to ask and no --yes rebases
 // nothing, as a sweep deletes nothing: what nobody named and nobody
 // confirmed does not move. A worktree named on the line goes ahead.
-func runOptions(cmd *cobra.Command, f syncVerbFlags, bulk bool) (synccmd.RunOptions, *prompter) {
+func runOptions(cmd *cobra.Command, f runFlags, bulk bool) (synccmd.RunOptions, *prompter) {
 	opts := synccmd.RunOptions{NoFetch: f.noFetch, NoFFTrunk: f.noFFTrunk, IfReady: f.ifReady, Force: f.force,
 		AllowDiverged: f.allowDiverged, Onto: f.onto, Upstream: f.upstream, EachCommit: f.eachCommit}
 	opts.AllowOwed = f.allowOwed
@@ -581,21 +440,19 @@ func noTerminal(w io.Writer) kit.Confirm[[]string] {
 	}
 }
 
-// syncAcross is wt sync with --all, --roots or --profile: the overview of
-// every repository they name, or with --rebase a run across all of them. The
-// other verbs finish one worktree's run, so they name it instead.
-func syncAcross(cmd *cobra.Command, args []string, verb string, sel reposel.Selection, f syncVerbFlags) error {
+// syncAcross is wt sync or wt sync rebase with --all, --roots or --profile:
+// the overview of every repository they name, or with rebase a run across all
+// of them.
+func syncAcross(cmd *cobra.Command, args []string, rebase bool, sel reposel.Selection, f runFlags) error {
 	u := loadUserWarn(cmd.ErrOrStderr())
 	switch {
-	case verb == "resume" || verb == "undo":
-		return usagef("--%s finishes one worktree's run; name it, without --all, --roots or --profile", verb)
 	case len(args) > 0:
 		return usagef("--all, --roots and --profile cover whole repositories; name no worktree with them")
-	case f.json && verb != "":
+	case f.json && rebase:
 		return usagef("--json reports a run in one repository; leave out --all, --roots and --profile")
 	case f.expect != "":
 		return usagef("--expect holds a run in one repository to its overview; leave out --all, --roots and --profile")
-	case verb == "":
+	case !rebase:
 		return synccmd.SyncAll(u, sel, synccmd.SyncOptions{NoFetch: f.noFetch}, cmd.OutOrStdout())
 	}
 	opts, p := runOptions(cmd, f, true)

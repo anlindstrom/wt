@@ -648,7 +648,7 @@ wt sync rebase tmp/stack --stack --autosquash --yes > /dev/null 2>&1 &   # the r
 wt sync wait tmp/stack --timeout 9m    # shows progress; exit 124: run it again
 ```
 
-`wt sync rebase`, `wt sync --rebase`, `wt sync steps` and `wt sync resume` copy
+`wt sync rebase`, `wt sync steps` and `wt sync resume` copy
 what they print into a log of their own, `wt-sync-logs/<start>-<pid>.log` under
 the repository's git dir (the person's output is as it was; with `--json` the
 copy holds what goes to stderr, never the result object). The log is made when

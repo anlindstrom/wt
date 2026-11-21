@@ -64,7 +64,7 @@
         "fetched": { "type": "boolean", "description": "Trunk was fetched first." },
         "fetchError": { "type": ["string", "null"], "description": "The fetch failed: the overview is against trunk as last fetched." },
         "declared": { "type": "boolean", "description": "Trunk declares .wt-sync.yaml. Without it the worktrees are assessed but a run rebases none." },
-        "token": { "type": ["string", "null"], "description": "Names what a run would start on; pass it to wt sync rebase --expect or wt sync --rebase --expect. Since 1.3.0 a worktree refused only for having diverged from its own remote is in it too, with the remote commit, for a run under --allow-diverged. Null when a run would start on nothing." },
+        "token": { "type": ["string", "null"], "description": "Names what a run would start on; pass it to wt sync rebase --expect. Since 1.3.0 a worktree refused only for having diverged from its own remote is in it too, with the remote commit, for a run under --allow-diverged. Null when a run would start on nothing." },
         "error": { "type": ["string", "null"], "description": "Why there is no overview: trunk not known, the repository not readable. The exit code is then non-zero." },
         "sessionsError": { "type": ["string", "null"], "description": "Agent sessions could not be listed; sessions are then empty, not known empty." },
         "eachCommitDeclared": { "type": "array", "items": { "$ref": "#/$defs/declaredStep" }, "description": "Since 1.6.0. The each_commit checks .wt-sync.yaml declares on the trunk commit in onto, in the declared order: each runs after every replayed commit that changes a path its paths match, every commit when it lists none. Empty when trunk declares none." },
@@ -106,7 +106,7 @@
           "enum": ["proceed", "skip", "refuse"],
           "description": "What wt sync rebase <work> would do: start on it, skip it, or refuse it untouched. A contested one is rebased up to its stop and handed over."
         },
-        "runnable": { "type": "boolean", "description": "wt sync --rebase, with nothing named, takes it." },
+        "runnable": { "type": "boolean", "description": "wt sync rebase, with nothing named, takes it." },
         "reason": { "type": ["string", "null"], "description": "Why it is not runnable; null when it is." },
         "behind": { "type": "integer", "description": "Commits it lacks against trunk."  },
         "ahead": { "type": "integer", "description": "Commits it has that trunk lacks."  },

@@ -452,7 +452,7 @@ rebase onto or judge branches merged against.
 
 ### `trunkSync` — local trunk
 
-After fetching trunk, `wt up`, `wt sync rebase` and `wt sync --rebase` bring local
+After fetching trunk, `wt up`, `wt sync rebase` bring local
 `<trunk>` up to `origin/<trunk>` when that is a pure fast-forward and safe:
 checked out nowhere, the ref moves by compare-and-swap; checked out in a
 checkout that is clean (untracked files count), with no operation in progress
@@ -638,7 +638,7 @@ fetched and as whatever it last said from one that did not.
 
 **`--allow-diverged`**, on `wt up` and `wt sync rebase`: rebase a `diverged`
 branch as it stands. It does nothing for `behind`. Like `--force` it needs the
-worktree named: `wt sync rebase` and `wt sync --rebase` with nothing named, in one
+worktree named: `wt sync rebase` with nothing named, in one
 repository or across many, refuse the flag. `wt up` always names one, the
 worktree you are in when no `<work>` is given, so `wt up --allow-diverged` is
 accepted. With `--expect <token>` it
@@ -1750,7 +1750,7 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `fetched` | boolean | yes | Trunk was fetched first. |
 | `fetchError` | string \| null | yes | The fetch failed: the overview is against trunk as last fetched. |
 | `declared` | boolean | yes | Trunk declares .wt-sync.yaml. Without it the worktrees are assessed but a run rebases none. |
-| `token` | string \| null | yes | Names what a run would start on; pass it to wt sync rebase --expect or wt sync --rebase --expect. Since 1.3.0 a worktree refused only for having diverged from its own remote is in it too, with the remote commit, for a run under --allow-diverged. Null when a run would start on nothing. |
+| `token` | string \| null | yes | Names what a run would start on; pass it to wt sync rebase --expect. Since 1.3.0 a worktree refused only for having diverged from its own remote is in it too, with the remote commit, for a run under --allow-diverged. Null when a run would start on nothing. |
 | `error` | string \| null | yes | Why there is no overview: trunk not known, the repository not readable. The exit code is then non-zero. |
 | `sessionsError` | string \| null | yes | Agent sessions could not be listed; sessions are then empty, not known empty. |
 | `eachCommitDeclared` | array of object | yes | Since 1.6.0. The each_commit checks .wt-sync.yaml declares on the trunk commit in onto, in the declared order: each runs after every replayed commit that changes a path its paths match, every commit when it lists none. Empty when trunk declares none. |
@@ -1770,7 +1770,7 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `worktrees[].class` | `"conflict-free"` \| `"recipe"` \| `"contested"` \| `"divergent"` \| `"stale"` \| `"current"` \| `"detached"` \| `"unknown"` | yes | What the simulated rebase found; unknown when the assessment failed (error). |
 | `worktrees[].verified` | boolean | yes | false is the overview's question mark (recipe?): a script owns a path and the replay could not be carried past it. |
 | `worktrees[].verdict` | `"proceed"` \| `"skip"` \| `"refuse"` | yes | What wt sync rebase <work> would do: start on it, skip it, or refuse it untouched. A contested one is rebased up to its stop and handed over. |
-| `worktrees[].runnable` | boolean | yes | wt sync --rebase, with nothing named, takes it. |
+| `worktrees[].runnable` | boolean | yes | wt sync rebase, with nothing named, takes it. |
 | `worktrees[].reason` | string \| null | yes | Why it is not runnable; null when it is. |
 | `worktrees[].behind` | integer | yes | Commits it lacks against trunk. |
 | `worktrees[].ahead` | integer | yes | Commits it has that trunk lacks. |
@@ -1932,8 +1932,7 @@ has the token an older wt gives it.
 
 ## `wt sync rebase|resume|undo --json` — the result
 
-`wt sync rebase [<work>...] --json` (also spelled `wt sync [<work>...] --rebase
---json`), `wt sync resume <work> --json` and `wt sync undo <work> --json` do
+`wt sync rebase [<work>...] --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` do
 what they do without it, and print one object in the shape of `wt up --json`'s,
 with more said about each worktree. Progress, and any question, go to
 **stderr**; stdout carries exactly that object, also when a handled SIGINT or
@@ -1947,7 +1946,7 @@ without `--yes` (it is then `refused` with `error` saying so), as without
 keeps the push out, on `rebase` and `resume` (undo never pushes). A named worktree
 goes ahead without `--yes`, and with no terminal nothing is asked.
 
-With `--expect <token>`, `wt sync rebase` and `wt sync --rebase` fetch, recompute
+With `--expect <token>`, `wt sync rebase` fetch, recompute
 the overview's token and refuse, touching no worktree, when it differs: what a run
 would start on is not what `wt sync --json` showed. It is then an `error` with
 no participants and a non-zero exit. The fetch then covers every worktree's own

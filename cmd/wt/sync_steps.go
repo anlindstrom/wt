@@ -42,9 +42,9 @@ func newSyncStepsCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			f := syncVerbFlags{rebase: true, yes: yes, noFetch: true, allowOwed: allowOwed, push: push(), json: asJSON,
+			f := runFlags{yes: yes, noFetch: true, allowOwed: allowOwed, push: push(), json: asJSON,
 				stack: stack, layers: layers}
-			if err := f.check(); err != nil {
+			if err := f.check(false); err != nil {
 				return err
 			}
 			return withVerbContext(cmd, args, "sync steps", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {

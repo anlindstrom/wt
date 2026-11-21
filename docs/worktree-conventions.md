@@ -101,11 +101,10 @@ carry are shims that call `wt`.
    `wt sync rebase <work> --stack`, with `--autosquash` to fold its fixups in place (and `--onto <trunk>` to fold and move in one run),
    and `wt sync steps <work>` runs the steps a run left owed. A run left in the
    background is followed with `wt sync wait <work>`, which prints what it
-   prints and exits with its code. `wt sync --rebase` does
+   prints and exits with its code. `wt sync rebase` does
    every worktree the table calls ready except `recipe?`. Without a terminal, a run
    with nothing named rebases nothing unless `--yes` says so, and nothing is pushed
-   without `--push` or `--yes`. Each verb is also a flag on the line you just
-   recalled: `wt sync <work> --rebase`, `--resume`, `--undo`. `wt sync keep start`
+   without `--push` or `--yes`. `wt sync keep start`
    does the ready ones on a timer, leaving alone any worktree a session is in, and
    the table says when it last did. In a repo without the file, `wt up` still
    rebases what goes through conflict-free, and the rest is plain git. When

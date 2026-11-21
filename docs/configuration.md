@@ -290,7 +290,7 @@ write them, and `WT_ROOTS`, when set, stands in for every root. Only
 repositories with a `bin/worktree` configuration count.
 
 - `wt repos` lists them, and `wt cd <repo>` goes to one.
-- `wt sweep --all` and `wt sync --all --rebase` work across every one, planned a
+- `wt sweep --all` and `wt sync rebase --all` work across every one, planned a
   few at a time and asked once; `wt sync --all` is the overview of each.
   `--roots work` or `--profile api` narrows the run.
 - `wt list`, `wt status` and `wt doctor` take the same flags.

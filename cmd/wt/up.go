@@ -86,7 +86,7 @@ func newUpCmd() *cobra.Command {
 			if len(args) == 1 {
 				work = args[0]
 			}
-			f := syncVerbFlags{rebase: true, yes: yes, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: true, force: force,
+			f := runFlags{yes: yes, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: true, force: force,
 				allowDiverged: allowDiverged, allowOwed: allowOwed, push: push(), onto: onto, upstream: upstream}
 			switch {
 			case upstream != "" && onto == "":

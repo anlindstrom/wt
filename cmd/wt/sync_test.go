@@ -62,106 +62,56 @@ func TestConfirmAskNamesTheWorktreesAndDefaultsToNo(t *testing.T) {
 	}
 }
 
-// The verb flags on wt sync name one verb, or say which two were given.
-func TestSyncVerbFlagsNameOneVerb(t *testing.T) {
+// A flag given without what it needs is refused by name, the way --push with
+// --no-push is: one line, no usage. The overview (look) and a run take
+// different flags, so the same flags are checked for each.
+func TestRunFlagsRefuseFlagsThatDoNotGoTogether(t *testing.T) {
 	for _, tc := range []struct {
-		flags syncVerbFlags
-		verb  string
+		flags runFlags
+		look  bool
 		err   string
 	}{
-		{syncVerbFlags{}, "", ""},
-		{syncVerbFlags{rebase: true}, "rebase", ""},
-		{syncVerbFlags{resume: true}, "resume", ""},
-		{syncVerbFlags{undo: true}, "undo", ""},
-		{syncVerbFlags{rebase: true, undo: true}, "", "--rebase and --undo cannot both be given"},
-		{syncVerbFlags{resume: true, undo: true}, "", "--resume and --undo cannot both be given"},
-		{syncVerbFlags{rebase: true, resume: true, undo: true}, "", "--rebase, --resume and --undo cannot both be given"},
-	} {
-		verb, err := tc.flags.verb()
-		if verb != tc.verb {
-			t.Errorf("%+v: verb %q, want %q", tc.flags, verb, tc.verb)
-		}
-		if got := errString(err); got != tc.err {
-			t.Errorf("%+v: error %q, want %q", tc.flags, got, tc.err)
-		}
-	}
-}
-
-// A verb's flag without its verb is refused by name, the way --push with
-// --no-push is: one line, no usage.
-func TestSyncVerbFlagsRefuseAFlagWithoutItsVerb(t *testing.T) {
-	for _, tc := range []struct {
-		flags syncVerbFlags
-		err   string
-	}{
-		{syncVerbFlags{}, ""},
-		{syncVerbFlags{noFetch: true}, ""},
-		{syncVerbFlags{rebase: true, yes: true, noFetch: true, push: syncrun.PushAlways}, ""},
-		{syncVerbFlags{resume: true, yes: true, push: syncrun.PushNever}, ""},
-		{syncVerbFlags{undo: true, yes: true, force: true}, ""},
-		{syncVerbFlags{rebase: true, undo: true, force: true}, "--rebase and --undo cannot both be given"},
-		{syncVerbFlags{push: syncrun.PushAlways}, "--push needs --rebase or --resume"},
-		{syncVerbFlags{undo: true, push: syncrun.PushAlways}, "--push needs --rebase or --resume"},
-		{syncVerbFlags{push: syncrun.PushNever}, "--no-push needs --rebase or --resume"},
-		{syncVerbFlags{undo: true, push: syncrun.PushNever}, "--no-push needs --rebase or --resume"},
-		{syncVerbFlags{force: true}, "--force needs --rebase or --undo"},
-		{syncVerbFlags{noFFTrunk: true}, "--no-ff-trunk needs --rebase"},
-		{syncVerbFlags{resume: true, noFFTrunk: true}, "--no-ff-trunk needs --rebase"},
-		{syncVerbFlags{resume: true, force: true}, "--force needs --rebase or --undo"},
-		{syncVerbFlags{yes: true}, "--yes needs --rebase, --resume or --undo"},
-		{syncVerbFlags{resume: true, noFetch: true}, "--no-fetch needs --rebase, or no verb"},
-		{syncVerbFlags{undo: true, noFetch: true}, "--no-fetch needs --rebase, or no verb"},
-		{syncVerbFlags{rebase: true, allowOwed: true}, ""},
-		{syncVerbFlags{resume: true, allowOwed: true}, ""},
-		{syncVerbFlags{allowOwed: true}, "--allow-owed needs --rebase or --resume"},
-		{syncVerbFlags{undo: true, allowOwed: true}, "--allow-owed needs --rebase or --resume"},
-		{syncVerbFlags{resume: true, adopt: true}, ""},
-		{syncVerbFlags{adopt: true}, "--adopt needs --resume"},
-		{syncVerbFlags{rebase: true, adopt: true}, "--adopt needs --resume"},
-		{syncVerbFlags{rebase: true, stack: true, layers: []string{"a"}, autosquash: true}, ""},
-		{syncVerbFlags{stack: true, layers: []string{"a"}}, ""},
-		{syncVerbFlags{resume: true, stack: true}, "--stack needs --rebase, or no verb"},
-		{syncVerbFlags{undo: true, stack: true}, "--stack needs --rebase, or no verb"},
-		{syncVerbFlags{rebase: true, layers: []string{"a"}}, "--layer needs --stack"},
-		{syncVerbFlags{rebase: true, autosquash: true}, "--autosquash needs --stack"},
-		{syncVerbFlags{rebase: true, noSides: true}, "--no-side-branches needs --stack"},
-		{syncVerbFlags{noSides: true}, "--no-side-branches needs --stack"},
-		{syncVerbFlags{resume: true, alone: true}, "--alone needs --rebase, or no verb"},
-		{syncVerbFlags{undo: true, alone: true}, "--alone needs --rebase, or no verb"},
-		{syncVerbFlags{alone: true, json: true}, "--alone with --json needs --rebase: the look has no JSON of it"},
-		{syncVerbFlags{rebase: true, alone: true, stack: true, edit: "a1b2c3d"}, "--alone and --edit: --edit moves the layers by the amend, and --alone moves none; edit first without --alone"},
-		{syncVerbFlags{rebase: true, alone: true, stack: true, autosquash: true}, ""},
-		{syncVerbFlags{rebase: true, alone: true, onto: "main"}, "--alone and --onto: --onto already moves exactly the worktrees named and none of their stack; leave --alone out"},
+		{runFlags{}, true, ""},
+		{runFlags{noFetch: true}, true, ""},
+		{runFlags{yes: true, noFetch: true, push: syncrun.PushAlways}, false, ""},
+		{runFlags{allowOwed: true}, false, ""},
+		{runFlags{stack: true, layers: []string{"a"}, autosquash: true}, false, ""},
+		{runFlags{stack: true, layers: []string{"a"}}, true, ""},
+		{runFlags{layers: []string{"a"}}, false, "--layer needs --stack"},
+		{runFlags{layers: []string{"a"}}, true, "--layer needs --stack"},
+		{runFlags{autosquash: true}, false, "--autosquash needs --stack"},
+		{runFlags{autosquash: true}, true, "--autosquash needs --stack"},
+		{runFlags{noSides: true}, false, "--no-side-branches needs --stack"},
+		{runFlags{noSides: true}, true, "--no-side-branches needs --stack"},
+		{runFlags{alone: true, json: true}, true, "--alone with --json needs wt sync rebase: the look has no JSON of it"},
+		{runFlags{alone: true, json: true}, false, ""},
+		{runFlags{alone: true, stack: true, edit: "a1b2c3d"}, false, "--alone and --edit: --edit moves the layers by the amend, and --alone moves none; edit first without --alone"},
+		{runFlags{alone: true, stack: true, autosquash: true}, false, ""},
+		{runFlags{alone: true, onto: "main"}, false, "--alone and --onto: --onto already moves exactly the worktrees named and none of their stack; leave --alone out"},
+		{runFlags{upstream: "a"}, true, "--upstream needs --onto: it says where the commits rebased onto --onto's ref start"},
 		// The look names the fixups a fold would move ahead of their context.
-		{syncVerbFlags{stack: true, autosquash: true}, ""},
-		{syncVerbFlags{stack: true, autosquash: true, onto: "main"}, ""},
-		{syncVerbFlags{resume: true, autosquash: true}, "--autosquash needs --stack"},
-		{syncVerbFlags{resume: true, allowDropped: true}, ""},
-		{syncVerbFlags{allowDropped: true}, "--allow-dropped needs --resume"},
-		{syncVerbFlags{rebase: true, allowDropped: true}, "--allow-dropped needs --resume"},
-		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d"}, ""},
-		{syncVerbFlags{rebase: true, edit: "a1b2c3d"}, "--edit needs --stack"},
-		{syncVerbFlags{stack: true, edit: "a1b2c3d"}, "--edit needs --rebase"},
-		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", autosquash: true},
+		{runFlags{stack: true, autosquash: true}, true, ""},
+		{runFlags{stack: true, autosquash: true, onto: "main"}, true, ""},
+		{runFlags{stack: true, edit: "a1b2c3d"}, false, ""},
+		{runFlags{edit: "a1b2c3d"}, false, "--edit needs --stack"},
+		{runFlags{stack: true, edit: "a1b2c3d", autosquash: true}, false,
 			"--edit and --autosquash are two runs: edit in place first (--stack --edit <rev>), then fold (--stack --autosquash)"},
-		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", onto: "main"},
+		{runFlags{stack: true, edit: "a1b2c3d", onto: "main"}, false,
 			"--edit and --onto are two runs: edit in place first (--stack --edit <rev>), then move (--stack --onto <ref>)"},
-		{syncVerbFlags{rebase: true, eachCommit: "tips"}, ""},
-		{syncVerbFlags{rebase: true, stack: true, eachCommit: "off", autosquash: true, onto: "main", ifReady: true}, ""},
-		{syncVerbFlags{rebase: true, eachCommit: "all"}, ""},
-		{syncVerbFlags{rebase: true, eachCommit: "sometimes"}, `--each-commit takes all, tips, targets or off, not "sometimes"`},
-		{syncVerbFlags{resume: true, eachCommit: "tips"}, "--each-commit needs --rebase: a resume goes on with the mode its run was given"},
-		{syncVerbFlags{eachCommit: "tips"}, "--each-commit needs --rebase: a resume goes on with the mode its run was given"},
-		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", eachCommit: "tips"},
+		{runFlags{eachCommit: "tips"}, false, ""},
+		{runFlags{stack: true, eachCommit: "off", autosquash: true, onto: "main", ifReady: true}, false, ""},
+		{runFlags{eachCommit: "all"}, false, ""},
+		{runFlags{eachCommit: "sometimes"}, false, `--each-commit takes all, tips, targets or off, not "sometimes"`},
+		{runFlags{stack: true, edit: "a1b2c3d", eachCommit: "tips"}, false,
 			"--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after"},
-		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", eachCommit: "off"}, ""},
-		{syncVerbFlags{rebase: true, stack: true, autosquash: true, eachCommit: "targets"}, ""},
-		{syncVerbFlags{rebase: true, stack: true, eachCommit: "targets"}, wtsync.TargetsRefusal(false)},
-		{syncVerbFlags{rebase: true, stack: true, autosquash: true, onto: "main", eachCommit: "targets"}, wtsync.TargetsRefusal(false)},
-		{syncVerbFlags{rebase: true, stack: true, edit: "a1b2c3d", eachCommit: "targets"}, wtsync.TargetsRefusal(true)},
+		{runFlags{stack: true, edit: "a1b2c3d", eachCommit: "off"}, false, ""},
+		{runFlags{stack: true, autosquash: true, eachCommit: "targets"}, false, ""},
+		{runFlags{stack: true, eachCommit: "targets"}, false, wtsync.TargetsRefusal(false)},
+		{runFlags{stack: true, autosquash: true, onto: "main", eachCommit: "targets"}, false, wtsync.TargetsRefusal(false)},
+		{runFlags{stack: true, edit: "a1b2c3d", eachCommit: "targets"}, false, wtsync.TargetsRefusal(true)},
 	} {
-		if got := errString(tc.flags.check()); got != tc.err {
-			t.Errorf("%+v: error %q, want %q", tc.flags, got, tc.err)
+		if got := errString(tc.flags.check(tc.look)); got != tc.err {
+			t.Errorf("%+v (look %v): error %q, want %q", tc.flags, tc.look, got, tc.err)
 		}
 	}
 }
@@ -173,18 +123,17 @@ func errString(err error) string {
 	return err.Error()
 }
 
-// The flag spelling takes the count its verb's subcommand takes, refused in
-// the same words; the overview keeps taking at most one.
-func TestSyncVerbFlagsTakeTheVerbsArgumentCount(t *testing.T) {
+// Each verb takes the count its subcommand declares, refused in its words;
+// the overview takes at most one worktree.
+func TestSyncTakesTheArgumentCountOfItsVerb(t *testing.T) {
 	for _, tc := range []struct {
 		args []string
 		err  string
 	}{
 		{[]string{"sync", "a", "b"}, "accepts at most 1 arg(s), received 2"},
-		{[]string{"sync", "--resume"}, "accepts 1 arg(s), received 0"},
-		{[]string{"sync", "a", "b", "--resume"}, "accepts 1 arg(s), received 2"},
+		{[]string{"sync", "resume"}, "accepts 1 arg(s), received 0"},
 		{[]string{"sync", "resume", "a", "b"}, "accepts 1 arg(s), received 2"},
-		{[]string{"sync", "a", "b", "--undo"}, "accepts 1 arg(s), received 2"},
+		{[]string{"sync", "undo"}, "accepts 1 arg(s), received 0"},
 		{[]string{"sync", "undo", "a", "b"}, "accepts 1 arg(s), received 2"},
 	} {
 		out, err := runCmd(t, tc.args...)
@@ -201,11 +150,11 @@ func TestSyncVerbFlagsTakeTheVerbsArgumentCount(t *testing.T) {
 	}
 }
 
-// rebase with nothing named is every ready worktree, in both spellings: no
-// argument count refuses it, so it gets as far as opening the repository.
-func TestSyncRunWithNothingNamedIsNotAnArgumentMistake(t *testing.T) {
+// rebase with nothing named is every ready worktree: no argument count
+// refuses it, so it gets as far as opening the repository.
+func TestSyncRebaseWithNothingNamedIsNotAnArgumentMistake(t *testing.T) {
 	t.Chdir(t.TempDir())
-	for _, args := range [][]string{{"sync", "--rebase"}, {"sync", "rebase"}, {"sync", "rebase", "--no-fetch"}} {
+	for _, args := range [][]string{{"sync", "rebase"}, {"sync", "rebase", "--no-fetch"}} {
 		out, err := runCmd(t, args...)
 		if err == nil || err.Error() != "not a git repository" {
 			t.Errorf("%v: error %v, want the verb's own not-a-repository error\n%s", args, err, out)
@@ -213,49 +162,43 @@ func TestSyncRunWithNothingNamedIsNotAnArgumentMistake(t *testing.T) {
 	}
 }
 
-// Both spellings of a verb open the repository the verb's way (withContext,
-// which refuses a directory outside a repository as "not a git repository")
-// rather than the overview's lenient way, which says "not inside a git
-// repository". Outside a repository that is the first thing either does, so
-// the same error from both is the same code path reached.
-func TestSyncVerbFlagsReachTheVerb(t *testing.T) {
+// Each verb takes every flag it has and opens the repository the verb's way
+// (withContext, which refuses a directory outside a repository as "not a git
+// repository") rather than the overview's lenient way, which says "not inside
+// a git repository". An unknown or misplaced flag would fail before either, so
+// the verb's own error is the flags parsed and the verb reached.
+func TestSyncVerbsTakeTheirFlagsAndReachTheVerb(t *testing.T) {
 	t.Chdir(t.TempDir())
 	_, overview := runCmd(t, "sync", "a")
 	if overview == nil || overview.Error() != "not inside a git repository" {
 		t.Fatalf("overview outside a repository: %v", overview)
 	}
-	for _, tc := range [][2][]string{
-		{{"sync", "rebase", "a"}, {"sync", "a", "--rebase"}},
-		{{"sync", "rebase", "a", "b", "--yes", "--push", "--no-fetch"}, {"sync", "a", "b", "--rebase", "-y", "--push", "--no-fetch"}},
-		{{"sync", "resume", "a", "--no-push"}, {"sync", "a", "--resume", "--no-push"}},
-		{{"sync", "resume", "a", "-y"}, {"sync", "a", "--resume", "--yes"}},
-		{{"sync", "undo", "a", "--force"}, {"sync", "a", "--undo", "--force"}},
-		{{"sync", "undo", "a", "-y"}, {"sync", "a", "-y", "--undo"}},
+	for _, args := range [][]string{
+		{"sync", "rebase", "a"},
+		{"sync", "rebase", "a", "b", "--yes", "--push", "--no-fetch"},
+		{"sync", "rebase", "a", "-y", "--no-push", "--force", "--allow-diverged", "--allow-owed", "--no-ff-trunk"},
+		{"sync", "rebase", "a", "--if-ready", "--expect", "1:0000", "--each-commit", "tips"},
+		{"sync", "resume", "a", "--no-push"},
+		{"sync", "resume", "a", "-y"},
+		{"sync", "resume", "a", "--push", "--allow-owed", "--adopt", "--allow-dropped"},
+		{"sync", "undo", "a", "--force"},
+		{"sync", "undo", "a", "-y"},
 	} {
-		verbOut, verbErr := runCmd(t, tc[0]...)
-		flagOut, flagErr := runCmd(t, tc[1]...)
-		if verbErr == nil || verbErr.Error() == overview.Error() {
-			t.Fatalf("%v: the verb did not open the repository its own way: %v", tc[0], verbErr)
-		}
-		if flagErr == nil || flagErr.Error() != verbErr.Error() {
-			t.Errorf("%v: %v; the verb says %v", tc[1], flagErr, verbErr)
-		}
-		if flagOut != verbOut {
-			t.Errorf("%v printed %q; the verb printed %q", tc[1], flagOut, verbOut)
+		out, err := runCmd(t, args...)
+		if err == nil || err.Error() != "not a git repository" {
+			t.Errorf("%v: error %v, want the verb's own not-a-repository error\n%s", args, err, out)
 		}
 	}
 }
 
-// A flag mistake on the flag spelling prints one line and no usage, as
-// --push with --no-push does on the verb.
-func TestSyncVerbFlagMistakesDoNotShowUsage(t *testing.T) {
+// A flag mistake prints one line and no usage, as --push with --no-push does
+// on the verb.
+func TestSyncFlagMistakesDoNotShowUsage(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for _, args := range [][]string{
-		{"sync", "a", "--rebase", "--undo"},
-		{"sync", "a", "--push"},
-		{"sync", "a", "--force"},
-		{"sync", "a", "--yes"},
-		{"sync", "a", "--resume", "--no-fetch"},
+		{"sync", "a", "--layer", "x"},
+		{"sync", "rebase", "a", "--layer", "x"},
+		{"sync", "rebase", "a", "--autosquash"},
 	} {
 		out, err := runCmd(t, args...)
 		if err == nil {
@@ -271,7 +214,7 @@ func TestSyncVerbFlagMistakesDoNotShowUsage(t *testing.T) {
 // -y is --yes on every verb, as on wt remove, wt sweep and wt init.
 func TestSyncVerbsTakeYForYes(t *testing.T) {
 	root := newRootCmd()
-	for _, path := range [][]string{{"sync"}, {"sync", "rebase"}, {"sync", "resume"}, {"sync", "undo"}} {
+	for _, path := range [][]string{{"sync", "rebase"}, {"sync", "resume"}, {"sync", "undo"}} {
 		c, _, err := root.Find(path)
 		if err != nil {
 			t.Fatal(err)
@@ -307,24 +250,24 @@ func TestRunOptionsAskNobodyAndRefuseBulkWithoutATerminal(t *testing.T) {
 	cmd.SetIn(strings.NewReader(""))
 	cmd.SetOut(&out)
 
-	bulk, _ := runOptions(cmd, syncVerbFlags{rebase: true}, true)
+	bulk, _ := runOptions(cmd, runFlags{}, true)
 	if bulk.Confirm == nil {
 		t.Fatal("a bulk run with no terminal must not go ahead unasked")
 	}
 	if ok := bulk.Confirm([]string{"bump"}); ok || !strings.Contains(out.String(), "Pass --yes to rebase bump.") {
 		t.Errorf("want a no that says how to say yes: %v %q", ok, out.String())
 	}
-	if named, _ := runOptions(cmd, syncVerbFlags{rebase: true}, false); named.Confirm != nil {
+	if named, _ := runOptions(cmd, runFlags{}, false); named.Confirm != nil {
 		t.Error("a named worktree with no terminal goes ahead")
 	}
-	yes, p := runOptions(cmd, syncVerbFlags{rebase: true, yes: true}, true)
+	yes, p := runOptions(cmd, runFlags{yes: true}, true)
 	if yes.Confirm != nil || yes.ConfirmPush != nil || p != nil {
 		t.Error("--yes asks nothing")
 	}
 	if yes.Push != syncrun.PushAlways {
 		t.Error("--yes is yes to the push too")
 	}
-	if held, _ := runOptions(cmd, syncVerbFlags{rebase: true, yes: true, push: syncrun.PushNever}, false); held.Push != syncrun.PushNever {
+	if held, _ := runOptions(cmd, runFlags{yes: true, push: syncrun.PushNever}, false); held.Push != syncrun.PushNever {
 		t.Error("--no-push keeps the push out, --yes or not")
 	}
 }

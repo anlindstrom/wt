@@ -59,7 +59,7 @@ func acquireKeepLock(gitDir string) (f *os.File, held bool, err error) {
 
 // Run is one unattended pass of the keeper: fetch trunk, and when
 // its tip has moved since the last pass, rebase every ready worktree the way
-// wt sync --rebase --yes does, leaving alone any worktree with a session in it,
+// wt sync rebase --yes does, leaving alone any worktree with a session in it,
 // and push what finished with nothing owed. Every pass is recorded in the
 // log, as it happens, and in the state file. The error is what synccmd.SyncRebase's
 // would be.
