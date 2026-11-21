@@ -517,6 +517,32 @@ type StackFinish struct {
 	Between   func(stage string, m wtsync.LayerMove) error
 }
 
+// StackFinishCaller is what a run and a resume each decide for themselves
+// when they finish a stack: the tip the line was rebased from, who owns the
+// branch, the paths the rebase stopped on, whether wt drove the replay (the
+// tree guard's strictness depends on it), and the fold's report inputs. No
+// field has a default.
+type StackFinishCaller struct {
+	OldTip    string
+	Own       *wtsync.Own
+	Stopped   []string
+	Confirmed bool
+	Gaps      []wtsync.ContextGap
+	Unchecked []string
+	// AfterMove and Between are a test's hooks; nil in a real run and a resume.
+	AfterMove func(wtsync.LayerMove) error
+	Between   func(stage string, m wtsync.LayerMove) error
+}
+
+// StackFinishFor builds the StackFinish a run and a resume both write: what
+// the rebase and the sessions listed after it say, and c what only the caller
+// knows.
+func StackFinishFor(rec *wtsync.StackRecord, res wtsync.Result, cfg *wtsync.Config, now time.Time, listed []agents.Agent, listErr error, c StackFinishCaller) StackFinish {
+	return StackFinish{Record: rec, OldTip: c.OldTip, NewTip: res.NewTip,
+		Onto: rec.Onto, Own: c.Own, Listed: listed, ListErr: listErr, Force: rec.Force, Now: now, AfterMove: c.AfterMove, Between: c.Between,
+		Folds: FoldPaths(cfg), Stopped: c.Stopped, Dropped: res.Emptied, Confirmed: c.Confirmed, Gaps: c.Gaps, Unchecked: c.Unchecked}
+}
+
 // FinishStack checks every layer's new tip and moves the layers, once the
 // rebase of the line has finished: in a run, and in the resume of one that
 // was handed over. It prints a line per layer and returns the report and

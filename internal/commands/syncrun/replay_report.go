@@ -22,16 +22,16 @@ func droppedJSON(ds []wtsync.Dropped) []DroppedJSON {
 	return out
 }
 
-// SetReplayReport records the commits a finished rebase emptied or left only
+// setReplayReport records the commits a finished rebase emptied or left only
 // tests of on its participant.
-func SetReplayReport(p *SyncParticipant, res wtsync.Result) {
+func setReplayReport(p *SyncParticipant, res wtsync.Result) {
 	p.Emptied, p.TestsOnly = droppedJSON(res.Emptied), droppedJSON(res.TestsOnly)
 }
 
-// PrintReplayReport says, one line per commit, which commits a finished
+// printReplayReport says, one line per commit, which commits a finished
 // rebase emptied and which it left only tests of. It is a report: the rebase
 // stands and nothing waits on it.
-func PrintReplayReport(w io.Writer, res wtsync.Result) {
+func printReplayReport(w io.Writer, res wtsync.Result) {
 	line := func(d wtsync.Dropped, what, why string) {
 		layer := ""
 		if d.Layer != "" {

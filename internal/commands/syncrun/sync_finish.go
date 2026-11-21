@@ -264,9 +264,9 @@ func CompleteRun(ctx *kit.Context, w io.Writer, cfg *wtsync.Config, t *RebaseTra
 	return head, ran, nil
 }
 
-// OwedSteps is the deferred steps that failed, by name: owed, to be run by
+// owedSteps is the deferred steps that failed, by name: owed, to be run by
 // hand.
-func OwedSteps(ran []wtsync.DeferredResult) []string {
+func owedSteps(ran []wtsync.DeferredResult) []string {
 	var owed []string
 	for _, d := range ran {
 		if d.Err != nil {
@@ -312,8 +312,8 @@ func PlanFileOf(path string) *string {
 	return jsonout.Strp(wtsync.PlanPath(gitDir))
 }
 
-// OwedBy names a finish's owed steps the way the closing error names them.
-func OwedBy(work string, steps []string) []string {
+// owedBy names a finish's owed steps the way the closing error names them.
+func owedBy(work string, steps []string) []string {
 	named := make([]string, 0, len(steps))
 	for _, s := range steps {
 		named = append(named, work+" (owed: "+s+")")

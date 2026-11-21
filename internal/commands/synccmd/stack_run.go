@@ -247,9 +247,9 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) (rest
 	// layer's worktree while the line was rebased. One that cannot be
 	// listed holds every layer in a worktree.
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
-	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinish{Record: rec, OldTip: res.OldTip, NewTip: res.NewTip,
-		Onto: rec.Onto, Own: r.own, Listed: listed, ListErr: lerr, Force: rec.Force, Now: r.opts.Clock(), AfterMove: st.AfterMove, Between: st.Between,
-		Folds: syncrun.FoldPaths(r.cfg), Stopped: wtsync.StopPaths(res.Stops), Dropped: res.Emptied, Confirmed: res.Replay != nil && res.Replay.Confirmed, Gaps: r.gaps, Unchecked: r.gapsUnchecked})
+	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinishFor(rec, res, r.cfg, r.opts.Clock(), listed, lerr, syncrun.StackFinishCaller{
+		OldTip: res.OldTip, Own: r.own, Stopped: wtsync.StopPaths(res.Stops), Confirmed: res.Replay != nil && res.Replay.Confirmed,
+		Gaps: r.gaps, Unchecked: r.gapsUnchecked, AfterMove: st.AfterMove, Between: st.Between}))
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s; syncrun.SetFold(jp, s) })
 	restored = s != nil && s.Restored
 	if ferr != nil {

@@ -49,9 +49,9 @@ func LayerStepsOf(steps []wtsync.LayerStep) []LayerStepJSON {
 	return out
 }
 
-// OwedLayerSteps is the per-layer steps owed, named with their layer the
+// owedLayerSteps is the per-layer steps owed, named with their layer the
 // way the closing error names owed steps.
-func OwedLayerSteps(steps []wtsync.LayerStep) []string {
+func owedLayerSteps(steps []wtsync.LayerStep) []string {
 	var owed []string
 	for _, s := range steps {
 		if s.Owed() {
