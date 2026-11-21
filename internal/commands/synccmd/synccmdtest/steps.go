@@ -34,6 +34,12 @@ type Probe struct {
 	Err   error
 }
 
+// DockerUp is the probe set of a docker that answers: what a run's options
+// take where a test's step declares needs: [docker] and the machine has no
+// docker. Unlike a fake docker on the PATH it shares nothing, so the test
+// stays parallel.
+func DockerUp() map[string]func() error { return (&Probe{}).Probes() }
+
 // DockerDown is a docker probe that fails.
 func DockerDown() *Probe { return &Probe{Err: errors.New("cannot connect to the Docker daemon")} }
 

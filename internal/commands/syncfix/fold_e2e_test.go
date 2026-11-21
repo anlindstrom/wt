@@ -90,12 +90,11 @@ func foldEndToEnd(t *testing.T, rule string, versions map[string]string, f5Folde
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, gittest.FoldYAML(rule))
 	main := ctx.Repo.MainRoot
 
 	// 1. wt sync tmp/fold --stack --json: the look.
-	o := synccmdtest.OverviewJSONWith(t, ctx, synccmd.SyncOptions{NoFetch: true, Stack: &synccmd.StackLook{Work: gittest.FoldTmp}})
+	o := synccmdtest.OverviewJSONWith(t, ctx, synccmd.SyncOptions{NoFetch: true, Probes: synccmdtest.DockerUp(), Stack: &synccmd.StackLook{Work: gittest.FoldTmp}})
 	if o.Stack == nil || len(o.Stack.Layers) != 5 {
 		t.Fatalf("look %+v", o.Stack)
 	}
@@ -240,12 +239,14 @@ func layersOfStack(s *syncrun.Stack) map[string]syncrun.StackLayer { return stac
 
 // The case with the version rule wt has today.
 func TestFoldOfAStackEndToEnd(t *testing.T) {
+	t.Parallel()
 	foldEndToEnd(t, "max-plus-patch", map[string]string{"f1": "1.1.1", "f3": "1.1.2", "f5": "1.1.3"}, false)
 }
 
 // The case under shift-bump, which keeps each bump's kind: it runs where wt
 // knows the rule, and says so where it does not.
 func TestFoldOfAStackEndToEndShiftBump(t *testing.T) {
+	t.Parallel()
 	if _, err := wtsync.Parse([]byte(gittest.FoldYAML("shift-bump"))); err != nil {
 		t.Skipf("this wt does not know shift-bump: %v", err) //skip-ok: any error from Parse of the shift-bump declaration skips the test, not only an unknown rule, so a real Parse regression is hidden here
 	}

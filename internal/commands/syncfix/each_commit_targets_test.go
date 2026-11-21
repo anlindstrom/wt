@@ -173,10 +173,10 @@ func TestSyncUndoAfterATargetsStopRestoresEverything(t *testing.T) {
 // works under targets: the owner and the layer's tip are checked again, the
 // run finishes, and every layer holds a tree that regenerates to itself.
 func TestFoldUnderTargetsChecksTheFoldedOwnersAgain(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, gittest.FoldYAML("max-plus-patch"))
 	main := ctx.Repo.MainRoot
 	opts := runAt(200, &synccmd.StackOptions{Autosquash: true})

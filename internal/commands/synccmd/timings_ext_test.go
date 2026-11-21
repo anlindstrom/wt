@@ -42,8 +42,8 @@ func sleepyFold(t *testing.T) (yamlRun string) {
 // layer. Each check and step prints how long it took; the end of the run sums
 // them up per check and step and names the slowest; --json carries the same.
 func TestARunSaysHowLongEachCheckAndStepTookAndSumsThemUp(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, sleepyFold(t))
 	testkit.GitIn(t, s.Paths["f3"], "checkout", "--", ".")
 	main := ctx.Repo.MainRoot
@@ -141,8 +141,8 @@ func TestARunSaysHowLongEachCheckAndStepTookAndSumsThemUp(t *testing.T) {
 // A check that fails once and passes on its retry is one timed run, with both
 // tries in its time, and the line that says it passed on retry carries it.
 func TestACheckWithARetryIsTimedWithBothTries(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, sleepyFold(t))
 	testkit.GitIn(t, s.Paths["f3"], "checkout", "--", ".")
 	res, human, err := synccmdtest.StackRun(t, ctx, gittest.FoldTmp, synccmdtest.NoAgents())

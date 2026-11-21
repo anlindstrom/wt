@@ -20,10 +20,10 @@ import (
 // and the ones above, keeps the step that failed at f3 owed there and above,
 // records it owed on disk, and the layers move on the plan the run made.
 func TestSyncResumeKeepsTheLayerStepsOfTheRunItResumes(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	synccmdtest.FakeDocker(t)
 	yaml := strings.Replace(gittest.FoldYAML("max-plus-patch"), "defer:\n",
 		"defer:\n  - run: test ! -e src/c.txt\n    paths: [gen/**]\n    each: layer\n", 1)
 	ctx, s := synccmdtest.FoldLine(t, yaml)
@@ -94,6 +94,7 @@ func TestSyncResumeKeepsTheLayerStepsOfTheRunItResumes(t *testing.T) {
 // the step it was owed runs, whatever the rebase changed, and the record is
 // cleared because it ran, not because it was skipped.
 func TestSyncResumeOfStepsRunsTheOwedAfterStep(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: real repositories and worktrees")
 	}

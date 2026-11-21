@@ -58,8 +58,8 @@ func TestOntoStackLineMovesItsLayersOntoTheTarget(t *testing.T) {
 // commit owning its output: at each layer's new tip on the target, the
 // generator leaves the spec as it is.
 func TestOntoStackLineRunsTheLayerStepsOnTheTarget(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, gittest.FoldYAML("max-plus-patch"))
 	testkit.GitIn(t, s.Paths["f3"], "checkout", "--", ".")
 	integ := synccmdtest.Branch(t, ctx, "integ", "main", map[string]string{"src/i.txt": "i\n"})

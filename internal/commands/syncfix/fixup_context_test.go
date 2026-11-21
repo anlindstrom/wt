@@ -104,6 +104,7 @@ func undoesExactly(t *testing.T, ctx *kit.Context, s *gittest.ContextLine, befor
 // first, and the stop and its plan say why and how out of it, with the
 // commit that carries the missing context; undo puts it all back.
 func TestFoldNamesTheFixupsAheadOfTheirContext(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -196,10 +197,10 @@ func probeUnchecked(t *testing.T) string {
 
 // A finished fold keeps, in its report, what it could not analyse.
 func TestAFinishedFoldKeepsWhatItCouldNotAnalyse(t *testing.T) {
+	// Not parallel: it swaps syncrun.ContextGapsOf.
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	synccmdtest.FakeDocker(t)
 	probe := probeUnchecked(t)
 	ctx, _ := synccmdtest.FoldLine(t, gittest.FoldYAML("max-plus-patch"))
 	res, human, err := synccmdtest.StackRun(t, ctx, gittest.FoldTmp, runAt(500, &synccmd.StackOptions{Autosquash: true}))
@@ -236,6 +237,7 @@ func handedAtFixup(t *testing.T, nanos int64, state string) (*kit.Context, *gitt
 // on; the next stop is an ordinary conflict, resumed as ever; the fold
 // finishes with the line's content what it was, and undo puts it back.
 func TestResumeRefusesAResolutionThatDropsAFixupsHunk(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -317,6 +319,7 @@ func TestResumeRefusesAResolutionThatDropsAFixupsHunk(t *testing.T) {
 // goes on, and the content check at its end still holds the layers, since
 // the line no longer has what it had.
 func TestResumeAllowDroppedLetsAnIntendedDropThrough(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -349,6 +352,7 @@ func TestResumeAllowDroppedLetsAnIntendedDropThrough(t *testing.T) {
 // Undo right after a refused resume puts the line and every layer back, and
 // the person's untracked file stays.
 func TestUndoAfterARefusedResumePutsTheLineBack(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -368,6 +372,7 @@ func TestUndoAfterARefusedResumePutsTheLineBack(t *testing.T) {
 // --json has the failure in contextUnchecked, not an empty contextGaps
 // that reads as nothing found.
 func TestTheLookSaysWhenItCannotTellTheContext(t *testing.T) {
+	// Not parallel: it swaps syncrun.ContextGapsOf.
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}

@@ -197,10 +197,10 @@ func TestFoldOntoTrunkHandsOverAtAConflictAndUndoOrResumeFinishesIt(t *testing.T
 // the line leaves what the two runs did (fold in place, then rebase onto
 // trunk): every layer tip, and the line, has the same tree and subjects.
 func TestFoldOntoTrunkInOneRunEqualsTheTwoRunWay(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	synccmdtest.FakeDocker(t)
 	tips := func(t *testing.T, twoRuns bool) map[string]string {
 		ctx, _ := synccmdtest.FoldLine(t, gittest.FoldYAML("max-plus-patch"))
 		main := ctx.Repo.MainRoot

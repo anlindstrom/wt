@@ -347,8 +347,8 @@ func TestSyncRebaseStackKeepsDirtyTwinsAtACommitNoLayerHas(t *testing.T) {
 // way. The generator runs in the rebase (fold) and, on the line as it is, in
 // wt sync steps --all (forced).
 func TestSyncRebaseStackWithAStrayIsTheRunOfTheKeptLayers(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
-	synccmdtest.FakeDocker(t)
 	kept := []string{"f1", "f2", "f3", "f4", "f5"}
 	type outcome struct {
 		refs  map[string]string
@@ -417,6 +417,7 @@ func TestSyncRebaseStackWithAStrayIsTheRunOfTheKeptLayers(t *testing.T) {
 	for _, mode := range []string{"fold", "forced"} {
 		for _, strayName := range []string{"aaa-stray", "zzz-stray"} {
 			t.Run(mode+"/"+strayName, func(t *testing.T) {
+				t.Parallel()
 				got := run(t, strayName, false, mode == "forced")
 				want := run(t, strayName, true, mode == "forced")
 				if len(want.steps) == 0 {

@@ -28,6 +28,7 @@ func refsOf(t *testing.T, main string, branches []string) map[string]string {
 // no "contested" stop for the conflict with trunk, which an in-place fold
 // never meets. The fold finishes, and undo puts every ref back.
 func TestFoldInPlaceHeaderSaysSoAndPrintsNoTrunkStop(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
 	ctx, s := synccmdtest.StackLine(t, "conflicts: []\n")
 	tmp := s.Paths[gittest.StackTmp]
@@ -77,6 +78,7 @@ func TestFoldInPlaceHeaderSaysSoAndPrintsNoTrunkStop(t *testing.T) {
 // A plain --stack rebase onto trunk keeps its header and the contested stop
 // it will meet.
 func TestPlainStackRebaseKeepsTheOntoTrunkHeaderAndContestedLine(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
 	ctx, _ := synccmdtest.StackLine(t, "conflicts: []\n")
 	res, human, _ := synccmdtest.StackRun(t, ctx, gittest.StackTmp, synccmdtest.NoAgents())
@@ -93,6 +95,7 @@ func TestPlainStackRebaseKeepsTheOntoTrunkHeaderAndContestedLine(t *testing.T) {
 // A fold that passes the tree guard says what it compared: the old tip,
 // and the declared step paths it left out when a changed file matched one.
 func TestFoldSaysWhatTheTreeGuardComparedWhenNothingWasExcluded(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
 	ctx, s := synccmdtest.StackLine(t, "")
 	tmp := s.Paths[gittest.StackTmp]
@@ -115,8 +118,8 @@ func TestFoldSaysWhatTheTreeGuardComparedWhenNothingWasExcluded(t *testing.T) {
 }
 
 func TestFoldSaysWhichDeclaredStepPathsTheTreeGuardLeftOut(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, gittest.FoldYAML("max-plus-patch"))
 	old := testkit.GitOut(t, ctx.Repo.MainRoot, "rev-parse", gittest.FoldTmp)
 	opts := synccmdtest.NoAgents()
@@ -135,8 +138,8 @@ func TestFoldSaysWhichDeclaredStepPathsTheTreeGuardLeftOut(t *testing.T) {
 // A run that stops before it has read the line still says what it was
 // running: the plain header, as before, not none.
 func TestFoldThatFailsBeforeTheLineIsReadStillPrintsAHeader(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
-	synccmdtest.FakeDocker(t)
 	// A fold: owner step without each: layer is refused before the line is read.
 	yaml := strings.Replace(gittest.FoldYAML("max-plus-patch"), "    each: layer\n", "", 1)
 	ctx, _ := synccmdtest.FoldLine(t, yaml)
