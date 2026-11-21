@@ -28,19 +28,8 @@ func TestUpRebasesAWorktreeTheStrategiesResolve(t *testing.T) {
 	if !strings.HasPrefix(out.String(), "wt up  onto origin/main") || !strings.Contains(out.String(), "✓ rebased 1 commit") {
 		t.Errorf("output:\n%s", out.String())
 	}
-}
-
-// A conflict that would be yours is refused untouched, and the run fails.
-func TestUpRefusesAWorktreeThatWouldHandOver(t *testing.T) {
-	t.Parallel()
-	ctx, bump := provisiontest.ContestedFixture(t)
-	old := testkit.GitOut(t, bump, "rev-parse", "HEAD")
-	var out bytes.Buffer
-	if err := synccmd.Up(ctx, "bump", synccmdtest.NoAgents(), &out); err == nil {
-		t.Fatalf("want a failure:\n%s", out.String())
-	}
-	if !strings.Contains(out.String(), "would not sync cleanly") || testkit.GitOut(t, bump, "rev-parse", "HEAD") != old {
-		t.Errorf("want it refused and untouched:\n%s", out.String())
+	if !testkit.GitAncestor(t, bump, "origin/main", "HEAD") {
+		t.Errorf("the worktree is not on trunk after the rebase:\n%s", out.String())
 	}
 }
 

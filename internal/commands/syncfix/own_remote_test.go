@@ -58,6 +58,8 @@ func TestUpFastForwardsABranchBehindItsRemoteThenRebases(t *testing.T) {
 	if got := testkit.GitOut(t, x, "rev-parse", "HEAD"); got != before {
 		t.Fatalf("undo left the branch at %s, want %s as before the fast-forward\n%s", got, before, out.String())
 	}
+	// The remote's commit reads as nothing the branch once had.
+	synccmdtest.MustBeDiverged(t, f, x, opts, theirs)
 }
 
 // wt up promises a rebase that goes through without anybody: a branch that
@@ -100,7 +102,7 @@ func TestABranchBehindItsRemoteIsJudgedAtTheRemotesCommit(t *testing.T) {
 	}
 	// The handover says which tip the safety ref pins, so a resume neither
 	// refuses it nor forgets where undo goes.
-	testkit.WriteIn(t, x, "c.txt", "both\n")
+	testkit.WriteFile(t, x, "c.txt", "both\n")
 	testkit.GitIn(t, x, "add", "c.txt")
 	resumed, err := syncResumeJSON(t, f.Ctx, "x", ResumeOptions{PushOptions: syncrun.PushOptions{Push: syncrun.PushNever}, VerbOptions: opts.VerbOptions})
 	if err != nil || resumed.Worktrees[0].Result != syncrun.ResultRebased || resumed.Worktrees[0].OwnRemoteSync != nil {

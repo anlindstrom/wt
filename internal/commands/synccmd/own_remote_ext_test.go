@@ -69,7 +69,7 @@ func TestSyncRunRunsAgainAfterAStrategyResolvedRebase(t *testing.T) {
 	if unmatched := testkit.GitOut(t, main, "rev-list", "--right-only", "--cherry-pick", "feat_wt/bump...origin/feat_wt/bump"); unmatched == "" {
 		t.Fatal("the fixture's rebase replayed the pushed patch unchanged: it proves nothing about former tips")
 	}
-	testkit.WriteIn(t, main, "a.txt", "a2\n")
+	testkit.WriteFile(t, main, "a.txt", "a2\n")
 	testkit.GitIn(t, main, "commit", "-q", "-am", "trunk moves")
 	testkit.GitIn(t, main, "push", "-q", "origin", "main")
 	r, err := synccmdtest.SyncRunJSON(t, ctx, []string{"bump"}, synccmdtest.At(opts, 100))
@@ -174,7 +174,7 @@ func TestUpBehindAndNotFastForwardableTouchesNothing(t *testing.T) {
 	before := testkit.GitOut(t, x, "rev-parse", "HEAD")
 	f.Theirs(t, "feat_wt/x", "t.txt", "t\n")
 	f.AdvanceOrigin(t, 1) // fetches everything, so the plan sees the remote
-	testkit.WriteIn(t, x, "x.txt", "edited\n")
+	testkit.WriteFile(t, x, "x.txt", "edited\n")
 
 	p := synccmdtest.PlanOfWork(t, f.Ctx, "x")
 	if p.UpEligible || testkit.Str(p.UpIneligibleCode) != synccmd.IneligibleOwnBehind || p.Token != nil {
@@ -343,7 +343,7 @@ func TestPlanIsHeldBackByAnyStackMembersOwnRemote(t *testing.T) {
 	// x falls behind as well, with tracked changes in it.
 	f.Theirs(t, "feat_wt/x", "tx.txt", "tx\n")
 	testkit.GitIn(t, f.Main, "fetch", "-q", "origin")
-	testkit.WriteIn(t, x, "x.txt", "edited\n")
+	testkit.WriteFile(t, x, "x.txt", "edited\n")
 	p = synccmdtest.PlanOfWork(t, f.Ctx, "y")
 	if testkit.Str(p.UpIneligibleCode) != synccmd.IneligibleOwnBehind || p.Token != nil {
 		t.Fatalf("both kinds: code %s token %s", testkit.Str(p.UpIneligibleCode), testkit.Str(p.Token))
@@ -688,7 +688,7 @@ func TestUpRefusesWhenTheFastForwardItselfFails(t *testing.T) {
 	f.Theirs(t, "feat_wt/x", "t.txt", "theirs\n")
 	f.AdvanceOrigin(t, 1)
 	// An untracked file the remote's commit would overwrite.
-	testkit.WriteIn(t, x, "t.txt", "scratch\n")
+	testkit.WriteFile(t, x, "t.txt", "scratch\n")
 	r, human, err := synccmdtest.UpOut(t, f.Ctx, "x", opts)
 	if err == nil {
 		t.Fatalf("overwrote an untracked file:\n%s", human)

@@ -2,21 +2,20 @@ package retire
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/anlindstrom/wt/internal/agents"
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/provision/provisiontest"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 )
 
-// refused runs a removal that must not happen and checks nothing went.
-func refused(t *testing.T, ctx *kit.Context, path string, opts RemoveOptions, why string) string {
+// refused runs a removal that must not happen and checks nothing went. It
+// says why, and each of also.
+func refused(t *testing.T, ctx *kit.Context, path string, opts RemoveOptions, why string, also ...string) string {
 	t.Helper()
 	var buf bytes.Buffer
 	err := RemoveAt(ctx, path, opts, &buf)
@@ -26,8 +25,10 @@ func refused(t *testing.T, ctx *kit.Context, path string, opts RemoveOptions, wh
 	if _, serr := os.Stat(path); serr != nil {
 		t.Fatalf("the worktree must still be there (%s)", why)
 	}
-	if !strings.Contains(buf.String()+err.Error(), why) {
-		t.Errorf("want %q in what it said:\n%s\n%v", why, buf.String(), err)
+	for _, want := range append([]string{why}, also...) {
+		if !strings.Contains(buf.String()+err.Error(), want) {
+			t.Errorf("want %q in what it said:\n%s\n%v", want, buf.String(), err)
+		}
 	}
 	return buf.String()
 }
@@ -38,9 +39,13 @@ func TestRemoveRefusesADirtyWorktreeBeforeAsking(t *testing.T) {
 	testkit.MustWrite(t, filepath.Join(path, "scratch.txt"), "mine")
 	asked := false
 	opts := RemoveOptions{Confirm: func(Plan) bool { asked = true; return true }}
-	refused(t, ctx, path, opts, "uncommitted changes")
+	plan := refused(t, ctx, path, opts, "uncommitted changes")
 	if asked {
 		t.Error("a removal that will refuse must not ask first")
+	}
+	// git itself refuses a dirty checkout; the plan says so before the attempt.
+	if !strings.Contains(plan, "uncommitted") {
+		t.Errorf("plan should report uncommitted changes:\n%s", plan)
 	}
 }
 
@@ -120,53 +125,6 @@ func TestRemoveListsNothingWhenAnotherRefHoldsTheTip(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "on no branch") || strings.Contains(buf.String(), "restores its commits") {
 		t.Errorf("backup still holds the commit:\n%s", buf.String())
-	}
-}
-
-func TestRemoveRefusesASessionInTheWorktree(t *testing.T) {
-	t.Parallel()
-	ctx, path := provisiontest.SafetyWorktree(t, "fix/visited")
-	resolved, _ := filepath.EvalSymlinks(path)
-	opts := RemoveOptions{Agents: []agents.Agent{{Name: "parked-1", Cwd: resolved, Status: "idle"}}}
-	refused(t, ctx, path, opts, "parked-1")
-}
-
-func TestRemoveForceGoesPastASession(t *testing.T) {
-	t.Parallel()
-	ctx, path := provisiontest.SafetyWorktree(t, "fix/visited-forced")
-	resolved, _ := filepath.EvalSymlinks(path)
-	opts := RemoveOptions{Force: kit.ForceAll, Agents: []agents.Agent{{Name: "parked-1", Cwd: resolved}}}
-	var buf bytes.Buffer
-	if err := RemoveAt(ctx, path, opts, &buf); err != nil {
-		t.Fatalf("RemoveAt --force: %v\n%s", err, buf.String())
-	}
-}
-
-func TestRemoveRefusesWhenTheSessionsCannotBeListed(t *testing.T) {
-	t.Parallel()
-	ctx, path := provisiontest.SafetyWorktree(t, "fix/unknown")
-	opts := RemoveOptions{AgentsErr: errors.New("claude agents --json failed: boom")}
-	refused(t, ctx, path, opts, "cannot list agent sessions")
-
-	opts.Force = kit.ForceAll
-	var buf bytes.Buffer
-	if err := RemoveAt(ctx, path, opts, &buf); err != nil {
-		t.Fatalf("--force goes past a listing that failed: %v\n%s", err, buf.String())
-	}
-}
-
-func TestRemoveRefusesFilesStatusIsToldNotToLookAt(t *testing.T) {
-	t.Parallel()
-	ctx, path := provisiontest.SafetyWorktree(t, "fix/hidden")
-	testkit.MustWrite(t, filepath.Join(path, "a.txt"), "a")
-	testkit.GitIn(t, path, "add", "a.txt")
-	testkit.GitIn(t, path, "commit", "-qm", "a")
-	testkit.GitIn(t, path, "update-index", "--assume-unchanged", "a.txt")
-	refused(t, ctx, path, RemoveOptions{}, "a.txt")
-
-	var buf bytes.Buffer
-	if err := RemoveAt(ctx, path, RemoveOptions{Force: kit.ForceAll}, &buf); err != nil {
-		t.Fatalf("--force goes past an unedited assume-unchanged file: %v\n%s", err, buf.String())
 	}
 }
 

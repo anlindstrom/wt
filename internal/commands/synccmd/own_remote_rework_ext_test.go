@@ -161,7 +161,7 @@ func TestAllowedIsOnlyARunThatWentOn(t *testing.T) {
 	f.Theirs(t, "feat_wt/x", "t.txt", "t\n")
 	testkit.Mine(t, x, "m.txt", "m\n")
 	f.AdvanceOrigin(t, 1)
-	testkit.WriteIn(t, x, "x.txt", "edited\n")
+	testkit.WriteFile(t, x, "x.txt", "edited\n")
 	opts.AllowDiverged = true
 	r, human, err := synccmdtest.UpOut(t, f.Ctx, "x", opts)
 	if err == nil || r.Worktrees[0].Result != syncrun.ResultRefused || r.Worktrees[0].OwnRemoteSync.Allowed {

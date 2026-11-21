@@ -1,4 +1,4 @@
-package provision
+package kit_test
 
 import (
 	"path/filepath"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
+	"github.com/anlindstrom/wt/internal/commands/provision/provisiontest"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 )
 
@@ -14,7 +15,7 @@ import (
 // that did not exist while the worktree sat under chore_wt/.
 func TestPathAndBranchPreferAnExistingWorktreeOfAnotherType(t *testing.T) {
 	t.Parallel()
-	ctx := locatable(t, "chore/wt-migration")
+	ctx := provisiontest.Locatable(t, "chore/wt-migration")
 	want, err := kit.Locate(ctx, "chore/wt-migration")
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +35,7 @@ func TestPathAndBranchPreferAnExistingWorktreeOfAnotherType(t *testing.T) {
 // rather than resolved to whichever the default type implies.
 func TestPathAndBranchRefuseAnAmbiguousWorkName(t *testing.T) {
 	t.Parallel()
-	ctx := locatable(t, "feat/arch", "fix/arch")
+	ctx := provisiontest.Locatable(t, "feat/arch", "fix/arch")
 
 	for name, resolve := range map[string]func(*kit.Context, string) (string, error){"Path": kit.Path, "Branch": kit.Branch} {
 		_, err := resolve(ctx, "arch")
@@ -56,10 +57,13 @@ func TestPathAndBranchRefuseAnAmbiguousWorkName(t *testing.T) {
 // while other worktrees exist.
 func TestPathAndBranchFallBackToTheDefaultTypeWhenNothingExists(t *testing.T) {
 	t.Parallel()
-	ctx := locatable(t, "chore/wt-migration")
+	ctx := provisiontest.Locatable(t, "chore/wt-migration")
 
 	if got, err := kit.Branch(ctx, "login-crash"); err != nil || got != "feat_wt/login-crash" {
 		t.Errorf("Branch = %q, %v; want feat_wt/login-crash", got, err)
+	}
+	if got, err := kit.Branch(ctx, "fix/login-crash"); err != nil || got != "fix_wt/login-crash" {
+		t.Errorf("explicit type: Branch = %q, %v; want fix_wt/login-crash", got, err)
 	}
 	want := filepath.Join(ctx.Repo.Parent, "demo_wt", "feat_wt", "login-crash")
 	if got, err := kit.Path(ctx, "login-crash"); err != nil || got != want {
@@ -73,7 +77,7 @@ func TestPathAndBranchFallBackToTheDefaultTypeWhenNothingExists(t *testing.T) {
 // that names nothing.
 func TestPathAndBranchAnswerForAnExistingWorktreeOfAnUndeclaredType(t *testing.T) {
 	t.Parallel()
-	ctx := locatable(t)
+	ctx := provisiontest.Locatable(t)
 	foreign := testkit.WorktreeAt(t, ctx.Repo.MainRoot, "wibble_wt/thing", filepath.Join(ctx.Repo.Parent, "demo-thing"))
 
 	if got, err := kit.Path(ctx, "wibble/thing"); err != nil || got != foreign {
@@ -92,7 +96,7 @@ func TestPathAndBranchAnswerForAnExistingWorktreeOfAnUndeclaredType(t *testing.T
 // inside it are the ways to ask for it (see TestPathAndBranchAnswerForRoot).
 func TestPathDoesNotAnswerForTheMainCheckout(t *testing.T) {
 	t.Parallel()
-	ctx := locatable(t)
+	ctx := provisiontest.Locatable(t)
 	if got, err := kit.Path(ctx, ctx.Repo.MainRoot); err == nil {
 		t.Errorf("want an error for the main checkout's path, got %q", got)
 	}
@@ -102,7 +106,7 @@ func TestPathDoesNotAnswerForTheMainCheckout(t *testing.T) {
 // makes of an empty string.
 func TestPathAndBranchRefuseAnEmptySpec(t *testing.T) {
 	t.Parallel()
-	ctx := locatable(t, "fix/login-crash")
+	ctx := provisiontest.Locatable(t, "fix/login-crash")
 	wt, err := kit.Locate(ctx, "login-crash")
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +127,7 @@ func TestPathAndBranchRefuseAnEmptySpec(t *testing.T) {
 // configures it, from wherever the caller stands.
 func TestPathAndBranchAnswerForRoot(t *testing.T) {
 	t.Parallel()
-	ctx := locatable(t, "fix/login-crash")
+	ctx := provisiontest.Locatable(t, "fix/login-crash")
 	wt, err := kit.Locate(ctx, "login-crash")
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +155,7 @@ func TestPathAndBranchAnswerForRoot(t *testing.T) {
 // error, not an empty line that exits 0.
 func TestBranchRefusesADetachedWorktree(t *testing.T) {
 	t.Parallel()
-	ctx := locatable(t)
+	ctx := provisiontest.Locatable(t)
 	detached := filepath.Join(ctx.Repo.Parent, "demo-detached")
 	testkit.GitIn(t, ctx.Repo.MainRoot, "worktree", "add", "-q", "--detach", detached)
 

@@ -2,7 +2,6 @@ package syncfix
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,17 +55,8 @@ func newEditCaseWith(t *testing.T, emptied bool, steps string) *editCase {
 	t.Helper()
 	logPath := filepath.Join(t.TempDir(), "checks.log")
 	yaml := "conflicts: []\n" + strings.ReplaceAll(steps, "%LOG%", logPath)
-	main := testkit.CommittedRepo(t, testkit.MinimalConf)
-	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
-	wtDir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := gittest.NewEditLine(t, main, wtDir, yaml, emptied)
-	ctx, err := kit.Open(main, io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
+	var s *gittest.EditLine
+	ctx, main := synccmdtest.OpenLine(t, func(main, wtDir string) { s = gittest.NewEditLine(t, main, wtDir, yaml, emptied) })
 	testkit.WriteFile(t, s.Path, "untracked.txt", "mine\n")
 	testkit.WriteFile(t, main, "readme.txt", "stashed work\n")
 	testkit.GitIn(t, main, "stash", "push", "-q", "-m", "keep")

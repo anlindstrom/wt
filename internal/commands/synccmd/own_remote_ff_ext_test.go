@@ -80,7 +80,7 @@ func TestSyncRunRefusesAFastForwardOnlyBranchItCannotMove(t *testing.T) {
 	}
 	t.Run("dirty", func(t *testing.T) {
 		f, x, opts, local, _ := synccmdtest.NothingToRebase(t)
-		testkit.WriteIn(t, x, "x.txt", "edited\n")
+		testkit.WriteFile(t, x, "x.txt", "edited\n")
 		if p := synccmdtest.PlanOfWork(t, f.Ctx, "x"); testkit.Str(p.UpIneligibleCode) != synccmd.IneligibleOwnBehind || p.Token != nil ||
 			testkit.Str(p.Worktree.OwnRemote.Blocks) != wtsync.OwnBlockDirty {
 			t.Fatalf("plan: %s %+v", testkit.Str(p.UpIneligibleCode), p.Worktree.OwnRemote)

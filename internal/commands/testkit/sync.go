@@ -3,15 +3,7 @@ package testkit
 import (
 	"path/filepath"
 	"testing"
-
-	"github.com/anlindstrom/wt/internal/gittest"
 )
-
-// GitOut runs git and returns its stdout; GitIn returns nothing.
-func GitOut(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	return gittest.Git(t, dir, args...)
-}
 
 // FetchHead is the fixture's FETCH_HEAD, whose mtime is the age --no-fetch
 // reports.

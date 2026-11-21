@@ -22,9 +22,12 @@ func TestUpFastForwardsLocalTrunkAfterItsFetch(t *testing.T) {
 	remote := f.AdvanceOrigin(t, 2)
 	testkit.GitIn(t, f.Main, "update-ref", "refs/remotes/origin/main", before) // as if never fetched
 
-	r, err := synccmdtest.UpJSON(t, f.Ctx, "x", opts)
+	r, human, err := synccmdtest.UpOut(t, f.Ctx, "x", opts)
 	if err != nil {
-		t.Fatalf("up: %v", err)
+		t.Fatalf("up: %v\n%s", err, human)
+	}
+	if !strings.Contains(human, "local main  ") || !strings.Contains(human, "fast-forwarded to origin/main") {
+		t.Fatalf("no line about local main:\n%s", human)
 	}
 	if got := f.Local(t); got != remote {
 		t.Fatalf("local main at %s, want origin's %s", got, remote)
@@ -35,23 +38,6 @@ func TestUpFastForwardsLocalTrunkAfterItsFetch(t *testing.T) {
 	}
 	if len(r.Worktrees) != 1 || r.Worktrees[0].Result != syncrun.ResultRebased {
 		t.Fatalf("worktrees = %+v, want x rebased", r.Worktrees)
-	}
-}
-
-func TestUpSaysWhatHappenedToLocalTrunk(t *testing.T) {
-	t.Parallel()
-	if testing.Short() {
-		t.Skip("integration: a sync run over real repositories and worktrees")
-	}
-	f := synccmdtest.NewTrunkFixture(t)
-	opts := f.WithWork(t)
-	f.AdvanceOrigin(t, 1)
-	var out bytes.Buffer
-	if err := synccmd.Up(f.Ctx, "x", opts, &out); err != nil {
-		t.Fatalf("up: %v\n%s", err, out.String())
-	}
-	if !strings.Contains(out.String(), "local main  ") || !strings.Contains(out.String(), "fast-forwarded to origin/main") {
-		t.Fatalf("no line about local main:\n%s", out.String())
 	}
 }
 
@@ -156,7 +142,7 @@ func TestStatusJSONSaysWhatARunWouldDoToLocalTrunk(t *testing.T) {
 	if got := f.Local(t); got != before {
 		t.Fatalf("local main moved to %s", got)
 	}
-	testkit.WriteIn(t, f.Main, "scratch.txt", "mine\n")
+	testkit.WriteFile(t, f.Main, "scratch.txt", "mine\n")
 	if p = synccmdtest.PlanOfWork(t, f.Ctx, "x"); p.TrunkSync.SkippedReason == nil || *p.TrunkSync.SkippedReason != syncrun.TrunkSkipDirty {
 		t.Fatalf("trunkSync = %+v, want dirty", p.TrunkSync)
 	}

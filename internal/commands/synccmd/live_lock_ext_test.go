@@ -20,6 +20,7 @@ import (
 // run, even one starting more than 30 minutes after the lock was written,
 // is refused while the first run's process lives, and moves nothing.
 func TestSyncRebaseRefusesAWorktreeWhoseRunsProcessStillLives(t *testing.T) {
+	t.Parallel()
 	ctx, bump := provisiontest.RunFixture(t, false)
 	holder := exec.Command("sleep", "300")
 	if err := holder.Start(); err != nil {

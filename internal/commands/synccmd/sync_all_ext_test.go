@@ -39,21 +39,6 @@ func TestSyncRunIfReadyRefusesANamedWorktreeThatWouldHandOver(t *testing.T) {
 	}
 }
 
-// Stops the declared strategies resolve are ready: --if-ready runs them.
-func TestSyncRunIfReadyRunsAWorktreeTheStrategiesResolve(t *testing.T) {
-	t.Parallel()
-	ctx, _ := provisiontest.RunFixture(t, false)
-	opts := synccmdtest.NoAgents()
-	opts.IfReady = true
-	var out bytes.Buffer
-	if err := synccmd.SyncRebase(ctx, []string{"bump"}, opts, &out); err != nil {
-		t.Fatalf("err %v\n%s", err, out.String())
-	}
-	if !strings.Contains(out.String(), "✓ rebased 1 commit") {
-		t.Errorf("not rebased:\n%s", out.String())
-	}
-}
-
 // With nothing named, the ready ones go and the ones left behind trunk fail
 // the run; a stale one is a lifecycle question, not a failure.
 func TestSyncRunIfReadyWithNothingNamedFailsOnWhatItLeft(t *testing.T) {

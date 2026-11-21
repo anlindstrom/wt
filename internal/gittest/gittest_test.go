@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,5 +38,38 @@ func TestHideClaudeHidesDevportsToo(t *testing.T) {
 	}
 	if _, err := exec.LookPath("tool"); err != nil {
 		t.Errorf("tool is gone: %v", err)
+	}
+}
+
+func TestOlderComparesMajorAndMinor(t *testing.T) {
+	t.Parallel()
+	for text, want := range map[string]bool{
+		"git version 2.54.0 (Apple Git-157)": true,
+		"git version 2.55.1":                 true,
+		"git version 2.56.0":                 false,
+		"git version 2.100.0":                false,
+		"git version 3.0.0":                  false,
+		"git version 1.9.9":                  true,
+		"unreadable":                         false,
+	} {
+		if got := older(text, MinGit); got != want {
+			t.Errorf("older(%q, %s) = %v, want %v", text, MinGit, got, want)
+		}
+	}
+}
+
+func TestNeedRefusesWhatItCannotRead(t *testing.T) {
+	t.Parallel()
+	if why := tooOld("", MinGit); !strings.Contains(why, "no version") {
+		t.Errorf("empty output passed: %q", why)
+	}
+	if why := tooOld("git: command garbled", MinGit); !strings.Contains(why, "garbled") {
+		t.Errorf("unparseable output passed or hid the output: %q", why)
+	}
+	if why := tooOld("git version 2.54.0 (Apple Git-157)", MinGit); !strings.Contains(why, "2.54.0") {
+		t.Errorf("an old git passed: %q", why)
+	}
+	if why := tooOld("git version 2.56.0", MinGit); why != "" {
+		t.Errorf("a new enough git failed: %q", why)
 	}
 }

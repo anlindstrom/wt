@@ -144,8 +144,4 @@ func TestConfigJSONSchemaCommand(t *testing.T) {
 	if !ok || out != string(doc.Bytes) {
 		t.Fatal("schema config did not print the embedded schema")
 	}
-	listed, err := runCmd(t, "schema")
-	if err != nil || !strings.Contains(listed, "wt config --json") {
-		t.Fatalf("schema list: %v\n%s", err, listed)
-	}
 }

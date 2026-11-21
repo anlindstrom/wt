@@ -2,7 +2,6 @@ package synccmd_test
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,41 +21,8 @@ import (
 // untracked changes, in another worktree.
 func patternLine(t *testing.T) (ctx *kit.Context, spikePath string) {
 	t.Helper()
-	main := testkit.CommittedRepo(t, testkit.MinimalConf)
-	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
-	wtDir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	commit := func(file string) {
-		gittest.WriteFile(t, filepath.Join(main, file), file+"\n")
-		gittest.Git(t, main, "add", "-A")
-		gittest.Git(t, main, "commit", "-q", "--no-verify", "-m", "feat: "+file)
-	}
-	commit("base.txt")
-	gittest.Git(t, main, "checkout", "-q", "-b", "tmp/line")
-	for _, l := range []string{"a", "b", "c"} {
-		commit(l + ".txt")
-		gittest.Git(t, main, "branch", "tmp/layer/"+l)
-	}
-	gittest.Git(t, main, "branch", "spike")
-	gittest.Git(t, main, "checkout", "-q", "main")
-	commit("trunk.txt")
-	gittest.WriteFile(t, filepath.Join(main, ".wt-sync.yaml"), synccmdtest.StackYAML)
-	gittest.Git(t, main, "add", "-A")
-	gittest.Git(t, main, "commit", "-q", "--no-verify", "-m", "chore: declare")
-	gittest.Git(t, main, "remote", "add", "origin", main)
-	gittest.Git(t, main, "fetch", "-q", "origin")
-	gittest.Git(t, main, "worktree", "add", "-q", filepath.Join(wtDir, "line"), "tmp/line")
-	spikePath = filepath.Join(wtDir, "spike")
-	gittest.Git(t, main, "worktree", "add", "-q", spikePath, "spike")
-	gittest.WriteFile(t, filepath.Join(spikePath, "a.txt"), "work in progress\n")
-	gittest.WriteFile(t, filepath.Join(spikePath, "scratch.txt"), "untracked\n")
-	ctx, err = kit.Open(main, io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ctx, spikePath
+	ctx, paths := layeredLine(t, false, stray{"spike", "tip", "dirty"})
+	return ctx, paths["spike"]
 }
 
 // --layer takes a glob: 'tmp/layer/*' takes the three layers and not the
@@ -74,9 +40,7 @@ func TestSyncRebaseStackLayerPatternLeavesAStrayBranchAlone(t *testing.T) {
 	for _, b := range []string{"tmp/line", "tmp/layer/a", "tmp/layer/b", "tmp/layer/c", "spike"} {
 		before[b] = testkit.GitOut(t, main, "rev-parse", b)
 	}
-	snap := func(dir string) string {
-		return testkit.GitOut(t, dir, "status", "--porcelain=v1", "-uall") + "\n" + testkit.GitOut(t, dir, "diff") + "\n" + testkit.GitOut(t, dir, "rev-parse", "HEAD")
-	}
+	snap := func(dir string) string { return worktreeSnap(t, dir) }
 	spikeBefore := snap(spike)
 
 	o := synccmdtest.OverviewJSONWith(t, ctx, synccmd.SyncOptions{NoFetch: true, Stack: &synccmd.StackLook{Work: "tmp/line", Layers: []string{"tmp/layer/*"}}})

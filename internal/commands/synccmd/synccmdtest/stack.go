@@ -26,18 +26,30 @@ func StackLine(t *testing.T, yaml string) (*kit.Context, *gittest.StackLine) {
 	if yaml == "" {
 		yaml = StackYAML
 	}
+	var s *gittest.StackLine
+	ctx, _ := OpenLine(t, func(main, wtDir string) { s = gittest.NewStackLine(t, main, wtDir, yaml) })
+	return ctx, s
+}
+
+// OpenLine is the setup every line fixture shares: a committed repository
+// with its hooks path pinned, a directory for the worktrees with its symlinks
+// resolved, build to put the line there (a gittest constructor), and the
+// repository opened the way wt opens it. It returns the context and the
+// main checkout.
+func OpenLine(t *testing.T, build func(main, wtDir string)) (*kit.Context, string) {
+	t.Helper()
 	main := testkit.CommittedRepo(t, testkit.MinimalConf)
 	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
 	wtDir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := gittest.NewStackLine(t, main, wtDir, yaml)
+	build(main, wtDir)
 	ctx, err := kit.Open(main, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return ctx, s
+	return ctx, main
 }
 
 // StackRun runs wt sync rebase <work> --stack --json with opts and returns
@@ -73,29 +85,18 @@ func Participant(t *testing.T, r syncrun.RunResult, branch string) *syncrun.Sync
 // declared on trunk.
 func FoldLine(t *testing.T, yaml string) (*kit.Context, *gittest.FoldLine) {
 	t.Helper()
-	main := testkit.CommittedRepo(t, testkit.MinimalConf)
-	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
-	wtDir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := gittest.NewFoldLine(t, main, wtDir, yaml)
-	ctx, err := kit.Open(main, io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
+	var s *gittest.FoldLine
+	ctx, _ := OpenLine(t, func(main, wtDir string) { s = gittest.NewFoldLine(t, main, wtDir, yaml) })
 	return ctx, s
 }
 
-// FakeDocker puts a docker on PATH that answers docker info, for a step
-// that needs docker. The test cannot run in parallel.
-func FakeDocker(t *testing.T) {
+// WriteFakeDocker puts a docker that answers docker info in dir, for a child
+// process whose step needs docker: the child's PATH starts with dir. A test
+// that runs wt in its own process gives the run a docker through opts.Probes
+// instead (DockerUp), and changes nothing the test binary shares.
+func WriteFakeDocker(t *testing.T, dir string) {
 	t.Helper()
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(filepath.ListSeparator)+os.Getenv("PATH"))
+	gittest.WriteExecutable(t, filepath.Join(dir, "docker"), "#!/bin/sh\nexit 0\n")
 }
 
 // CheckedLine is StackLine with an each_commit step on trunk running
@@ -163,16 +164,7 @@ const ContextYAML = "each_commit:\n  - run: test ! -e broken.marker\n"
 // ContextYAML declared on trunk; both adds its second fixup.
 func ContextLine(t *testing.T, both bool) (*kit.Context, *gittest.ContextLine) {
 	t.Helper()
-	main := testkit.CommittedRepo(t, testkit.MinimalConf)
-	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
-	wtDir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := gittest.NewContextLine(t, main, wtDir, ContextYAML, both)
-	ctx, err := kit.Open(main, io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
+	var s *gittest.ContextLine
+	ctx, _ := OpenLine(t, func(main, wtDir string) { s = gittest.NewContextLine(t, main, wtDir, ContextYAML, both) })
 	return ctx, s
 }

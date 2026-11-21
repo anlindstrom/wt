@@ -49,6 +49,8 @@ func runIn(t *testing.T, dir string, off bool, args ...string) (stdout, stderr, 
 // The person's output is the same bytes with the copy on and with it off, for
 // a text run and for a --json run, and the log is what was shown.
 func TestTheCopyLeavesTheOutputUntouched(t *testing.T) {
+	// Not parallel: it runs wt in this process (t.Chdir, the noRunLog hook and
+	// runlog's active log) and sets the git dates and WTGATE in the environment.
 	t.Setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
 	t.Setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
 	gate := t.TempDir()
@@ -162,6 +164,7 @@ func normaliseJSON(v any) any {
 // The comparison sees a timing entry that is missing, and one that names
 // another commit.
 func TestTheComparisonSeesAChangedTimingEntry(t *testing.T) {
+	t.Parallel()
 	text := "    slowest:\n      3s  check  make  at aacaf52 feat: a1.txt\n      2s  check  make  at 9f931f1 feat: a2.txt\n"
 	for name, other := range map[string]string{
 		"a missing entry": "    slowest:\n      3s  check  make  at aacaf52 feat: a1.txt\n",

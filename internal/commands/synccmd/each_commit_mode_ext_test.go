@@ -319,6 +319,7 @@ func TestEachCommitTipsChecksAFirstLayerGitKeptAsItWas(t *testing.T) {
 // commit of its own, so it is not checked at the target's tip.
 func TestEachCommitTipsDoesNotCheckALayerTheTargetAlreadyCarries(t *testing.T) {
 	t.Parallel()
+	gittest.Need(t, "2.56") // git 2.54 replays the target's own commit and checks it too
 	skipShort(t)
 	ctx, bump := provisiontest.RunFixture(t, false)
 	logPath := filepath.Join(t.TempDir(), "checked.log")

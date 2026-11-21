@@ -92,19 +92,6 @@ func TestSyncRunRefusesADirtyWorktreeAndTouchesNothing(t *testing.T) {
 	}
 }
 
-func TestSyncRunRefusesAWorktreeWithAnAgent(t *testing.T) {
-	t.Parallel()
-	ctx, bump := provisiontest.RunFixture(t, false)
-	resolved, _ := filepath.EvalSymlinks(bump)
-	opts := synccmdtest.NoAgents()
-	opts.Agents = []agents.Agent{{Name: "bump-1", Cwd: resolved}}
-	var out bytes.Buffer
-	err := synccmd.SyncRebase(ctx, []string{"bump"}, opts, &out)
-	if err == nil || !strings.Contains(out.String(), "bump-1") {
-		t.Fatalf("err %v out %s", err, out.String())
-	}
-}
-
 func TestSyncRunRefusesWhenAgentsCannotBeListed(t *testing.T) {
 	t.Parallel()
 	// Agents nil means "list them"; make the listing fail.
@@ -710,6 +697,7 @@ func TestSyncRunStillRefusesASessionThatIsNotIdle(t *testing.T) {
 	for _, a := range []agents.Agent{
 		{Name: "bump-1", Cwd: resolved, Kind: "interactive", Status: "busy"},
 		{Name: "bump-1", Cwd: resolved, Kind: "background", State: "blocked", Status: "idle"},
+		{Name: "bump-1", Cwd: resolved}, // a session that says nothing of its own state is not idle
 	} {
 		opts := synccmdtest.NoAgents()
 		opts.Agents = []agents.Agent{a}

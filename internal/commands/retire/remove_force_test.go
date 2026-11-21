@@ -89,32 +89,33 @@ func TestRemoveForceCategoryGoesPastOnlyItsOwnProblem(t *testing.T) {
 		force kit.ForceSet
 		setup func(t *testing.T, ctx *kit.Context, path string, opts *RemoveOptions)
 		why   string
+		names []string // what the refusal also names: the file that is hidden
 	}{
 		{"idle-sessions", kit.ForceIdleSessions, func(t *testing.T, _ *kit.Context, path string, o *RemoveOptions) {
 			o.Agents = []agents.Agent{AgentIn(t, path, "idle-1", true)}
-		}, "idle-1"},
+		}, "idle-1", nil},
 		{"busy-sessions", kit.ForceBusySessions, func(t *testing.T, _ *kit.Context, path string, o *RemoveOptions) {
 			o.Agents = []agents.Agent{AgentIn(t, path, "busy-1", false)}
-		}, "busy-1"},
+		}, "busy-1", nil},
 		{"sessions-unknown", kit.ForceSessionsUnknown, func(_ *testing.T, _ *kit.Context, _ string, o *RemoveOptions) {
 			o.AgentsErr = errors.New("claude agents --json failed: boom")
-		}, "cannot list agent sessions"},
+		}, "cannot list agent sessions", nil},
 		{"hidden-files", kit.ForceHiddenFiles, func(t *testing.T, _ *kit.Context, path string, _ *RemoveOptions) {
 			testkit.MustWrite(t, filepath.Join(path, "a.txt"), "a")
 			testkit.GitIn(t, path, "add", "a.txt")
 			testkit.GitIn(t, path, "commit", "-q", "-m", "a")
 			testkit.GitIn(t, path, "update-index", "--assume-unchanged", "a.txt")
-		}, "told not to look at"},
+		}, "told not to look at", []string{"a.txt"}},
 		{"lock", kit.ForceLock, func(t *testing.T, ctx *kit.Context, path string, _ *RemoveOptions) {
 			testkit.GitIn(t, ctx.Repo.MainRoot, "worktree", "lock", "--reason", fmt.Sprintf("live (pid %d)", os.Getpid()), path)
-		}, "locked"},
+		}, "locked", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, path := provisiontest.SafetyWorktree(t, "fix/force-"+tc.name)
 			opts := RemoveOptions{Agents: []agents.Agent{}}
 			tc.setup(t, ctx, path, &opts)
 			opts.Force = everyOther(tc.force)
-			refused(t, ctx, path, opts, tc.why)
+			refused(t, ctx, path, opts, tc.why, tc.names...)
 			opts.Force = tc.force
 			removed(t, ctx, path, opts)
 		})

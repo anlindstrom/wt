@@ -3,15 +3,7 @@ package testkit
 import (
 	"path/filepath"
 	"testing"
-
-	"github.com/anlindstrom/wt/internal/gittest"
 )
-
-// GitIn runs git in dir and fails the test when it fails.
-func GitIn(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	gittest.Git(t, dir, args...)
-}
 
 // RepoWithWorktree builds one repo and adds a worktree at the path returned by
 // where(parent), so the caller cannot accidentally compute a path from a

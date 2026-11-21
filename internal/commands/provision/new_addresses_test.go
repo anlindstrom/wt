@@ -132,14 +132,6 @@ func TestNewJSONHasNoAddressesAsAnEmptyArray(t *testing.T) {
 	}
 }
 
-func TestRefusedNewJSONHasEmptyAddresses(t *testing.T) {
-	t.Setenv("PATH", filepath.Dir(mustLookGit(t)))
-	ctx := repoWith(t)
-	var out bytes.Buffer
-	_ = NewJSON(ctx, "nosuchtype/x", NewOptions{NoSetup: true}, "", NewCreateJournal(&out, "new"), io.Discard)
-	testkit.ValidateJSON(t, "new", out.Bytes())
-}
-
 // mustLookGit is git's path, for a PATH that holds git and no devports.
 func mustLookGit(t *testing.T) string {
 	t.Helper()

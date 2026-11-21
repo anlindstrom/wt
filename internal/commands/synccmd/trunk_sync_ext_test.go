@@ -92,14 +92,14 @@ func TestTrunkSyncSkips(t *testing.T) {
 			o.OptedOut = true
 		}, syncrun.TrunkSkipOptedOut},
 		{"dirty tracked", func(t *testing.T, f *synccmdtest.TrunkFixture, _ *syncrun.TrunkSyncOptions) {
-			testkit.WriteIn(t, f.Main, "bin/worktree/worktree.conf", testkit.MinimalConf+"# edited\n")
+			testkit.WriteFile(t, f.Main, "bin/worktree/worktree.conf", testkit.MinimalConf+"# edited\n")
 		}, syncrun.TrunkSkipDirty},
 		{"dirty untracked", func(t *testing.T, f *synccmdtest.TrunkFixture, _ *syncrun.TrunkSyncOptions) {
-			testkit.WriteIn(t, f.Main, "scratch.txt", "mine\n")
+			testkit.WriteFile(t, f.Main, "scratch.txt", "mine\n")
 		}, syncrun.TrunkSkipDirty},
 		{"merge in progress", func(t *testing.T, f *synccmdtest.TrunkFixture, _ *syncrun.TrunkSyncOptions) {
 			gitDir := testkit.GitOut(t, f.Main, "rev-parse", "--absolute-git-dir")
-			testkit.WriteIn(t, gitDir, "MERGE_HEAD", f.Local(t)+"\n")
+			testkit.WriteFile(t, gitDir, "MERGE_HEAD", f.Local(t)+"\n")
 		}, syncrun.TrunkSkipOperation},
 		{"rebase stopped on trunk", func(t *testing.T, f *synccmdtest.TrunkFixture, _ *syncrun.TrunkSyncOptions) {
 			testkit.GitIn(t, f.Main, "-c", "sequence.editor=perl -pi -e s/^pick/edit/", "rebase", "-q", "-i", "HEAD~1")
@@ -214,10 +214,10 @@ func TestTrunkSyncMergeRefusedIsNotFastForward(t *testing.T) {
 func TestTrunkSyncNeverOverwritesAnIgnoredFile(t *testing.T) {
 	t.Parallel()
 	f := synccmdtest.NewTrunkFixture(t)
-	testkit.WriteIn(t, f.Main, ".git/info/exclude", "keep.txt\n")
-	testkit.WriteIn(t, f.Main, "keep.txt", "mine\n")
+	testkit.WriteFile(t, f.Main, ".git/info/exclude", "keep.txt\n")
+	testkit.WriteFile(t, f.Main, "keep.txt", "mine\n")
 	testkit.GitIn(t, f.Other, "pull", "-q", "--ff-only")
-	testkit.WriteIn(t, f.Other, "keep.txt", "theirs\n")
+	testkit.WriteFile(t, f.Other, "keep.txt", "theirs\n")
 	testkit.GitIn(t, f.Other, "add", "keep.txt")
 	testkit.GitIn(t, f.Other, "commit", "-q", "-m", "track keep.txt")
 	testkit.GitIn(t, f.Other, "push", "-q", "origin", "main")
@@ -337,7 +337,7 @@ func TestTrunkSyncSeesUntrackedFilesStatusHides(t *testing.T) {
 	t.Parallel()
 	f := synccmdtest.NewTrunkFixture(t)
 	testkit.GitIn(t, f.Main, "config", "status.showUntrackedFiles", "no")
-	testkit.WriteIn(t, f.Main, "scratch.txt", "mine\n")
+	testkit.WriteFile(t, f.Main, "scratch.txt", "mine\n")
 	remote := f.AdvanceOrigin(t, 1)
 
 	if ts := syncrun.SyncLocalTrunk(f.Ctx, remote, ffOn()); reasonOf(ts) != syncrun.TrunkSkipDirty {

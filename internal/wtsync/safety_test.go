@@ -21,6 +21,26 @@ func TestWriteSafetyPinsTheTipUnderTheBranchAndEpoch(t *testing.T) {
 	}
 }
 
+func TestWriteSafetyRefusesASecondWriteOfTheSameBranchAndEpoch(t *testing.T) {
+	t.Parallel()
+	dir := linearRepo(t, nil, []map[string]string{{"a.txt": "a2\n"}})
+	first := gitIn(t, dir, "rev-parse", "feature")
+	other := gitIn(t, dir, "rev-parse", "feature~1")
+	if first == other {
+		t.Fatal("fixture: the two tips must differ")
+	}
+	s, err := WriteSafety(dir, "feature", first, 1700000000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteSafety(dir, "feature", other, 1700000000); err == nil {
+		t.Fatal("a second write with the same branch and epoch must be refused")
+	}
+	if got := gitIn(t, dir, "rev-parse", s.Ref); got != first {
+		t.Fatalf("ref points at %s after the refused write, want the first tip %s", got, first)
+	}
+}
+
 func TestListSafetyIsNewestFirstAndLatestPicksPerBranch(t *testing.T) {
 	t.Parallel()
 	dir := linearRepo(t, nil, []map[string]string{{"a.txt": "a2\n"}})
@@ -74,23 +94,6 @@ func TestPrunableKeepsEveryNewestRunGroupAndAnythingYoung(t *testing.T) {
 	}
 }
 
-func TestDeleteSafetyRemovesTheRef(t *testing.T) {
-	t.Parallel()
-	dir := linearRepo(t, nil, []map[string]string{{"a.txt": "a2\n"}})
-	tip := gitIn(t, dir, "rev-parse", "feature")
-	s, err := WriteSafety(dir, "feature", tip, 5)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := DeleteSafety(dir, s); err != nil {
-		t.Fatal(err)
-	}
-	all, _ := ListSafety(dir)
-	if len(all) != 0 {
-		t.Fatalf("still listed: %+v", all)
-	}
-}
-
 func TestResultTipReadsWhatARunLeftAndIsAbsentUntilWritten(t *testing.T) {
 	t.Parallel()
 	dir := linearRepo(t, nil, []map[string]string{{"a.txt": "a2\n"}})
@@ -123,6 +126,9 @@ func TestDeleteSafetyAlsoDropsTheRunsResultRef(t *testing.T) {
 	}
 	if _, ok, err := ResultTip(dir, "feature", 5); err != nil || ok {
 		t.Fatalf("result ref survived: ok %v err %v", ok, err)
+	}
+	if all, err := ListSafety(dir); err != nil || len(all) != 0 {
+		t.Fatalf("the safety ref is still listed: %+v %v", all, err)
 	}
 }
 

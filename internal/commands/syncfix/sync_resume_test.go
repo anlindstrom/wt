@@ -27,7 +27,7 @@ func noResumeAgents() ResumeOptions {
 	return ResumeOptions{VerbOptions: syncrun.VerbOptions{
 		Agents: []agents.Agent{},
 		Now:    func() time.Time { return time.Unix(5, 0) },
-	}}
+	}, StepOptions: syncrun.StepOptions{Probes: synccmdtest.DockerUp()}}
 }
 
 // assertUntouched is what "a refusal changes nothing" means: the rebase is

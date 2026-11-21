@@ -12,6 +12,7 @@ import (
 	"time"
 	_ "time/tzdata" // Europe/Stockholm loads on any runner, so the clock-change tests always run
 
+	"github.com/anlindstrom/wt/internal/gittest"
 	"github.com/anlindstrom/wt/internal/repo"
 )
 
@@ -39,16 +40,6 @@ func lockBytes(t *testing.T, dir string) string {
 	return string(b)
 }
 
-// A pid that is gone: a child that has exited and been waited for.
-func deadPID(t *testing.T) int {
-	t.Helper()
-	cmd := exec.Command("true")
-	if err := cmd.Run(); err != nil {
-		t.Fatal(err)
-	}
-	return cmd.Process.Pid
-}
-
 func TestOldLockOfARunningProcessIsRefusedAndLeftAlone(t *testing.T) {
 	dir := t.TempDir()
 	t0 := time.Now()
@@ -72,7 +63,7 @@ func TestOldLockOfARunningProcessIsRefusedAndLeftAlone(t *testing.T) {
 func TestOldLockOfAGoneProcessIsBrokenAsToday(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
-	writeLockFile(t, dir, "pid="+itoa(deadPID(t))+"\nstart="+itoa(int(now.Add(-time.Hour).Unix()))+"\nowner=x\n")
+	writeLockFile(t, dir, "pid="+itoa(gittest.DeadPID(t))+"\nstart="+itoa(int(now.Add(-time.Hour).Unix()))+"\nowner=x\n")
 	l, err := Acquire(dir, now)
 	if err != nil {
 		t.Fatalf("lock of a gone process was not broken: %v", err)
@@ -179,7 +170,7 @@ func TestDoctorNamesAnOldLockOfARunningProcessLiveWithNoFix(t *testing.T) {
 
 func TestDoctorFixRemovesAnOldLockOfAGoneProcess(t *testing.T) {
 	now := time.Now()
-	c, gitDir := doctorLocks(t, now, now.Add(-time.Hour), deadPID(t))
+	c, gitDir := doctorLocks(t, now, now.Add(-time.Hour), gittest.DeadPID(t))
 	if c.Fix == nil || !strings.Contains(c.Detail, "expired") {
 		t.Fatalf("check %+v", c)
 	}

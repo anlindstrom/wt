@@ -21,7 +21,6 @@ import (
 // rebased onto its parent's new tip in a rebase of its own.
 func worktreeStack(t *testing.T, yaml string) (*kit.Context, *gittest.FoldLine) {
 	t.Helper()
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, yaml)
 	testkit.GitIn(t, s.Paths["f3"], "checkout", "--", ".")
 	parent := filepath.Dir(s.Paths["f1"])
@@ -55,6 +54,7 @@ func regeneratesAt(t *testing.T, dir, tip string) bool {
 // commit of the spec then conflicts with f1's regenerated spec, nothing
 // claims it, and as a stack parent f3 is restored with everything above it.
 func TestAStackOfWorktreesWithAStepAfterTheRebaseStopsAtTheChildsSpec(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -84,6 +84,7 @@ func TestAStackOfWorktreesWithAStepAfterTheRebaseStopsAtTheChildsSpec(t *testing
 // takes its own side of the spec for its stop to write again, and every
 // branch's tip passes the check CI runs on its PR.
 func TestAStackOfWorktreesFoldsEachBranchIntoItsOwner(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -117,10 +118,10 @@ func TestAStackOfWorktreesFoldsEachBranchIntoItsOwner(t *testing.T) {
 // which on a --stack line would rewrite commits below the layers' markers:
 // a --stack run refuses it before anything moves.
 func TestAStackRunRefusesAFoldThatIsNotPerLayer(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, strings.Replace(gittest.FoldYAML("max-plus-patch"), "    each: layer\n", "", 1))
 	_, human, err := synccmdtest.StackRun(t, ctx, gittest.FoldTmp, synccmdtest.NoAgents())
 	if err == nil || !strings.Contains(err.Error(), "fold: owner without each: layer") {

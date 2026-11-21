@@ -32,6 +32,12 @@ type stray struct{ name, at, state string }
 // commits are a, b, x, c, and the strays.
 func strayLine(t *testing.T, strays ...stray) (ctx *kit.Context, paths map[string]string) {
 	t.Helper()
+	return layeredLine(t, true, strays...)
+}
+
+// layeredLine is strayLine, with the commit x between b and c only when withX.
+func layeredLine(t *testing.T, withX bool, strays ...stray) (ctx *kit.Context, paths map[string]string) {
+	t.Helper()
 	main := testkit.CommittedRepo(t, testkit.MinimalConf)
 	testkit.GitIn(t, main, "config", "core.hooksPath", filepath.Join(main, ".git", "hooks"))
 	wtDir, err := filepath.EvalSymlinks(t.TempDir())
@@ -46,6 +52,9 @@ func strayLine(t *testing.T, strays ...stray) (ctx *kit.Context, paths map[strin
 	commit("base.txt")
 	gittest.Git(t, main, "checkout", "-q", "-b", "tmp/line")
 	for _, l := range []string{"a", "b", "x", "c"} {
+		if l == "x" && !withX {
+			continue
+		}
 		commit(l + ".txt")
 		if l != "x" {
 			gittest.Git(t, main, "branch", "tmp/layer/"+l)
@@ -347,8 +356,8 @@ func TestSyncRebaseStackKeepsDirtyTwinsAtACommitNoLayerHas(t *testing.T) {
 // way. The generator runs in the rebase (fold) and, on the line as it is, in
 // wt sync steps --all (forced).
 func TestSyncRebaseStackWithAStrayIsTheRunOfTheKeptLayers(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
-	synccmdtest.FakeDocker(t)
 	kept := []string{"f1", "f2", "f3", "f4", "f5"}
 	type outcome struct {
 		refs  map[string]string
@@ -417,6 +426,7 @@ func TestSyncRebaseStackWithAStrayIsTheRunOfTheKeptLayers(t *testing.T) {
 	for _, mode := range []string{"fold", "forced"} {
 		for _, strayName := range []string{"aaa-stray", "zzz-stray"} {
 			t.Run(mode+"/"+strayName, func(t *testing.T) {
+				t.Parallel()
 				got := run(t, strayName, false, mode == "forced")
 				want := run(t, strayName, true, mode == "forced")
 				if len(want.steps) == 0 {

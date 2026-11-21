@@ -21,6 +21,7 @@ import (
 // onto trunk, and once nothing is owed a second wt sync steps has nothing
 // to do.
 func TestSyncStepsRunsWhatARunLeftOwedAtEveryLayer(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -29,7 +30,6 @@ func TestSyncStepsRunsWhatARunLeftOwedAtEveryLayer(t *testing.T) {
 		t.Fatal(err)
 	}
 	yaml := strings.Replace(gittest.FoldYAML("max-plus-patch"), "run: ./gen.sh", "run: test ! -e "+block+" && ./gen.sh", 1)
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, yaml)
 	testkit.GitIn(t, s.Paths["f3"], "checkout", "--", ".")
 	main := ctx.Repo.MainRoot
@@ -97,10 +97,10 @@ func TestSyncStepsRunsWhatARunLeftOwedAtEveryLayer(t *testing.T) {
 // wt sync steps works on the branch as it is here: a commit its own remote
 // has and the branch does not is not taken in, and the steps still run.
 func TestSyncStepsDoesNotTakeInTheBranchsRemoteCommits(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, gittest.FoldYAML("max-plus-patch"))
 	main := ctx.Repo.MainRoot
 	tip := s.Tips[gittest.FoldTmp]

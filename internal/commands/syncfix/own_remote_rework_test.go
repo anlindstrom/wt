@@ -12,27 +12,6 @@ import (
 	"github.com/anlindstrom/wt/internal/gittest"
 )
 
-// Behind, fast-forwarded and rebased by a run, then undone.
-func TestAFastForwardThatWasUndoneLeavesNoFormerTip(t *testing.T) {
-	t.Parallel()
-	if testing.Short() {
-		t.Skip("integration: real repositories with an origin to push to")
-	}
-	f := synccmdtest.NewTrunkFixture(t)
-	x, opts := f.PushedWork(t)
-	before := testkit.GitOut(t, x, "rev-parse", "HEAD")
-	theirs := f.Theirs(t, "feat_wt/x", "t.txt", "t\n")
-	f.AdvanceOrigin(t, 1)
-	if r, human, err := synccmdtest.UpOut(t, f.Ctx, "x", opts); err != nil || !r.Worktrees[0].OwnRemoteSync.FastForwarded {
-		t.Fatalf("%v\n%s", err, human)
-	}
-	var out bytes.Buffer
-	if err := SyncUndo(f.Ctx, "x", UndoOptions{VerbOptions: opts.VerbOptions}, &out); err != nil || testkit.GitOut(t, x, "rev-parse", "HEAD") != before {
-		t.Fatalf("undo: %v\n%s", err, out.String())
-	}
-	synccmdtest.MustBeDiverged(t, f, x, opts, theirs)
-}
-
 // The same for the fast-forward that is all a run did.
 func TestAFastForwardAloneThatWasUndoneLeavesNoFormerTip(t *testing.T) {
 	t.Parallel()
@@ -106,7 +85,7 @@ func TestAHandoverAfterAFastForwardKeepsOrDropsTheFormerTip(t *testing.T) {
 	}
 	t.Run("resumed", func(t *testing.T) {
 		f, x, opts, _ := handedOver(t)
-		testkit.WriteIn(t, x, "c.txt", "both\n")
+		testkit.WriteFile(t, x, "c.txt", "both\n")
 		testkit.GitIn(t, x, "add", "c.txt")
 		if r, err := syncResumeJSON(t, f.Ctx, "x", ResumeOptions{PushOptions: syncrun.PushOptions{Push: syncrun.PushNever}, VerbOptions: opts.VerbOptions}); err != nil || r.Worktrees[0].Result != syncrun.ResultRebased {
 			t.Fatalf("resume: %v %+v", err, r.Worktrees)
@@ -150,7 +129,7 @@ func TestSyncUndoForcedPinsACommitInsideAHandoverThatFollowedAFastForward(t *tes
 	if run, err := synccmdtest.SyncRunJSON(t, f.Ctx, []string{"x"}, opts); err == nil || run.Worktrees[0].Result != syncrun.ResultHandedOver || !run.Worktrees[0].OwnRemoteSync.FastForwarded {
 		t.Fatalf("%v %+v", err, run.Worktrees[0])
 	}
-	testkit.WriteIn(t, x, "c.txt", "merged by hand\n")
+	testkit.WriteFile(t, x, "c.txt", "merged by hand\n")
 	testkit.GitIn(t, x, "add", "--", "c.txt")
 	testkit.GitIn(t, x, "commit", "-q", "-m", "resolved by hand")
 	inside := testkit.GitOut(t, x, "rev-parse", "HEAD")

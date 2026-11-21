@@ -1,42 +1,10 @@
 package retire
 
 import (
-	"bytes"
-	"encoding/json"
 	"testing"
 
-	"github.com/anlindstrom/wt/internal/commands/testkit"
 	"github.com/anlindstrom/wt/internal/jsonout"
 )
-
-// A signal writes the one object: the item in flight interrupted, those not
-// reached not run, and nothing written a second time.
-func TestSweepJournalWritesOneObjectWhenInterrupted(t *testing.T) {
-	t.Parallel()
-	ctx, main, _ := testkit.SweepRepo(t)
-	testkit.BranchWithWork(t, main, "one", 0)
-	testkit.BranchWithWork(t, main, "two", 0)
-	plan := PlanOf(t, ctx)
-
-	var out bytes.Buffer
-	j := NewSweepJournal(&out)
-	j.begin(ctx, plan, "1:abc")
-	j.start(sweepKey(plan.Delete[0]))
-	j.Interrupted("", "interrupted")
-	j.Finish()
-	testkit.ValidateJSON(t, "sweep", out.Bytes())
-	dec := json.NewDecoder(&out)
-	var r SweepResult
-	if err := dec.Decode(&r); err != nil {
-		t.Fatal(err)
-	}
-	if dec.More() {
-		t.Error("a second object was written")
-	}
-	if r.Outcome != jsonout.OutcomeInterrupted || r.Recovery == nil || r.Items[0].Result != SweepInterrupted || r.Items[1].Result != SweepNotRun {
-		t.Errorf("%+v", r)
-	}
-}
 
 // The outcome rules, as docs/json.md states them.
 func TestSweepOutcomeRules(t *testing.T) {

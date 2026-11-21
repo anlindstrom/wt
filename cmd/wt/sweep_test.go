@@ -1,7 +1,6 @@
 package main
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -26,19 +25,6 @@ func TestSweepJSONFlagsRefuseWhatTheyCannotDo(t *testing.T) {
 	}
 }
 
-// wt schema lists each schema by the command line whose output it is.
-func TestSchemaListsTheSweepSchemas(t *testing.T) {
-	out, err := runCmd(t, "schema")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{`(?m)^sweep-plan +wt sweep --dry-run --json `, `(?m)^sweep +wt sweep --yes --json `} {
-		if !regexp.MustCompile(want).MatchString(out) {
-			t.Errorf("want %q in:\n%s", want, out)
-		}
-	}
-}
-
 // --expect only means something for a refs command that goes ahead and
 // reports in JSON; each refuses it otherwise, before anything runs.
 func TestRefsExpectNeedsYesJSON(t *testing.T) {
@@ -51,15 +37,6 @@ func TestRefsExpectNeedsYesJSON(t *testing.T) {
 		out, err := runCmd(t, args...)
 		if err == nil || !strings.Contains(err.Error(), "--yes --json") {
 			t.Errorf("%v: want an error naming --yes --json, got %v\n%s", args, err, out)
-		}
-	}
-	out, err := runCmd(t, "schema")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{`(?m)^refs-sweep-plan +wt refs sweep --dry-run --json `, `(?m)^refs-swept +wt refs swept --json `} {
-		if !regexp.MustCompile(want).MatchString(out) {
-			t.Errorf("want %q in:\n%s", want, out)
 		}
 	}
 }

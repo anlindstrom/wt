@@ -31,7 +31,7 @@ func (f *TrunkFixture) Theirs(t *testing.T, branch, file, content string) string
 	t.Helper()
 	testkit.GitIn(t, f.Other, "fetch", "-q", "origin")
 	testkit.GitIn(t, f.Other, "checkout", "-q", "-B", branch, "origin/"+branch)
-	testkit.WriteIn(t, f.Other, file, content)
+	testkit.WriteFile(t, f.Other, file, content)
 	testkit.GitIn(t, f.Other, "add", "-A")
 	testkit.GitIn(t, f.Other, "commit", "-q", "-m", "theirs "+file)
 	testkit.GitIn(t, f.Other, "push", "-q", "origin", branch)

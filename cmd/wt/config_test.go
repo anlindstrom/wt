@@ -74,8 +74,13 @@ func TestUserConfigSubcommandsWorkOutsideARepository(t *testing.T) {
 		t.Errorf("config get github = %q, want the default true", out)
 	}
 
-	if _, err = runCmd(t, "config", "set", "superset", "true"); err != nil {
+	if out, err = runCmd(t, "config", "get", "superset"); err != nil || strings.TrimSpace(out) != "false" {
+		t.Fatalf("config get superset = %q, %v; want the default false", out, err)
+	}
+	if out, err = runCmd(t, "config", "set", "superset", "true"); err != nil {
 		t.Fatalf("config set: %v", err)
+	} else if strings.TrimSpace(out) != "superset = true in "+want {
+		t.Errorf("config set said %q, want %q", strings.TrimSpace(out), "superset = true in "+want)
 	}
 	if out, err = runCmd(t, "config", "get", "superset"); err != nil {
 		t.Fatalf("config get: %v", err)

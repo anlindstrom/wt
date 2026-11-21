@@ -41,9 +41,10 @@ func sleepyFold(t *testing.T) (yamlRun string) {
 // The issue's shape: a stack with a check at every commit and a step at every
 // layer. Each check and step prints how long it took; the end of the run sums
 // them up per check and step and names the slowest; --json carries the same.
+// A check that fails once and passes on its retry is timed with both tries.
 func TestARunSaysHowLongEachCheckAndStepTookAndSumsThemUp(t *testing.T) {
+	t.Parallel()
 	skipShort(t)
-	synccmdtest.FakeDocker(t)
 	ctx, s := synccmdtest.FoldLine(t, sleepyFold(t))
 	testkit.GitIn(t, s.Paths["f3"], "checkout", "--", ".")
 	main := ctx.Repo.MainRoot
@@ -136,20 +137,10 @@ func TestARunSaysHowLongEachCheckAndStepTookAndSumsThemUp(t *testing.T) {
 	if !strings.Contains(summary, "slowest") || !strings.Contains(summary, p.Timings.Slowest[0].At) {
 		t.Errorf("the summary does not name the slowest run:\n%s", summary)
 	}
-}
 
-// A check that fails once and passes on its retry is one timed run, with both
-// tries in its time, and the line that says it passed on retry carries it.
-func TestACheckWithARetryIsTimedWithBothTries(t *testing.T) {
-	skipShort(t)
-	synccmdtest.FakeDocker(t)
-	ctx, s := synccmdtest.FoldLine(t, sleepyFold(t))
-	testkit.GitIn(t, s.Paths["f3"], "checkout", "--", ".")
-	res, human, err := synccmdtest.StackRun(t, ctx, gittest.FoldTmp, synccmdtest.NoAgents())
-	if err != nil {
-		t.Fatalf("%v\n%s", err, human)
-	}
-	p := synccmdtest.Participant(t, res, gittest.FoldTmp)
+	// A check that fails once and passes on its retry is one timed run, with
+	// both tries in its time, and the line that says it passed on retry
+	// carries it.
 	var flaky *syncrun.TimingRunJSON
 	for i, r := range p.Timings.Runs {
 		if strings.Contains(r.Run, flakyCheck) {
