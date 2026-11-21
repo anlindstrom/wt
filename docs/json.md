@@ -128,36 +128,38 @@ working directory.
 Every object has a JSON Schema (draft 2020-12), for validating what you read or
 generating types from it:
 
-| Output | Schema | `$id` |
-|---|---|---|
-| `wt config --json` | [`schema/config.v1.json`](../schema/config.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/config.v1.json` |
-| `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
-| `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
-| `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
-| `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
-| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
-| `wt sync rebase\|resume\|undo\|steps --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
-| `wt new --dry-run --json` | [`schema/new-plan.v1.json`](../schema/new-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new-plan.v1.json` |
-| `wt new --json` | [`schema/new.v1.json`](../schema/new.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new.v1.json` |
-| `wt checkout --dry-run --json` | [`schema/checkout-plan.v1.json`](../schema/checkout-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/checkout-plan.v1.json` |
-| `wt checkout --json` | [`schema/checkout.v1.json`](../schema/checkout.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/checkout.v1.json` |
-| `<dir>/recovery.json` | [`schema/recovery.v1.json`](../schema/recovery.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/recovery.v1.json` |
-| `wt restore --dry-run --json` | [`schema/restore-plan.v1.json`](../schema/restore-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/restore-plan.v1.json` |
-| `wt restore --json` | [`schema/restore.v1.json`](../schema/restore.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/restore.v1.json` |
-| `wt remove --dry-run --json` | [`schema/remove-plan.v1.json`](../schema/remove-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove-plan.v1.json` |
-| `wt remove --yes --json` | [`schema/remove.v1.json`](../schema/remove.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove.v1.json` |
-| `wt purge --dry-run --json` | [`schema/quarantine-purge-plan.v1.json`](../schema/quarantine-purge-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/quarantine-purge-plan.v1.json` |
-| `wt purge --yes --json` | [`schema/quarantine-purge.v1.json`](../schema/quarantine-purge.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/quarantine-purge.v1.json` |
-| `wt refs sweep --dry-run --json` | [`schema/refs-sweep-plan.v1.json`](../schema/refs-sweep-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-sweep-plan.v1.json` |
-| `wt refs sweep --yes --json` | [`schema/refs-sweep.v1.json`](../schema/refs-sweep.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-sweep.v1.json` |
-| `wt refs restore --dry-run --json` | [`schema/refs-restore-plan.v1.json`](../schema/refs-restore-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-restore-plan.v1.json` |
-| `wt refs restore --yes --json` | [`schema/refs-restore.v1.json`](../schema/refs-restore.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-restore.v1.json` |
-| `wt refs purge --dry-run --json` | [`schema/refs-purge-plan.v1.json`](../schema/refs-purge-plan.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-purge-plan.v1.json` |
-| `wt refs purge --yes --json` | [`schema/refs-purge.v1.json`](../schema/refs-purge.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-purge.v1.json` |
-| `wt refs swept --json` | [`schema/refs-swept.v1.json`](../schema/refs-swept.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-swept.v1.json` |
-| `wt session list --json` | [`schema/session-list.v1.json`](../schema/session-list.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/session-list.v1.json` |
-| `wt session send --json` | [`schema/session-send.v1.json`](../schema/session-send.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/session-send.v1.json` |
-| `wt session stop --json` | [`schema/session-stop.v1.json`](../schema/session-stop.v1.json) | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/session-stop.v1.json` |
+<!-- json-docs:begin index -->
+| Output | Schema | Version | `$id` |
+|---|---|---|---|
+| `wt checkout --json` | [`schema/checkout.v1.json`](../schema/checkout.v1.json) | 1.2.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/checkout.v1.json` |
+| `wt checkout --dry-run --json` | [`schema/checkout-plan.v1.json`](../schema/checkout-plan.v1.json) | 1.3.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/checkout-plan.v1.json` |
+| `wt config --json` | [`schema/config.v1.json`](../schema/config.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/config.v1.json` |
+| `wt new --json` | [`schema/new.v1.json`](../schema/new.v1.json) | 1.2.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new.v1.json` |
+| `wt new --dry-run --json` | [`schema/new-plan.v1.json`](../schema/new-plan.v1.json) | 1.2.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new-plan.v1.json` |
+| `wt purge <dir> --yes --json` | [`schema/quarantine-purge.v1.json`](../schema/quarantine-purge.v1.json) | 1.0.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/quarantine-purge.v1.json` |
+| `wt purge <dir> --dry-run --json` | [`schema/quarantine-purge-plan.v1.json`](../schema/quarantine-purge-plan.v1.json) | 1.0.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/quarantine-purge-plan.v1.json` |
+| `<dir>/recovery.json` | [`schema/recovery.v1.json`](../schema/recovery.v1.json) | 1.2.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/recovery.v1.json` |
+| `wt refs purge --yes --json` | [`schema/refs-purge.v1.json`](../schema/refs-purge.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-purge.v1.json` |
+| `wt refs purge --dry-run --json` | [`schema/refs-purge-plan.v1.json`](../schema/refs-purge-plan.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-purge-plan.v1.json` |
+| `wt refs restore <runId> --yes --json` | [`schema/refs-restore.v1.json`](../schema/refs-restore.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-restore.v1.json` |
+| `wt refs restore <runId> --dry-run --json` | [`schema/refs-restore-plan.v1.json`](../schema/refs-restore-plan.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-restore-plan.v1.json` |
+| `wt refs sweep --yes --json` | [`schema/refs-sweep.v1.json`](../schema/refs-sweep.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-sweep.v1.json` |
+| `wt refs sweep --dry-run --json` | [`schema/refs-sweep-plan.v1.json`](../schema/refs-sweep-plan.v1.json) | 1.1.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-sweep-plan.v1.json` |
+| `wt refs swept --json` | [`schema/refs-swept.v1.json`](../schema/refs-swept.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-swept.v1.json` |
+| `wt remove <work> --yes --json` | [`schema/remove.v1.json`](../schema/remove.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove.v1.json` |
+| `wt remove <work> --dry-run --json` | [`schema/remove-plan.v1.json`](../schema/remove-plan.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove-plan.v1.json` |
+| `wt restore <dir> --json` | [`schema/restore.v1.json`](../schema/restore.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/restore.v1.json` |
+| `wt restore <dir> --dry-run --json` | [`schema/restore-plan.v1.json`](../schema/restore-plan.v1.json) | 1.1.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/restore-plan.v1.json` |
+| `wt session list --json` | [`schema/session-list.v1.json`](../schema/session-list.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/session-list.v1.json` |
+| `wt session send --json` | [`schema/session-send.v1.json`](../schema/session-send.v1.json) | 1.1.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/session-send.v1.json` |
+| `wt session stop --json` | [`schema/session-stop.v1.json`](../schema/session-stop.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/session-stop.v1.json` |
+| `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | 1.12.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
+| `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
+| `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
+| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.13.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.20.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
+<!-- json-docs:end -->
 
 They are built into the binary: `wt schema` lists them and `wt schema up` prints
 one, so the schema you read is the one for the wt you run. Validate against that
@@ -177,19 +179,31 @@ Prints one object with the same resolved repository values as `wt config` and
 (exit 2). The user's settings block is not included; branch suffix and type names
 include user overrides exactly as the other outputs do.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion`, `command` | 1, string, `"config"` | schema major, full version and command |
-| `repo`, `mainRoot` | string | repository name and absolute path of its main checkout |
-| `configured` | bool | a repository configuration file parses; false for detected defaults |
-| `trunk`, `trunkSource` | string \| null | resolved trunk and [how it was found](#trunksource--how-trunk-was-found), as in status |
-| `branchPrefix`, `typeSuffix`, `branchSuffix`, `defaultType` | string \| null | resolved naming; `typeSuffix` names worktree folders, `branchSuffix` includes user overrides |
-| `types` | array of strings | available types, in configuration order |
-| `typeNames` | object | type → resolved name overrides; `{}` when none are set |
-| `developerConfigDirs`, `developerConfigFiles`, `cacheDirs` | arrays of strings | repository-relative entries exactly as configured; these entries stay relative |
-| `requiredBins` | array of strings | required executables |
-| `buildInitEnabled`, `buildInitCommand` | bool, string \| null | whether to run the build initialization and its command |
-| `provisionScript` | bool | the current checkout has an executable `bin/worktree/provision.sh` file |
+<!-- json-docs:begin config -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"config"` | yes |  |
+| `repo` | string | yes | The repository name. |
+| `mainRoot` | string, matching `^/` | yes | The absolute path of the main checkout, including when called from a linked worktree. |
+| `configured` | boolean | yes | A repository configuration file exists and parses; false for detected defaults. |
+| `trunk` | string \| null | yes | The resolved trunk branch; null when absent. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | How trunk was found, with the same meanings as status.v1.json. |
+| `branchPrefix` | string \| null | yes | The resolved naming prefix of branch names; null when none. |
+| `typeSuffix` | string \| null | yes | The suffix used in worktree directory names. It names worktree folders. |
+| `branchSuffix` | string \| null | yes | The resolved branch suffix, including user overrides; null when empty. |
+| `defaultType` | string \| null | yes | The type a bare work name takes; null when there is none. |
+| `types` | array of string | yes | The available worktree types, in configuration order. |
+| `typeNames` | object of string | yes | Resolved type-to-name overrides; an empty object when none are set. |
+| `developerConfigDirs` | array of string | yes | Repository-relative directory entries exactly as configured; empty is []. These entries stay relative. |
+| `developerConfigFiles` | array of string | yes | Repository-relative file entries exactly as configured; empty is []. These entries stay relative. |
+| `cacheDirs` | array of string | yes | Repository-relative cache entries exactly as configured; empty is []. These entries stay relative. |
+| `requiredBins` | array of string | yes | The executables the repository requires. |
+| `buildInitEnabled` | boolean | yes | Whether to run the build initialization. |
+| `buildInitCommand` | string \| null | yes | The build initialization command; null when there is none. |
+| `provisionScript` | boolean | yes | The current checkout has an executable bin/worktree/provision.sh file. |
+<!-- json-docs:end -->
 
 Empty lists are `[]`; an absent string is `null`. Within schema 1, the consumer
 fields `schema`, `command`, `mainRoot`, `developerConfigFiles` and
@@ -207,41 +221,68 @@ A worktree `wt up` would not start on is still a plan, with `upEligible: false`
 and the reason — never an error exit. The command fails only outside a git
 repository.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema` | 1 | the major version |
-| `schemaVersion` | string | the full version, `1.<minor>.<patch>` |
-| `command` | `"status"` | |
-| `token` | string \| null | names the inputs of this plan; pass it to `wt up --expect`. Null when not eligible, with one exception since 1.6.0: a plan whose `upIneligibleCode` is `ownRemoteDiverged` has one, for `wt up --allow-diverged --expect` |
-| `trunk` | string | trunk as `wt up` resolves it here (see [`trunkSource`](#trunksource--how-trunk-was-found)) |
-| `trunkSource` | string \| null | since 1.4.0: how `trunk` was found, [below](#trunksource--how-trunk-was-found) |
-| `trunkRef` | string \| null | `origin/<trunk>`, what `wt up` rebases onto after its fetch; null with `trunk` null, when nothing names trunk |
-| `trunkRefExists` | bool | whether that ref is here, as last fetched |
-| `trunkTip` | string \| null | its commit |
-| `trunkRefUpdatedAt` | string \| null | when that ref last moved, from its own reflog (RFC 3339, UTC); null without a reflog. Not FETCH_HEAD's time, which any fetch sets |
-| `trunkSync` | object | what `wt up` would do to local `<trunk>` after its fetch, judged against `trunkTip` (see [`trunkSync`](#trunksync--local-trunk)); `fastForwarded` is always false here, and `skippedReason` null means a run would fast-forward it (or there is nothing to do) |
-| `configured` | bool | the repository has a wt configuration file that parses. False also on **detected defaults**: no file, and wt runs on what `wt init --yes` would write, with no problem named (since 1.3.0; before, that repository was `noConfiguration`) |
-| `worktree` | object \| null | the worktree named; null when it cannot be found |
-| `worktree.work` | string | its work name, as `wt list` prints it |
-| `worktree.branch` | string | `""` when detached |
-| `worktree.path` | string | |
-| `worktree.isMain` | bool | the main checkout |
-| `worktree.state` | `clean` \| `dirty` \| `unreadable` | the checkout: `clean` is nothing uncommitted |
-| `worktree.behind`, `worktree.ahead` | int \| null | commits against `trunkRef` (the local trunk when that is not here); null when they cannot be counted |
-| `worktree.ownRemote` | object | since 1.6.0: the branch against [its own remote](#ownremote--a-branch-against-its-own-remote), as last fetched: `fetched` is always false here. `state` `none` for the main checkout and a detached HEAD |
-| `upEligible` | bool | `wt up` would start on it. Dirt, conflicts and busy sessions are **not** checked here, except where they stop a fast-forward (`ownRemoteBehind`), and except `alreadyOnTrunk`, which only the plan reports (`wt up` itself would fast-forward such a branch to trunk, which is why the plan holds it back): `wt up` checks them and its result says so |
-| `upIneligibleCode` | string \| null | `mainCheckout`, `noConfiguration` (no `MAIN_BRANCH` in a configuration file, and no trunk to detect either), `configurationInvalid`, `detachedHead`, `onTrunk`, `handedOver` (an earlier `wt sync` run waits on a person there), `notAWorktree`, since 1.6.0 `ownRemoteBehind` and `ownRemoteDiverged` (below), and since 1.9.0 `alreadyOnTrunk` (the branch has no commit its trunk lacks, so there is nothing to rebase; a remote branch that is gone changes nothing) |
-| `upIneligibleReason` | string \| null | the same as a sentence. For the two `ownRemote` codes it stands on its own: the branch, its remote ref, the counts, and the stack member when it is not the worktree asked about |
-| `stack` | array | every worktree `wt up` would move, parents first, from local refs as of now; just the one when it has no stack |
-| `stack[].work`, `.branch`, `.path` | string | |
-| `stack[].ownRemote` | object | since 1.6.0: that member's branch against [its own remote](#ownremote--a-branch-against-its-own-remote) |
-| `stack[].layers` | array | since 1.12.0: the branches in no worktree whose tips are commits of that member's line, above its stack parent's tip or above `trunkRef` without a parent, bottom first: what `wt up` [moves with the member](#layers--branches-in-no-worktree) or leaves, each `branch`, `tip`, and `left`, the reason it would leave it, null when it would move it; `[]` when there are none |
-| `stack[].deferredDeclared` | array | since 1.7.0: the [deferred steps trunk declares](#deferreddeclared--the-deferred-steps-trunk-declares), as last fetched, which `wt up` may run once it has rebased that member; `[]` when there are none |
-| `sessions` | array | [agent sessions](#sessions--claude-and-codex) in the stack's worktrees |
-| `sessions[].work`, `.name` | string | the worktree it is in, and its name |
-| `sessions[].kind` | `claude` \| `codex` | whose session it is; `codex` since 1.5.0 |
-| `sessions[].state` | `busy` \| `idle` | a busy session refuses `wt up` unless `--force` |
-| `sessionsError` | string \| null | the listing failed; `sessions` is then empty, not known empty |
+<!-- json-docs:begin status -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"status"` | yes |  |
+| `token` | string \| null | yes | Names the inputs of this plan (trunk name, wt configuration, stack, and since 1.6.0 the remote commit of each stack member that has diverged from its own remote); pass it to `wt up --expect`. Null when not eligible, except that since 1.6.0 a plan held back by ownRemoteDiverged alone has one, for `wt up --allow-diverged --expect`. The one exception, since 1.6.0, is a plan whose upIneligibleCode is ownRemoteDiverged: it has a token, for wt up --allow-diverged --expect. |
+| `trunk` | string \| null | yes | Trunk as wt up resolves it here. See trunkSource for how it was found. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | How trunk was determined, first match wins, from local refs alone (since 1.4.0): config — MAIN_BRANCH in the wt configuration file; originHead — refs/remotes/origin/HEAD; conventional — the first of development, main, master that exists locally or on origin (since 1.4.1; before, main, master, trunk, development, develop, ranked by where each exists); currentBranchGuess — no longer produced since 1.4.1: when nothing names trunk, detection fails and the repository reports noConfiguration. Null when trunk is. |
+| `trunkRef` | string \| null | yes | origin/<trunk>, what wt up rebases onto after its fetch; null when trunk is null, that is when nothing names trunk. |
+| `trunkRefExists` | boolean | yes | Whether that ref is here, as last fetched. |
+| `trunkTip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit of that ref; null when it is not here. |
+| `trunkRefUpdatedAt` | string \| null (date-time) | yes | When the trunk ref last moved, from its own reflog (RFC 3339, UTC); null without one. It is not the time of FETCH_HEAD, which any fetch sets. |
+| `trunkSync` | object | yes | What wt up would do to local trunk after its fetch, judged against trunkTip; fastForwarded is always false here. A skippedReason of null means a run would fast-forward local trunk, or that there is nothing to do. |
+| `trunkSync.local` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | Local trunk after the run (as found unless fast-forwarded); null when there is none. |
+| `trunkSync.remote` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The origin/<trunk> commit compared with; null when there is none. |
+| `trunkSync.localAhead` | integer \| null, at least 0 | yes | Commits local trunk has that origin lacks, as found; null when either side is missing. |
+| `trunkSync.remoteAhead` | integer \| null, at least 0 | yes | Commits origin has that local trunk lacks, as found; null when either side is missing. |
+| `trunkSync.fastForwarded` | boolean | yes |  |
+| `trunkSync.skippedReason` | `"optedOut"` \| `"ahead"` \| `"diverged"` \| `"dirty"` \| `"operation"` \| `"session"` \| `"notFastForward"` \| `"failed"` \| `null` | yes | Why local trunk was left; null when fast-forwarded or with nothing to do (the two are equal, or either side is missing). |
+| `configured` | boolean | yes | A wt configuration file that parses. Since 1.3.0, false also for a repository with no file, which runs on detected defaults (what `wt init --yes` would write) with no problem named; before, that repository had no configuration at all. |
+| `worktree` | object \| null | yes | The worktree named; null when it cannot be found. |
+| `worktree.work` | string | yes | The work name, as wt list prints it. |
+| `worktree.branch` | string | yes | Empty when detached. |
+| `worktree.path` | string | yes | The worktree's absolute path. |
+| `worktree.isMain` | boolean | yes | Whether it is the main checkout. |
+| `worktree.state` | `"clean"` \| `"dirty"` \| `"unreadable"` | yes | The checkout: clean is nothing uncommitted. |
+| `worktree.behind` | integer \| null, at least 0 | yes | Commits it lacks against trunkRef (the local trunk when that is not here); null when they cannot be counted. |
+| `worktree.ahead` | integer \| null, at least 0 | yes | Commits it has that trunkRef lacks (against the local trunk when trunkRef is not here); null when they cannot be counted. |
+| `worktree.ownRemote` | object | yes | Its state is none for the main checkout and for a detached HEAD. |
+| `worktree.ownRemote.ref` | string \| null | yes | The remote-tracking ref, as remote/branch (origin/feat/x); null only when no ref could be named: for none, and for unknown unless it is a ref that could not be compared. |
+| `worktree.ownRemote.state` | `"none"` \| `"gone"` \| `"unknown"` \| `"inSync"` \| `"ahead"` \| `"behind"` \| `"rebased"` \| `"diverged"` | yes | none: nothing to check: the ref is trunk's, or does not exist. gone: the branch names a ref the remote no longer has. unknown: where a push lands cannot be read from a tracking ref (a mirror remote, several push URLs, a push URL that is another repository than the fetch URL), or the branches or the remotes cannot be read at all, or the two tips cannot be compared; a run goes on unchecked. Since 1.8.0 also a branch a run would rebase and not push: noPushReason is then non-null. inSync: the same commit. ahead: only the branch has commits of its own. behind: only the remote has; a run fast-forwards the branch first. rebased: both have, and the remote's are old versions of the branch's (its tip is a tip the branch once had, or every commit only it has is matched patch for patch); a run goes on. diverged: both have, otherwise; a run refuses unless --allow-diverged. |
+| `worktree.ownRemote.commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The remote commit compared with; null for none, gone and unknown. |
+| `worktree.ownRemote.ahead` | integer \| null, at least 0 | yes | Commits only the branch has; null for none, gone and unknown. |
+| `worktree.ownRemote.behind` | integer \| null, at least 0 | yes | Commits only the remote has; null for none, gone and unknown. |
+| `worktree.ownRemote.fetched` | boolean | yes | Always false here: wt status does not fetch, so the remote side is as last fetched. |
+| `worktree.ownRemote.blocks` | `"diverged"` \| `"operation"` \| `"dirty"` \| `"session"` \| `null` | yes | Why a run would refuse for it; non-null only when a run would. diverged with state diverged, for a branch a run would rebase: --allow-diverged goes on. operation, dirty, session with state behind: it cannot be fast-forwarded, because a git operation is in progress there, the checkout has tracked changes, or an agent session is busy in it. |
+| `worktree.ownRemote.noPushReason` | string \| null | yes | Since 1.8.0: why a run would rebase the branch and not push it, in words; null when a run would push it, and for state none. It tracks a remote branch of another name and nothing is recorded for it (state unknown, fixCommand settles it); what is recorded for it cannot be used (state unknown); or it is recorded as pushing to a branch of another name that has commits it never had, is at a commit it was never at, or cannot be compared with it (state diverged, behind, rebased or unknown). See docs/json.md. |
+| `worktree.ownRemote.fixCommand` | array of string \| null, at least 1 items | yes | Since 1.8.0: the command that settles noPushReason, as an argv, when one does: wt sync push-to <branch> <remote>/<branch>, which records the branch it tracks as where it pushes. The same command with the branch's own name on the remote records that instead. It names no directory: run it in the repository. Null otherwise. |
+| `upEligible` | boolean | yes | wt up would start on it. Dirt, conflicts and busy sessions are not checked here, except where they stop a fast-forward (ownRemoteBehind). alreadyOnTrunk is the exception only the plan reports: wt up itself would fast-forward such a branch to trunk, which is why the plan holds it back. wt up checks dirt, conflicts and busy sessions, and its result says so. |
+| `upIneligibleCode` | `"mainCheckout"` \| `"noConfiguration"` \| `"configurationInvalid"` \| `"detachedHead"` \| `"onTrunk"` \| `"handedOver"` \| `"notAWorktree"` \| `"ownRemoteDiverged"` \| `"ownRemoteBehind"` \| `"alreadyOnTrunk"` \| `null` | yes | Since 1.9.0 alreadyOnTrunk: the worktree's branch has no commit its trunk lacks (worktree.ahead is 0 and it is the only branch of its stack), so there is nothing to rebase; upIneligibleReason names the trunk ref. Since 1.6.0 ownRemoteBehind: a member of the stack is behind its own remote and cannot be fast-forwarded (its ownRemote.blocks says why). ownRemoteDiverged: no member is, and one has diverged from its own remote; wt up --allow-diverged goes on. handedOver: an earlier wt sync run waits on a person there. alreadyOnTrunk: a remote branch that is gone changes nothing. |
+| `upIneligibleReason` | string \| null | yes | The code as a sentence. noConfiguration is, since 1.3.0, a repository with no file and no trunk to detect either; since 1.4.1 also a file with no MAIN_BRANCH when no trunk can be detected. For the two ownRemote codes it stands on its own: the branch, its remote ref, the counts, and the stack member when it is not the worktree asked about. |
+| `stack` | array of object | yes | Every worktree wt up would move, parents first. From local refs as of now; just the one when the worktree has no stack. |
+| `stack[].work` | string | yes | The work name of the stack member, as wt list prints it. |
+| `stack[].branch` | string | yes | The worktree's branch. |
+| `stack[].path` | string | yes | The worktree's absolute path. |
+| `stack[].ownRemote` | object | yes | Since 1.6.0: a branch against its own remote, the remote-tracking ref a push of it would replace: what is recorded for the branch (branch.<name>.wtPushTo), else the branch's own name on the remote git pushes it to (refs/remotes/origin/<branch> unless <branch>@{push} has that name on another remote, or branch.<name>.pushRemote or remote.pushDefault names one). Since 1.8.0 never a branch of another name that is not recorded, whatever <branch>@{push} is. Never the upstream as such: a branch cut from trunk often tracks trunk and pushes to its own name. See docs/json.md. Fields as at `worktree.ownRemote`. |
+| `stack[].layers` | array of object | yes | Since 1.12.0: the branches in no worktree whose tips are commits of this member's line, above its stack parent's tip or above trunkRef without one, bottom first: what wt up moves with the member's rebase, or leaves where they are (left says why). The token covers their names. Empty when there are none. |
+| `stack[].layers[].branch` | string | yes |  |
+| `stack[].layers[].tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `stack[].layers[].left` | string \| null | yes | Why wt up would leave it where it is: it is trunk, a backup name (also by a prefix at a slash), a tip that is a fixup!, squash! or amend! commit, or a merge commit on the line. Null when it would move it; a rebase that drops, folds or changes commits leaves it too, which only the run finds out. |
+| `stack[].deferredDeclared` | array of object | yes | Since 1.7.0. The deferred steps .wt-sync.yaml declares on trunkTip, trunk as last fetched, in the declared order: what wt up goes through once it has rebased this member. Declared, not predicted: each may run. A step with no paths does, after every finished rebase; one with paths only when the rebase changed one of them; none after a step that failed. wt up fetches first and reads the declaration from the trunk it then rebases onto, which may be newer, and the token does not cover it. The same list on every member. Empty when trunk declares none or has no .wt-sync.yaml, when trunkRefExists is false, and when the declaration there cannot be read. |
+| `stack[].deferredDeclared[].step` | string | yes | Its run line: the string deferred[].step carries for it in wt sync rebase --json. |
+| `stack[].deferredDeclared[].paths` | array of string | yes | The globs that gate it, as declared. Empty: it runs after every finished rebase. Otherwise it runs only when the rebase changed a path one of them matches, which is not known before the rebase. |
+| `stack[].deferredDeclared[].needs` | array of string, matching `^(docker\|env:[A-Za-z_][A-Za-z0-9_]*)$` | yes | Since 1.10.0 (env:<NAME> since 1.11.0). What the step cannot run without, as declared: wt up probes each before it moves anything. |
+| `sessions` | array of object | yes | The agent sessions in the stack's worktrees. |
+| `sessions[].work` | string | yes | The work name of the worktree it is in. |
+| `sessions[].name` | string | yes | The session's name. |
+| `sessions[].kind` | `"claude"` \| `"codex"` | yes | Since 1.5.0 also codex: a Codex session. name is then codex, codex exec, or codex (<originator>) for a thread an app-server runs. |
+| `sessions[].state` | `"busy"` \| `"idle"` | yes | busy or idle; a busy session refuses wt up unless --force. |
+| `sessionsError` | string \| null | yes | Listing the sessions failed; sessions is then empty, not known empty. |
+<!-- json-docs:end -->
 
 The **token** covers the trunk name, the bytes of the wt configuration file
 `wt up` would read, the stack's branches in order, and, since 1.12.0, the names
@@ -281,39 +322,62 @@ participants so far, the one in flight as `interrupted`, and the way back — th
 exits 130 for SIGINT or 143 for SIGTERM. SIGKILL or a crash may write none;
 treat a missing object as unknown.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema` | 1 | the major version |
-| `schemaVersion` | string | the full version, `1.<minor>.<patch>` |
-| `command` | `"up"` | |
-| `trunk`, `trunkRef` | string \| null | null when the run stopped before resolving them |
-| `trunkSource` | string \| null | since 1.3.0: how `trunk` was found ([`trunkSource`](#trunksource--how-trunk-was-found)); null with `trunk` |
-| `onto` | string \| null | the commit the run rebased onto: trunk's after its fetch, or since 1.6.0 the target `--onto` names; null when never determined |
-| `target` | object \| null | since 1.6.0: [what `onto` is](#target--trunk-or---onto), trunk or the ref `--onto` names; null when never determined |
-| `fetched` | bool | trunk was fetched (false with `--no-fetch`, or when the run stopped first) |
-| `trunkSync` | object \| null | what the run did to local `<trunk>` after its fetch (see [`trunkSync`](#trunksync--local-trunk)); null when it did not fetch |
-| `outcome` | see below | |
-| `error` | string \| null | why the run stopped before touching any participant: configuration, fetch, `--expect`, the main checkout named, a worktree not found |
-| `worktrees` | array | the participants, parents first; empty when `error` stopped the run first |
-| `recovery` | string \| null | for `interrupted`: what wt printed as the way back |
-
-Each participant:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `work`, `branch`, `path` | string | |
-| `result` | see below | |
-| `reason` | string \| null | why, for everything but `rebased` |
-| `before` | string \| null | the branch's commit when the run began |
-| `after` | string \| null | its commit when the run ended |
-| `failedSteps` | array of string | for `rebasedStepFailed`: each step that did not finish |
-| `recovery` | string \| null | for `needsRecovery`, `handedOver`, `interrupted`: how to put it back or finish it |
-| `pushCommand` | array of string \| null | for `rebased`: the push, as an argv (`["git", "-C", path, "push", …]`); null when the branch has [nowhere to push](#where-a-branch-pushes) |
-| `pushed` | bool | the run pushed it (`--push`, or `--yes` without `--no-push`) |
-| `noPushReason` | string \| null | since 1.5.0 (`sync-run` 1.4.0): for `rebased` with a null `pushCommand`, why wt made and offered no push, in the words the run printed; null otherwise |
-| `fixCommand` | array of string \| null | since 1.5.0 (`sync-run` 1.4.0): the command that settles `noPushReason`, as an argv to run in the repository, when one does; null otherwise |
-| `ownRemoteSync` | object | since 1.4.0: what the run found of the branch's own remote and did about it ([`ownRemoteSync`](#ownremotesync--what-a-run-did-about-it)) |
-| `layers` | array | since 1.7.0 (`sync-run` 1.15.0): the [branches in no worktree](#layers--branches-in-no-worktree) on the participant's line that the run moved with its rebase or left, each `branch`, `before`, `after`, `result` (`moved` \| `left`) and `reason`; `[]` when there are none |
+<!-- json-docs:begin up -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"up"` | yes |  |
+| `trunk` | string \| null | yes | Trunk as wt up resolved it; null when the run stopped before resolving it. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | How trunk was determined, first match wins, from local refs alone (since 1.3.0): config — MAIN_BRANCH in the wt configuration file; originHead — refs/remotes/origin/HEAD; conventional — the first of development, main, master that exists locally or on origin (since 1.3.1; before, main, master, trunk, development, develop, ranked by where each exists); currentBranchGuess — no longer produced since 1.3.1: when nothing names trunk, detection fails and the repository reports noConfiguration. Null when trunk is. Null with trunk. |
+| `trunkRef` | string \| null | yes | origin/<trunk>, what the run rebases onto after its fetch; null when the run stopped before resolving it. |
+| `onto` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit the run rebased onto: trunk's after its fetch, or since 1.6.0 the target --onto names. Null when it was never determined. |
+| `target` | object \| null | yes | What onto is: trunk, or the ref --onto names (since 1.6.0). Null when it was never determined. |
+| `target.ref` | string | yes | The ref as given to --onto, or origin/<trunk>. Examples: integ, origin/release. |
+| `target.trunk` | boolean | yes | The target is trunk: no --onto was given. |
+| `target.upstream` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit --upstream names: only the commits above it are replayed. Null without it. The run is then git rebase --onto <ref> <upstream>. |
+| `fetched` | boolean | yes | Whether trunk was fetched: false with --no-fetch, or when the run stopped first. |
+| `trunkSync` | object \| null | yes | What the run did to local trunk after its fetch: fast-forwarded to origin/<trunk> when safe, or why not. Null when it did not fetch. See trunkSync in wt status --json for the fields. |
+| `trunkSync.local` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | Local trunk's commit after the run (as found, unless fast-forwarded); null when there is no local trunk. |
+| `trunkSync.remote` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The origin/<trunk> commit compared with; null when there is none. |
+| `trunkSync.localAhead` | integer \| null, at least 0 | yes | Commits local trunk has that origin lacks, as found; null when either side is missing. |
+| `trunkSync.remoteAhead` | integer \| null, at least 0 | yes | Commits origin has that local trunk lacks, as found; null when either side is missing. |
+| `trunkSync.fastForwarded` | boolean | yes |  |
+| `trunkSync.skippedReason` | `"optedOut"` \| `"ahead"` \| `"diverged"` \| `"dirty"` \| `"operation"` \| `"session"` \| `"notFastForward"` \| `"failed"` \| `null` | yes | Why local trunk was left; null when fast-forwarded or with nothing to do (the two are equal, or either side is missing). |
+| `outcome` | `"done"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | done: every participant rebased, fastForwarded or skipped. refused: nothing changed, or error stopped the run first. partial: something changed and not everything finished. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | Why the run stopped before touching any participant: configuration, fetch, --expect, the main checkout named, or a worktree not found. |
+| `worktrees` | array of object | yes | The participants, parents first; empty when error stopped the run first. |
+| `worktrees[].work` | string | yes | The work name, as wt list prints it. |
+| `worktrees[].branch` | string | yes | The worktree's branch. |
+| `worktrees[].path` | string | yes | The worktree's absolute path. |
+| `worktrees[].result` | `"rebased"` \| `"fastForwarded"` \| `"rebasedStepFailed"` \| `"skipped"` \| `"refused"` \| `"notRun"` \| `"restored"` \| `"needsRecovery"` \| `"handedOver"` \| `"interrupted"` | yes | rebased, fastForwarded, rebasedStepFailed, needsRecovery, handedOver and interrupted changed the branch or worktree; skipped, refused, notRun and restored left them as they were. fastForwarded (since 1.4.0): the branch was behind its own remote and has nothing to rebase at the remote's commit, so the run moved it there and that is all; after is that commit, pushCommand is null. |
+| `worktrees[].reason` | string \| null | yes | Why, for every result but rebased. |
+| `worktrees[].before` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The branch's commit when the run began. |
+| `worktrees[].after` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The branch's commit when the run ended. |
+| `worktrees[].failedSteps` | array of string | yes | For rebasedStepFailed: each step that did not finish. |
+| `worktrees[].recovery` | string \| null | yes | For needsRecovery, handedOver and interrupted: how to put it back or finish it. |
+| `worktrees[].pushCommand` | array of string \| null, at least 1 items | yes | For rebased: the push, as an argv. Since 1.5.0 null also for rebased, when wt has no push to make or offer for the branch, which noPushReason explains. The argv has the form ["git", "-C", path, "push", …]. |
+| `worktrees[].pushed` | boolean | yes | Whether the run pushed it: with --push, or with --yes without --no-push. |
+| `worktrees[].noPushReason` | string \| null | yes | Since 1.5.0: for rebased with a null pushCommand, why wt made and offered no push for the branch, in words, whatever the reason: among them that it tracks a remote branch of another name with nothing recorded for it, and that the branch of another name it is recorded as pushing to holds commits that cannot be shown to be old versions of its own. Null otherwise. |
+| `worktrees[].fixCommand` | array of string \| null, at least 1 items | yes | Since 1.5.0: the command that settles noPushReason, as an argv, when one does: wt sync push-to <branch> <remote>/<branch>, which records the branch it tracks as where it pushes. The same command with the branch's own name on the remote records that instead. It names no directory: run it in the repository. Null otherwise. |
+| `worktrees[].layers` | array of object | yes | Since up 1.7.0: the branches in no worktree on this participant's line, bottom first, that the run moved with its rebase or left, and why. Empty when there are none, and for a participant the run did not rebase. |
+| `worktrees[].layers[].branch` | string | yes |  |
+| `worktrees[].layers[].before` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip when the run read the line. |
+| `worktrees[].layers[].after` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | Where the run moved it: the replay of its commit. Null for a branch left. |
+| `worktrees[].layers[].result` | `"moved"` \| `"left"` | yes | moved: the branch is at after, pinned with the run's safety and result refs, so wt sync undo puts it back with the worktrees. left: it stays at before; reason says why. |
+| `worktrees[].layers[].reason` | string \| null | yes | Why it was left: it is trunk, a backup name (also by a prefix at a slash), a tip that is a fixup!, squash! or amend! commit, a merge commit on the line, a rebase that dropped, folded or changed commits, one that stopped or failed, a branch checked out meanwhile. Null for a branch moved. |
+| `worktrees[].ownRemoteSync` | object | yes | Since 1.4.0: what the run found of a participant's own remote, the remote-tracking ref a push of its branch would replace, and what it did about it. See docs/json.md. |
+| `worktrees[].ownRemoteSync.ref` | string \| null | yes | The remote-tracking ref, as remote/branch; null only when no ref could be named. |
+| `worktrees[].ownRemoteSync.state` | `"none"` \| `"gone"` \| `"unknown"` \| `"inSync"` \| `"ahead"` \| `"behind"` \| `"rebased"` \| `"diverged"` | yes | As found, before anything moved; the states are those of ownRemote in wt status --json. |
+| `worktrees[].ownRemoteSync.local` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The branch as found, before any fast-forward: where wt sync undo puts it back. |
+| `worktrees[].ownRemoteSync.remote` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The remote commit compared with; null for none, gone and unknown. |
+| `worktrees[].ownRemoteSync.localAhead` | integer \| null, at least 0 | yes | Commits only the branch had; null for none, gone and unknown. |
+| `worktrees[].ownRemoteSync.remoteAhead` | integer \| null, at least 0 | yes | Commits only the remote had; null for none, gone and unknown. |
+| `worktrees[].ownRemoteSync.fastForwarded` | boolean | yes | The run moved the branch from local to remote before rebasing it. It stays true as a record of what was done when the rebase after it was put back, which takes the branch back to local. |
+| `worktrees[].ownRemoteSync.allowed` | boolean | yes | state is diverged and the run went on over it under --allow-diverged; false when the participant was refused for something else. |
+| `worktrees[].ownRemoteSync.skippedReason` | `"diverged"` \| `"operation"` \| `"dirty"` \| `"session"` \| `"failed"` \| `"fetchFailed"` \| `null` | yes | Why the own remote refuses the participant; null when it does not. diverged: --allow-diverged goes on. operation, dirty, session: behind, and it cannot be fast-forwarded. failed: the fast-forward itself did not go through; nothing of this participant was touched. fetchFailed: the branch's own remote could not be fetched, so the run could not look; trunk's fetch failing is the run's error instead. |
+| `recovery` | string \| null | yes | For interrupted: the way back wt printed. |
+<!-- json-docs:end -->
 
 `result`, exhaustively:
 
@@ -367,14 +431,6 @@ meanwhile. A run with `--stack` or `wt sync steps` reads its own layers and
 reports them under `stack`; `layers` is then empty. A branch whose commit the
 rebase did not change is in neither list.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `branch` | string | |
-| `before` | string | its tip when the run read the line |
-| `after` | string \| null | the commit it was moved to; null when left |
-| `result` | `moved` \| `left` | |
-| `reason` | string \| null | why it was left; null when moved |
-
 ### `trunkSource` — how trunk was found
 
 `wt status`, `wt up`, `wt sync`, `wt sweep --dry-run`, and the `wt new` and
@@ -406,14 +462,6 @@ it there. Anything else leaves it, with the reason. Local commits are never
 thrown away, and a fast-forward that fails never fails the run.
 `--no-ff-trunk`, or `wt config set ff_trunk false`, turns it off.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `local` | string \| null | local `<trunk>`'s commit after the run (as found, unless fast-forwarded); null when there is no local `<trunk>` |
-| `remote` | string \| null | the `origin/<trunk>` commit compared with; null when there is none |
-| `localAhead`, `remoteAhead` | int \| null | commits each side has that the other lacks, as found; null when either is missing |
-| `fastForwarded` | bool | local `<trunk>` was moved to `remote` |
-| `skippedReason` | string \| null | why it was left; null when fast-forwarded or with nothing to do (equal, or either side missing) |
-
 `skippedReason`, exhaustively. `ahead` and `diverged` are reported whenever they
 hold, even with `--no-ff-trunk` or `ff_trunk` false: they are facts about the
 repository a fast-forward could not get past anyway, and `ahead` is how a caller
@@ -437,12 +485,6 @@ What `onto` is, on `wt sync --json` (since `sync` 1.8.0), `wt sync rebase|resume
 --json` (`sync-run` 1.8.0) and `wt up --json` (`up` 1.6.0). Without `--onto` it
 is trunk, and `onto` is trunk's commit as it always was; the declaration and its
 scripts are read from trunk either way.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `ref` | string | the ref as `--onto` was given (`integ`, `origin/release`), or `origin/<trunk>` |
-| `trunk` | bool | true for trunk: no `--onto` was given |
-| `upstream` | string \| null | the commit `--upstream` names: only the commits above it were assessed or rebased (`git rebase --onto <ref> <upstream>`); null without it |
 
 The overview's `token` covers the target's ref and commit and the upstream,
 only when `--onto` is given: without it the token is byte for byte what it was.
@@ -497,18 +539,6 @@ own remote is `origin/<branch>`, and until that exists there is nothing to
 check. Trunk is never the answer, on origin or under its name on another
 remote: a branch that tracks it pushes under its own name, and the push names
 both sides of its refspec, so git cannot send it to the upstream instead.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `ref` | string \| null | the ref as `remote/branch`, `origin/feat/x`; null only when no ref could be named: for `none`, and for `unknown` unless it is a ref that could not be compared |
-| `state` | see below | |
-| `commit` | string \| null | the remote commit compared with; null for `none`, `gone`, `unknown` |
-| `ahead` | int \| null | commits only the branch has; null for `none`, `gone`, `unknown` |
-| `behind` | int \| null | commits only the remote has; null likewise |
-| `fetched` | bool | true: the remote side is from this command's fetch. False: as last fetched |
-| `blocks` | string \| null | why a run would refuse for it; non-null only when a run would. A `diverged` branch a run would not rebase, because it is on trunk already or has nothing of its own, is skipped, nothing is pushed over its remote, and `blocks` is null |
-| `noPushReason` | string \| null | since `status` 1.8.0, `sync` 1.5.0: why a run would rebase the branch and not push it, in words; null when a run would push it, and for `none` ([nowhere to push](#where-a-branch-pushes)) |
-| `fixCommand` | array of string \| null | since `status` 1.8.0, `sync` 1.5.0: the command that settles `noPushReason`, as an argv to run in the repository, when one does; null otherwise |
 
 `state`, exhaustively, and what a run does:
 
@@ -696,17 +726,6 @@ On each participant of `wt up --json` and `wt sync rebase --json`. From
 `wt sync resume` and `wt sync undo` the key is there and its value is null:
 they do not check.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `ref` | string \| null | as `ownRemote.ref` |
-| `state` | string | as found, before anything moved; the values of `ownRemote.state` |
-| `local` | string \| null | the branch as found, before any fast-forward: the participant's `before`, and where `wt sync undo` puts it back |
-| `remote` | string \| null | the remote commit compared with; null for `none`, `gone`, `unknown` |
-| `localAhead`, `remoteAhead` | int \| null | commits each side had that the other lacked; null likewise |
-| `fastForwarded` | bool | the run moved the branch from `local` to `remote` before rebasing it. It stays true as a record of what was done when the rebase after it was put back |
-| `allowed` | bool | `state` is `diverged` and the run went on over it under `--allow-diverged`. False when the flag was given and the participant was refused for something else |
-| `skippedReason` | string \| null | why the own remote refuses the participant, below; null when it does not |
-
 `skippedReason`, exhaustively; the participant is `refused`:
 
 | Value | Meaning |
@@ -754,13 +773,7 @@ rebase has finished: regenerate a file, commit the result. A run reports what
 each came to in [`deferred`](#wt-sync-rebaseresumeundo---json--the-result).
 `deferredDeclared` is the same steps before the run, on each worktree of
 `wt sync --json` (since `sync` 1.4.0) and each `stack` member of
-`wt status --json` (since `status` 1.7.0):
-
-| Field | Type | Meaning |
-|---|---|---|
-| `step` | string | the step's `run` line, the same string `deferred[].step` carries for it afterwards |
-| `paths` | array of string | the globs that gate it, as declared; empty when it has none |
-| `needs` | array of string | since `sync` 1.6.0 and `status` 1.10.0: what the step cannot run without, as declared (`docker`, and since `sync` 1.10.0 and `status` 1.11.0 `env:<NAME>`); empty when it has none. A run probes each before it moves anything ([needs](#needs--what-a-step-cannot-run-without)) |
+`wt status --json` (since `status` 1.7.0). Its fields are in the field table above.
 
 In the declared order, which is the order they run in.
 
@@ -803,42 +816,49 @@ repository).
 A plan that cannot be made — not the main checkout, no trunk, the fetch failed —
 is still one object, with `error` set and no items, and a non-zero exit.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema` | 1 | the major version |
-| `schemaVersion` | string | the full version, `1.<minor>.<patch>` |
-| `command` | `"sweep"` | |
-| `repo` | string \| null | the main checkout; null outside a repository |
-| `trunk` | string \| null | trunk's branch name |
-| `trunkSource` | string \| null | since 1.3.0: how `trunk` was found ([`trunkSource`](#trunksource--how-trunk-was-found)) |
-| `bases` | array | what merged is measured against, first first: `{name, tip}` for `origin/<trunk>` as fetched, then `<trunk>` |
-| `fetched` | bool | origin was fetched first |
-| `token` | string \| null | names this plan; pass it to `wt sweep --expect`. Null when there is nothing to remove or delete, or on error |
-| `error` | string \| null | why no plan could be made |
-| `items` | array | the rows, in the order `wt sweep` prints them |
-| `quarantine` | string \| null | since 1.2.0: with `--move-to <dir>`, the folder, absolute; a folder that exists or is on another volume sets `error` (the items stay, the token is null). Null without it |
-| `keepSuperset` | bool | since 1.4.0: `--keep-superset` was given, which the token covers: the removed worktrees' Superset workspaces are left |
-| `reap` | bool | since 1.6.0: `--reap` was given, which the token covers: the processes in each worktree that goes are stopped first, and no longer keep it |
-| `configFingerprint` | string \| null | since 1.5.0: the wt configuration the token covers, the lowercase hex SHA-256 of the configuration file wt read (`bin/worktree/worktree.toml` or `worktree.conf`, the worktree's own before the main checkout's). Two plans with the same value read the same file. Null when there is none |
-
-Each item:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `category` | see below | its part of the plan |
-| `branch` | string \| null | null for a detached worktree |
-| `tip` | string | the branch's commit, or a detached worktree's HEAD |
-| `work`, `path` | string \| null | the worktree; null for a branch in no worktree (`work` is null for a detached one) |
-| `merged` | object \| null | why it counts as merged; null for `upstreamGone` |
-| `merged.how` | `ancestor` \| `patch` \| `pullRequest` | `into` contains the tip; every commit is on `into` under another id, byte for byte (a rebase merge, a cherry-pick); GitHub merged its pull request into trunk at exactly this tip (a squash merge) |
-| `merged.into` | string | the base it is on (`origin/main`, `main`); trunk's name for `pullRequest` |
-| `merged.pullRequest` | int \| null | for `pullRequest`: its number |
-| `pullRequest` | object \| null | what GitHub says about the branch's pull request, merged or not: `number`, `state` (`OPEN`, `MERGED`, `CLOSED`), `base`, `url`. Null when there is none or GitHub was not asked |
-| `kept` | array of string | every reason it is kept (below); empty for `remove` and `delete` |
-| `reason` | string | the row as `wt sweep` prints it: why it goes, or why it stays and what to do |
-| `ahead` | int \| null | for `upstreamGone`: commits the first base lacks |
-| `subject` | string \| null | the tip's commit subject |
-| `processes` | array | since 1.6.0: `{pid, command, reap}` for each [process still working in its worktree](#processes--what-still-runs-in-a-worktree); `reap` true on a `remove` item under `--reap`, which stops it first. They keep an `inUse` item only without `--reap`, when `kept` has `processes`; under `--reap`, or on a row kept for another reason, they are listed and do not hold it. Empty for a branch in no worktree |
+<!-- json-docs:begin sweep-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"sweep"` | yes |  |
+| `repo` | string \| null | yes | The repository's main checkout; null outside one. |
+| `trunk` | string \| null | yes | Trunk's branch name; null outside a repository. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | How trunk was determined, first match wins, from local refs alone (since 1.3.0): config — MAIN_BRANCH in the wt configuration file; originHead — refs/remotes/origin/HEAD; conventional — the first of development, main, master that exists locally or on origin (since 1.4.1; before, main, master, trunk, development, develop, ranked by where each exists); currentBranchGuess — no longer produced since 1.4.1: when nothing names trunk, detection fails and the repository reports noConfiguration. Null when trunk is. |
+| `bases` | array of object | yes | What merged is measured against, first one first: origin/<trunk> as fetched, then <trunk>. |
+| `bases[].name` | string | yes |  |
+| `bases[].tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `fetched` | boolean | yes | origin was fetched first (false with --no-fetch, without an origin, or when the plan stopped before). |
+| `token` | string \| null | yes | Names this plan; pass it to `wt sweep --expect <token> --yes --json`. Null when there is nothing to remove or delete, or on error. |
+| `error` | string \| null | yes | Why no plan could be made: not the main checkout, no trunk, the fetch failed — items is then empty — or a --move-to folder that cannot be used. |
+| `items` | array of object | yes | The rows, in the order wt sweep prints them. |
+| `items[].category` | `"remove"` \| `"delete"` \| `"inUse"` \| `"upstreamGone"` | yes | remove: the worktree goes, and its branch with it. delete: a branch in no worktree goes. inUse: merged, but kept (kept says why): its worktree is kept, or (deliberateBackup, since 1.7.0) its name is a deliberate backup. upstreamGone: its upstream is gone but trunk lacks its commits, kept. |
+| `items[].branch` | string \| null | yes | Null for a detached worktree. |
+| `items[].tip` | string, matching `^[0-9a-f]{40,64}$` | yes | The branch's commit, or a detached worktree's HEAD. |
+| `items[].work` | string \| null | yes | The worktree's work name; null for a branch in no worktree, or a detached one. |
+| `items[].path` | string \| null | yes | The worktree; null for a branch in no worktree. |
+| `items[].merged` | object \| null | yes | Why it counts as merged; null for upstreamGone. |
+| `items[].merged.how` | `"ancestor"` \| `"patch"` \| `"pullRequest"` | yes | ancestor: into contains the tip. patch: every commit is on into under another id, byte for byte. pullRequest: GitHub merged its pull request into trunk at exactly this tip. The first is a merge or fast-forward; the second a rebase merge or a cherry-pick; the third a squash merge. |
+| `items[].merged.into` | string | yes | The base it is on (origin/main, main); trunk's name for pullRequest. |
+| `items[].merged.pullRequest` | integer \| null | yes | For pullRequest: its number; null otherwise. |
+| `items[].pullRequest` | object \| null | yes | What GitHub says about the branch's pull request, merged or not: its number, state, base and url. Null when there is none, or GitHub was not asked. |
+| `items[].pullRequest.number` | integer | yes | The pull request's number. |
+| `items[].pullRequest.state` | `"OPEN"` \| `"MERGED"` \| `"CLOSED"` | yes | OPEN, MERGED or CLOSED, as GitHub says. |
+| `items[].pullRequest.base` | string \| null | yes | The branch the pull request targets. |
+| `items[].pullRequest.url` | string \| null | yes | The pull request's URL. |
+| `items[].kept` | array of `"dirty"` \| `"statusUnknown"` \| `"detached"` \| `"session"` \| `"sessionsUnknown"` \| `"lockHeld"` \| `"directoryMissing"` \| `"heldByRebase"` \| `"heldByBisect"` \| `"mainCheckout"` \| `"branchNotDeletable"` \| `"notMerged"` \| `"operation"` \| `"hiddenChanges"` \| `"headUnreachable"` \| `"reachUnknown"` \| `"submoduleUnreachable"` \| `"nestedWorktree"` \| `"processes"` \| `"processesUnknown"` \| `"deliberateBackup"` | yes | Why it is kept, every reason that applies; empty for remove and delete. processes (since 1.6.0): without --reap, processes still run in its worktree (listed in processes). processesUnknown (since 1.6.0): the processes in it could not be found, or told apart from agent sessions. deliberateBackup (since 1.7.0): the branch name matches ref_keep_patterns, so the branch is not deleted and its worktree, if any, is not removed. |
+| `items[].reason` | string | yes | The row as wt sweep prints it: why it goes, or why it stays and what to do. |
+| `items[].ahead` | integer \| null, at least 0 | yes | For upstreamGone: commits the first base lacks. |
+| `items[].subject` | string \| null | yes | The tip's commit subject. |
+| `items[].processes` | array of object | yes | Since 1.6.0. The processes working in its worktree, as remove-plan lists them: another user's, any with a controlling terminal, wt's own and agent processes are never listed. reap is true on a remove item under --reap, which stops them before the worktree goes; they keep an inUse item only without --reap, when kept has processes; under --reap, or on a row kept for another reason, they are listed and do not hold it. Empty for a branch in no worktree, and when none was found. |
+| `items[].processes[].pid` | integer, at least 2 | yes |  |
+| `items[].processes[].command` | string | yes | Its command line as ps shows it, arguments joined with spaces. |
+| `items[].processes[].reap` | boolean | yes |  |
+| `quarantine` | string \| null | yes | Since 1.2.0. With --move-to <dir>: the folder the worktrees go to, absolute, which the token covers; a folder that exists or is on another volume refuses the plan (error set, token null, items kept). null without it. |
+| `keepSuperset` | boolean | yes | Since 1.4.0. --keep-superset was given: the removed worktrees' Superset workspaces are left, and Superset is not asked anything. The token covers it. |
+| `reap` | boolean | yes | Since 1.6.0. --reap was given: the processes still working in each worktree that goes are stopped first, and they no longer keep it. The token covers it, and the processes of each remove item. |
+| `configFingerprint` | string \| null, matching `^[0-9a-f]{64}$` | yes | Since 1.5.0. The wt configuration the token covers: the lowercase hex SHA-256 of the configuration file wt read (bin/worktree/worktree.toml or worktree.conf). Two plans with the same value read the same file. null when there is none. It is the worktree's own file before the main checkout's. |
+<!-- json-docs:end -->
 
 `category`, exhaustively:
 
@@ -899,35 +919,45 @@ flight as `interrupted` with what is true of it now — then exits 130 for SIGIN
 or 143 for SIGTERM. SIGKILL or a crash may write none; treat a missing object as
 unknown.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema` | 1 | the major version |
-| `schemaVersion` | string | the full version, `1.<minor>.<patch>` |
-| `command` | `"sweep"` | |
-| `repo`, `trunk` | string \| null | as in the plan |
-| `fetched` | bool | origin was fetched first |
-| `token` | string \| null | the token of the plan this sweep carried out; null when it stopped first or there was nothing to do |
-| `outcome` | see below | |
-| `error` | string \| null | why the sweep stopped before touching anything: `--expect`, the fetch, not the main checkout |
-| `items` | array | every row of the plan, in its order; empty when `error` stopped it first |
-| `recovery` | string \| null | for `interrupted`: what wt printed |
-| `quarantine` | string \| null | since 1.1.0: with `--move-to <dir>`, the folder; null without |
-| `runId` | string \| null | since 1.4.0: the run under `refs/wt-swept/` the deleted branches were moved into (see [below](#deleted-branches-are-pinned)); null when no branch was moved |
-
-Each item:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `category`, `branch`, `tip`, `work`, `path` | | as in the plan |
-| `result` | see below | |
-| `reason` | string \| null | why, for everything but `removed` and `deleted` |
-| `worktreeRemoved` | bool | the worktree is gone now |
-| `branchDeleted` | bool | the branch is gone now |
-| `pin` | string \| null | since 1.4.0: the ref the deleted branch was moved into, `refs/wt-swept/<runId>/heads/<branch>`, read back holding `tip`; null when it was not moved there |
-| `restoreCommand` | array of string \| null | when the branch was deleted, the argv that puts it back (not its upstream setting): `["wt", "refs", "restore", runId, "--only", "refs/heads/<branch>", "--yes"]` for a pinned branch, `["wt", "restore", dir]` for the branch of a worktree moved to a folder. Run it in `repo`. Null when the branch is there, or gone with no pin. Before 1.4.0 it was `["git", "-C", repo, "branch", branch, tip]`; that form is gone |
-| `quarantine` | object \| null | since 1.1.0: for a worktree moved, or being moved, into the quarantine: `dir`, its own folder (`wt restore <dir>` puts it back), and `checkoutMoved`, `adminMoved`, which of the two moves are done; null otherwise |
-| `superset` | object \| null | since 1.2.0: for a worktree the sweep removed, what came of its Superset workspace: `result` and `reason` (string \| null, why, for `skipped` and `failed`); null when no worktree was removed |
-| `reaped` | array | since 1.5.0, with `--reap`: `{pid, command, result}` for each process stopped, or tried, right before its worktree went, as in [`remove`](#processes--what-still-runs-in-a-worktree); one that `survived` leaves the worktree, `failed`. Empty otherwise |
+<!-- json-docs:begin sweep -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"sweep"` | yes |  |
+| `repo` | string \| null | yes |  |
+| `trunk` | string \| null | yes |  |
+| `fetched` | boolean | yes | Whether origin was fetched first. |
+| `token` | string \| null | yes | The token of the plan this run carried out; null when it stopped before one was made, or there was nothing to do. |
+| `outcome` | `"done"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | done: every item to remove or delete went. refused: nothing was removed or deleted. partial: some went, some did not. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | Why the run stopped before touching anything: an --expect that no longer holds, the fetch, not the main checkout. |
+| `items` | array of object | yes | Every row of the plan, in its order; empty when error stopped the run first. |
+| `items[].category` | `"remove"` \| `"delete"` \| `"inUse"` \| `"upstreamGone"` | yes | Its part of the plan, as in the sweep-plan schema. |
+| `items[].branch` | string \| null | yes |  |
+| `items[].tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `items[].work` | string \| null | yes |  |
+| `items[].path` | string \| null | yes |  |
+| `items[].result` | `"removed"` \| `"deleted"` \| `"kept"` \| `"failed"` \| `"notRun"` \| `"interrupted"` | yes | removed: the worktree and its branch are gone. deleted: the branch is gone. kept: left as it was, on purpose. failed: tried and not finished; worktreeRemoved and branchDeleted say what did happen. notRun: the run ended before it. interrupted: the one a signal caught. |
+| `items[].reason` | string \| null | yes | Why, for everything but removed and deleted. |
+| `items[].worktreeRemoved` | boolean | yes | Whether the worktree is gone now. |
+| `items[].branchDeleted` | boolean | yes | Whether the branch is gone now. |
+| `items[].pin` | string \| null, matching `^refs/wt-swept/` | yes | Since 1.4.0. The ref the deleted branch was moved into, refs/wt-swept/<runId>/heads/<branch>, read back holding tip; null when the branch was not moved there. |
+| `items[].restoreCommand` | array of string \| null, at least 1 items | yes | When the branch was deleted: the argv that puts it back, not its upstream setting: ["wt", "refs", "restore", runId, "--only", "refs/heads/<branch>", "--yes"] for a pinned branch, ["wt", "restore", dir] for the branch of a worktree moved to a folder. Run it in repo. Null when the branch is there, or gone with no pin. Before 1.4.0 it was ["git", "-C", repo, "branch", branch, tip]; that form is gone. |
+| `items[].quarantine` | object \| null | yes | Since 1.1.0. For a worktree the run moved, or tried to move, into the quarantine; null otherwise. Read from the folder after the row. dir is its own folder (wt restore <dir> puts it back); checkoutMoved and adminMoved say which of the two moves are done. |
+| `items[].quarantine.dir` | string | yes | This worktree's folder in the quarantine; wt restore <dir> puts it back. |
+| `items[].quarantine.checkoutMoved` | boolean | yes | Its checkout is in <dir>/checkout now. |
+| `items[].quarantine.adminMoved` | boolean | yes | Its admin dir is in <dir>/admin now: git no longer lists the worktree. |
+| `items[].superset` | object \| null | yes | Since 1.2.0. For a worktree the run removed, what came of its Superset workspace: result, and reason, which is why for skipped, failed and optedOut and null otherwise. Null when no worktree was removed. It changes neither result nor outcome. |
+| `items[].superset.result` | `"deregistered"` \| `"notRegistered"` \| `"skipped"` \| `"failed"` \| `"optedOut"` | yes | deregistered: the workspace was deleted, after the directory left its path and git stopped listing it. notRegistered: Superset is running and has no workspace there. skipped: the integration is off, Superset is not installed or not running, or the worktree was still there. failed: Superset erred. optedOut (since 1.3.0): --keep-superset; Superset was not asked. |
+| `items[].superset.reason` | string \| null | yes | Why, for skipped, failed and optedOut (--keep-superset). |
+| `items[].reaped` | array of object | yes | Since 1.5.0. With --reap: each process stopped, or tried, right before the worktree went, as in the remove schema; one that survived leaves the worktree in place, result failed. Empty otherwise. |
+| `items[].reaped[].pid` | integer, at least 2 | yes |  |
+| `items[].reaped[].command` | string | yes |  |
+| `items[].reaped[].result` | `"terminated"` \| `"killed"` \| `"gone"` \| `"survived"` | yes |  |
+| `recovery` | string \| null | yes | For interrupted: what wt printed. |
+| `quarantine` | string \| null | yes | Since 1.1.0. With --move-to <dir>: the folder, absolute. Each removed worktree went into a folder of its own in it, with its own recovery.json. null without it. |
+| `runId` | string \| null, matching `^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$` | yes | Since 1.4.0. The run under refs/wt-swept/ the deleted branches were moved into, as wt refs sweep moves backups: wt refs swept lists it, wt refs restore puts them back, wt refs purge deletes them for good. null when no branch was moved: nothing was deleted, or only quarantined worktrees' branches, which the quarantine pins. A run a signal ended may name a run that holds only its meta. |
+<!-- json-docs:end -->
 
 `superset.result`, exhaustively: `deregistered` — the workspace was deleted,
 after the directory had left its path and git no longer listed it;
@@ -1031,22 +1061,51 @@ pins go when the restore is done, with the purge, or at the next `wt sweep` once
 the folder has been deleted (its parent still
 there: a folder on a volume that is not mounted keeps them).
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | as everywhere |
-| `command` | `remove` \| `sweep` | who made it |
-| `createdAt` | string | RFC 3339, UTC |
-| `repo`, `commonDir` | string | the main checkout and the common git dir |
-| `worktreeId` | string | the `<id>` of `.git/worktrees/<id>` |
-| `dir` | string | the folder, as the removal named it |
-| `checkout`, `admin` | object | `path` (where it was), `quarantined` (where it goes), `device` and `inode` (which a rename keeps: a directory at either place with them is this one, and nothing else is) |
-| `gitFile` | string | the checkout's `.git` file as it was, which the restore writes back |
-| `pins` | object | the refs: `head`, `tip` (null when there is none) and `dir`, a blob holding the folder's path |
-| `head` | string \| null | the commit checked out; null before the first |
-| `branch` | object \| null | null for a detached HEAD; else `name`, `tip`, `plan` (`delete`, `keep`, `none`), `keepAs`, `config` (`[{key, value}]`, every value in order; null until captured) and `result` (`deleted`, `renamed`, `untouched`, `kept` — turned down on purpose — or `failed`; null before the step) |
-| `steps` | array | `{name, state, error}` for `lock`, `pin`, `moveCheckout`, `moveAdmin`, `relink`, `branch`, in order |
-| `restore` | object \| null | the restore's own journal: `action`, `occupiedBy`, `createdBranch` (this restore made the branch again; absent before 1.1.0) and its `steps` (`branch`, `moveAdmin`, `relink`, `moveCheckout`, `unlock`, `unpin`); null until `wt restore` changes something |
-| `purge` | object \| null | `{startedAt}`, only in `recovery.purging.json`: the copy of the record `wt purge` writes, and which replaces `recovery.json`, before it deletes anything. With no `recovery.json` no `wt restore` — of any version — restores it (`purging`). Absent before 1.2.0 |
+<!-- json-docs:begin recovery -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"remove"` \| `"sweep"` | yes | The wt command that made the quarantine. |
+| `createdAt` | string | yes | When, RFC 3339, UTC. |
+| `repo` | string | yes | The repository's main checkout. |
+| `commonDir` | string | yes | The repository's common git dir. |
+| `worktreeId` | string | yes | The worktree's id: its admin dir is <commonDir>/worktrees/<worktreeId>. |
+| `dir` | string | yes | The quarantine folder, as the removal named it. Its git lock reason while quarantined is "wt quarantine <dir>". |
+| `checkout` | object | yes | The worktree's checkout; quarantined at <dir>/checkout. |
+| `checkout.path` | string | yes | Where it was. |
+| `checkout.quarantined` | string | yes | Where it goes in the quarantine. |
+| `checkout.device` | integer, at least 0 | yes |  |
+| `checkout.inode` | integer, at least 0 | yes | A rename keeps device and inode: a directory at either place, path or quarantined, with these is this one, and nothing else is. |
+| `admin` | object | yes | The worktree's admin dir, .git/worktrees/<id>, with its initialised submodules' repositories under modules/; quarantined at <dir>/admin. Moving it is what unregisters the worktree. Fields as at `checkout`. |
+| `gitFile` | string | yes | The checkout's .git file as it was. While quarantined, <dir>/checkout/.git names <dir>/admin instead, so a new worktree that takes the id is never the one git in the quarantine works on; restore writes this back. |
+| `pins` | object | yes | Refs that hold the worktree's HEAD and its branch's tip while it is quarantined — once the branch is deleted and the admin dir is out of the repository nothing else may, and gc would take them. Created before anything moves, deleted when the restore is done, or by wt sweep once the quarantine folder has been deleted. |
+| `pins.head` | string \| null | yes | refs/wt-quarantine/<id>-<hash>/head, at head; null when there is none. |
+| `pins.tip` | string \| null | yes | refs/wt-quarantine/<id>-<hash>/tip, at branch.tip; null without a branch. |
+| `pins.dir` | string | yes | refs/wt-quarantine/<id>-<hash>/dir, a blob holding the quarantine folder's path, by which wt sweep tells a deleted quarantine's pins. |
+| `head` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit checked out; null before the first commit. |
+| `branch` | object \| null | yes | The branch checked out; null for a detached HEAD or a branch with no commit. |
+| `branch.name` | string | yes |  |
+| `branch.tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `branch.plan` | `"delete"` \| `"keep"` \| `"none"` | yes | delete: merged, deleted. keep: renamed to keepAs. none: left alone. |
+| `branch.keepAs` | string \| null | yes |  |
+| `branch.config` | array of object \| null | yes | The branch's section of the local config, every value in order, captured right before the branch step; null until then. |
+| `branch.config[].key` | string | yes |  |
+| `branch.config[].value` | string | yes |  |
+| `branch.result` | `"deleted"` \| `"renamed"` \| `"untouched"` \| `"kept"` \| `"failed"` \| `null` | yes | What the branch step came to. kept: turned down on purpose (moved, no longer merged, taken by a worktree). failed: git failed; the removal is partial. null before the step. |
+| `steps` | array of object | yes | The removal's steps, exactly these in this order: lock (git's worktree lock with the quarantine's reason, fsynced), pin (the refs in pins), moveCheckout, moveAdmin, relink (the quarantined checkout's .git names <dir>/admin), branch. Closed: another step is a new major. |
+| `steps[].name` | `"lock"` \| `"pin"` \| `"moveCheckout"` \| `"moveAdmin"` \| `"relink"` \| `"branch"` \| `"unlock"` \| `"unpin"` | yes |  |
+| `steps[].state` | `"pending"` \| `"running"` \| `"done"` \| `"failed"` | yes | Closed. running is written before the step changes anything: left so, the step may or may not have happened, and the places say which. |
+| `steps[].error` | string \| null | yes |  |
+| `restore` | object \| null | yes | The restore's own journal; null until wt restore first changes something. |
+| `restore.action` | `"none"` \| `"renameBack"` \| `"recreate"` \| `"attach"` \| `"detach"` \| `null` | yes | What the restore does to the branch; see the restore schema. |
+| `restore.occupiedBy` | string \| null | yes | The worktree using the branch, when that made the action detach. |
+| `restore.createdBranch` | boolean | no | Set once this restore has made the branch again (recreate): it owns that branch and its config until the restore is done, also after a failed step, so running it again puts back the recorded config still missing. Absent in records written before 1.1.0: read as false. |
+| `restore.steps` | array of object | yes | branch, moveAdmin, relink, moveCheckout, unlock, unpin, exactly, in order. Closed. |
+| `restore.steps[]` | object | yes | Fields as at `steps[]`. |
+| `purge` | object \| null | no | The purge's journal: set only in <dir>/recovery.purging.json, the copy of this record `wt purge <dir>` writes, and which replaces recovery.json, before it deletes anything. With no recovery.json no wt restore, of any version, restores it: the pins may be gone. Running the purge again finishes it. Absent in records written before 1.2.0: read as null. |
+| `purge.startedAt` | string | yes | When the purge began, RFC 3339, UTC. |
+<!-- json-docs:end -->
 
 The step lists and the states are **closed**, unlike the enumerations elsewhere:
 wt refuses a record whose steps are not exactly these, in this order, so another
@@ -1068,19 +1127,34 @@ A branch step that fails once the checkout has gone is **partial**, and wt says
 What `wt restore <dir>` would do, changing nothing: where each directory is,
 what happens to the branch, and every reason it would refuse.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | |
-| `command` | `"restore"` | |
-| `dir` | string | the folder, absolute |
-| `repo` | string \| null | from `recovery.json` |
-| `checkout`, `admin` | object \| null | `path`, `quarantined`, and `location`: `original` (at its path, the same directory by inode — moved back, or never moved), `quarantined`, `taken` (something else is at its path), `missing` |
-| `head` | string \| null | the commit to detach at, if it comes to that |
-| `branch` | object \| null | `name`, `tip`, `keepAs`, `removal` (the removal's `branch.result`), `action` and `occupiedBy` |
-| `locked` | bool | the worktree carries the removal's lock, which comes off last |
-| `orphan` | string \| null | a worktree locked for `<dir>` with no `recovery.json`: restoring it is unlocking it |
-| `problems` | array | `{code, text}`: `noRecord`, `repository`, `checkoutTaken`, `checkoutMissing`, `adminTaken`, `adminMissing`, `volume`, `commitMissing`, `worktreesUnknown`, `purging` (a purge began: its pins may be gone) |
-| `error` | string \| null | the problems in words |
+<!-- json-docs:begin restore-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"restore"` | yes |  |
+| `dir` | string | yes | The quarantine folder, absolute. |
+| `repo` | string \| null | yes | The repository, from recovery.json; null without one. |
+| `checkout` | object \| null | yes |  |
+| `checkout.path` | string | yes |  |
+| `checkout.quarantined` | string | yes |  |
+| `checkout.location` | `"original"` \| `"quarantined"` \| `"taken"` \| `"missing"` | yes | original: at path, the same directory (by inode) — moved back, or never moved. quarantined: in the quarantine. taken: something else is at path. missing: in neither place. |
+| `admin` | object \| null | yes | Fields as at `checkout`. |
+| `head` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit to detach at, if it comes to that. |
+| `branch` | object \| null | yes |  |
+| `branch.name` | string | yes |  |
+| `branch.tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `branch.keepAs` | string \| null | yes |  |
+| `branch.removal` | `"deleted"` \| `"renamed"` \| `"untouched"` \| `"kept"` \| `"failed"` \| `null` | yes | What the removal's branch step came to, as recovery.json records it. |
+| `branch.action` | `"none"` \| `"renameBack"` \| `"recreate"` \| `"attach"` \| `"detach"` \| `null` | yes | none: the branch is there at its tip. renameBack: kept under keepAs; gets its name back, config included. recreate: deleted and the name free; made again at tip with its recorded config. attach: its name holds another commit and keepAs still has tip; HEAD names keepAs. detach: another worktree uses it, or it moved on; no branch change, HEAD detached at head. null when a problem stops the decision. |
+| `branch.occupiedBy` | string \| null | yes | The worktree that has the branch — as HEAD, rebasing it, or bisecting from it — when that made the action detach. |
+| `locked` | boolean | yes | The worktree carries this quarantine's git lock, which the restore takes off last. |
+| `orphan` | string \| null | yes | A worktree locked for this quarantine with no recovery.json: stopped before anything moved; restoring it is unlocking it. |
+| `problems` | array of object | yes | Every reason the restore refuses; empty when it would go ahead. Each has a code and its text. |
+| `problems[].code` | `"noRecord"` \| `"repository"` \| `"checkoutTaken"` \| `"checkoutMissing"` \| `"adminTaken"` \| `"adminMissing"` \| `"volume"` \| `"commitMissing"` \| `"worktreesUnknown"` \| `"purging"` | yes | Why the restore refuses: noRecord, repository, checkoutTaken, checkoutMissing, adminTaken, adminMissing, volume, commitMissing, worktreesUnknown, or purging (a purge began: its pins may be gone). |
+| `problems[].text` | string | yes | The problem in words. |
+| `error` | string \| null | yes | The problems in words, or why the plan could not be made. |
+<!-- json-docs:end -->
 
 `branch.action`, exhaustively, decided in this order:
 
@@ -1119,15 +1193,35 @@ running `wt restore <dir>` again finishes a restore — or a removal — stopped
 anywhere. The human output goes to stderr. A handled SIGINT or SIGTERM writes the
 object too.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion`, `command`, `dir`, `repo` | | as in the plan |
-| `outcome` | `restored` \| `refused` \| `partial` \| `interrupted` | restored: registered at its path again, branch action done, lock off. refused: nothing changed. partial: a step failed after others; run it again. interrupted: a signal |
-| `error` | string \| null | |
-| `checkout`, `admin`, `branch` | | as in the plan, read when the object is written |
-| `unlocked` | bool | this run took the removal's lock off |
-| `steps` | array | the restore's steps from `recovery.json`; empty when it has none |
-| `recovery` | string \| null | for `interrupted`: what wt printed |
+<!-- json-docs:begin restore -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"restore"` | yes |  |
+| `dir` | string | yes |  |
+| `repo` | string \| null | yes | As in the plan: the repository's main checkout, from recovery.json; when the record cannot be loaded, the current repository's. |
+| `outcome` | `"restored"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | restored: the worktree is registered at its path again, with the branch action done, the quarantine's lock is off and its pins are deleted. refused: nothing changed. partial: a step failed after others were done; recovery.json says which, and wt restore <dir> again finishes it. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | The problems in words; null when there were none. |
+| `checkout` | object \| null | yes | As in the plan, read when the object is written. |
+| `checkout.path` | string | yes |  |
+| `checkout.quarantined` | string | yes |  |
+| `checkout.location` | `"original"` \| `"quarantined"` \| `"taken"` \| `"missing"` | yes | original: at path, the same directory (by inode) — moved back, or never moved. quarantined: in the quarantine. taken: something else is at path. missing: in neither place. |
+| `admin` | object \| null | yes | As in the plan, read when the object is written. Fields as at `checkout`. |
+| `branch` | object \| null | yes | As in the plan, read when the object is written. |
+| `branch.name` | string | yes |  |
+| `branch.tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `branch.keepAs` | string \| null | yes |  |
+| `branch.removal` | `"deleted"` \| `"renamed"` \| `"untouched"` \| `"kept"` \| `"failed"` \| `null` | yes | What the removal's branch step came to, as recovery.json records it. |
+| `branch.action` | `"none"` \| `"renameBack"` \| `"recreate"` \| `"attach"` \| `"detach"` \| `null` | yes | none: the branch is there at its tip. renameBack: kept under keepAs; gets its name back, config included. recreate: deleted and the name free; made again at tip with its recorded config. attach: its name holds another commit and keepAs still has tip; HEAD names keepAs. detach: another worktree uses it, or it moved on; no branch change, HEAD detached at head. null when a problem stops the decision. |
+| `branch.occupiedBy` | string \| null | yes | The worktree that has the branch — as HEAD, rebasing it, or bisecting from it — when that made the action detach. |
+| `unlocked` | boolean | yes | This run took the quarantine's lock off. |
+| `steps` | array of object | yes | The restore's steps as recovery.json records them — branch, moveAdmin, relink, moveCheckout, unlock, unpin — or empty when it has none. The list is closed. |
+| `steps[].name` | `"branch"` \| `"moveAdmin"` \| `"relink"` \| `"moveCheckout"` \| `"unlock"` \| `"unpin"` | yes |  |
+| `steps[].state` | `"pending"` \| `"running"` \| `"done"` \| `"failed"` | yes |  |
+| `steps[].error` | string \| null | yes |  |
+| `recovery` | string \| null | yes | For interrupted: what wt printed. |
+<!-- json-docs:end -->
 
 ## `wt purge <dir> --dry-run --json` — the plan
 
@@ -1136,23 +1230,36 @@ would refuse, deleting nothing. `--json` without `--yes` prints it too.
 `command` is `"quarantine purge"` and the schemas are `quarantine-purge-plan`
 and `quarantine-purge`, as they were when the command was `wt quarantine purge`.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | |
-| `command` | `"quarantine purge"` | |
-| `dir` | string | the folder, absolute |
-| `repo` | string \| null | from `recovery.json` |
-| `state` | string \| null | `quarantined`, `restored`, `purging`, `empty` or `unsettled`; null when the folder has no record purge can read |
-| `token` | string \| null | names this plan: the folder by path and identity, its state, its record byte for byte, its entries, every path in it with its type, size and time, each pin and where it is, what would be lost; null when it would refuse |
-| `worktree`, `branch`, `createdAt` | string \| null | where the checkout was, its branch, when it was moved there |
-| `entries` | array of string | every name in the folder, sorted; all of it goes |
-| `bytes` | integer \| null | the size of its files, symlinks not followed; null when something cannot be read |
-| `pins` | array | `{name, ref, oid}` for `head`, `tip`, `dir` as `recovery.json` names them; `oid` null when the pin is gone already |
-| `unreachable` | array | `{kind, oid, count}`: a pinned commit (`head` or `tip`) whose `count` commits nothing else holds, which gc may take once the pins go |
-| `reachError` | string \| null | why that could not be counted |
-| `repositoryGone` | bool | the recorded git dir is gone: deleted, its pins went with it; moved, they stay there until `wt sweep` in it drops them. The purge goes ahead on the record's own checks, every pin listed with `oid` null |
-| `problems` | array | `{code, text}`, below |
-| `error` | string \| null | the problems in words |
+<!-- json-docs:begin quarantine-purge-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"quarantine purge"` | yes |  |
+| `dir` | string | yes | The folder, absolute. |
+| `repo` | string \| null | yes | The repository's main checkout, from recovery.json; null without one. |
+| `state` | `"quarantined"` \| `"restored"` \| `"purging"` \| `"empty"` \| `"unsettled"` \| `null` | yes | quarantined: a removal moved a worktree here and finished; the purge deletes it for good. restored: wt restore put it back; only what it left goes. purging: a purge began and stopped; this one finishes it. empty: an empty folder; nothing names what it was, so it is refused (problem empty). A purge stopped between its last two steps leaves one. unsettled: a removal or a restore stopped mid-way; refused (problem unsettled). null: the folder is not a quarantine purge can read. |
+| `token` | string \| null | yes | Names this plan: the folder by path and identity, its state, its record byte for byte, its entries, every path in it with its type, size and time, each pin and where it is, and what would be lost. null when the purge would refuse. The purge reads the plan again, holding the folder's lock, and goes ahead only while it is the same. |
+| `worktree` | string \| null | yes | Where the quarantined worktree's checkout was, from recovery.json. |
+| `branch` | string \| null | yes | The branch it had checked out, from recovery.json. |
+| `createdAt` | string \| null | yes | When the quarantine was made, RFC 3339, UTC. |
+| `entries` | array of string | yes | Every name in the folder, sorted: all of it is deleted. A symlink is deleted, never what it names. |
+| `bytes` | integer \| null, at least 0 | yes | The size of every file in the folder, symlinks not followed; null when something in it cannot be read. |
+| `pins` | array of object | yes | The refs recovery.json names, in the order head, tip, dir. Each is deleted only while it is at oid. |
+| `pins[].name` | `"head"` \| `"tip"` \| `"dir"` | yes |  |
+| `pins[].ref` | string | yes | refs/wt-quarantine/<id>-<hash>/<name>. |
+| `pins[].oid` | string \| null | yes | Where it is now; null when it is gone already. |
+| `unreachable` | array of object | yes | Each pinned commit whose history nothing else holds: once the pins go, gc may take those commits. |
+| `unreachable[].kind` | `"head"` \| `"tip"` | yes |  |
+| `unreachable[].oid` | string | yes |  |
+| `unreachable[].count` | integer, at least 1 | yes | Commits reachable from oid and from no other ref or worktree HEAD. |
+| `reachError` | string \| null | yes | Why what becomes unreachable could not be counted. |
+| `repositoryGone` | boolean | yes | The repository's git dir, as recorded, is gone. Deleted, its pins went with it; moved, they stay there until wt sweep in it drops them. The purge goes ahead on the record's own checks, and every pin is listed with oid null. |
+| `problems` | array of object | yes |  |
+| `problems[].code` | `"missing"` \| `"notAFolder"` \| `"noRecord"` \| `"wrongFolder"` \| `"repository"` \| `"pinsForeign"` \| `"pinsUnreadable"` \| `"unsettled"` \| `"foreignEntry"` \| `"nestedQuarantine"` \| `"empty"` \| `"worktreesUnknown"` \| `"registered"` \| `"locked"` \| `"location"` | yes | missing: no such folder. notAFolder: a symlink or a file. noRecord: no recovery.json (nor recovery.purging.json), or one wt cannot trust. wrongFolder: the record was written for another folder, or what is at its checkout or admin is not the directory the removal moved there. repository: its repository cannot be opened, or is another one now. pinsForeign: a pin it names is not this quarantine's, or holds something the removal did not pin. pinsUnreadable: git cannot read a pin (a broken ref), which is not taken for one that is gone. unsettled: a removal or a restore stopped mid-way; wt restore <dir> settles it. worktreesUnknown: the worktrees cannot be listed. registered: git has a worktree registered inside the folder. locked: a worktree is locked for this quarantine. location: the folder is inside a checkout or the git dir, or holds the git dir. foreignEntry: something at its top level no quarantine in its state leaves there (quarantined: checkout, admin; always: the journal, its temp file, .DS_Store). nestedQuarantine: another quarantine's record below its top level. empty: an empty folder. |
+| `problems[].text` | string | yes | The problem in words. |
+| `error` | string \| null | yes | The problems in words. |
+<!-- json-docs:end -->
 
 `state`:
 
@@ -1207,15 +1314,29 @@ not a boundary — whoever can write the folder can delete it.
 The human output goes to stderr; a handled SIGINT or SIGTERM writes the object
 too.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion`, `command`, `dir`, `repo`, `state`, `token` | | as in the plan it went by |
-| `outcome` | `purged` \| `refused` \| `partial` \| `interrupted` | purged: every pin and the folder are gone. refused: nothing was deleted. partial: it began and stopped; run it again. interrupted: a signal |
-| `error` | string \| null | |
-| `problems` | array | as in the plan, plus `planChanged`: `--expect` named another plan, or the plan changed while the question was open or before the lock was taken |
-| `pins` | array | `{name, ref, oid, result}`: `oid` as planned; `result` `deleted`, `absent` (gone already) or `kept` (still there, or unreadable), read when the object is written |
-| `folderDeleted` | bool | the folder is gone |
-| `recovery` | string \| null | for `interrupted`: what wt printed |
+<!-- json-docs:begin quarantine-purge -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"quarantine purge"` | yes |  |
+| `dir` | string | yes |  |
+| `repo` | string \| null | yes | As in the plan: the repository's main checkout, from recovery.json; null without one. |
+| `state` | `"quarantined"` \| `"restored"` \| `"purging"` \| `"empty"` \| `"unsettled"` \| `null` | yes | What the folder was when the purge planned, as in the plan. |
+| `token` | string \| null | yes | The token of the plan the purge went by. |
+| `outcome` | `"purged"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | purged: every pin and the folder are gone. refused: nothing was deleted (problems says why, planChanged for --expect). partial: the purge began and stopped; recovery.purging.json, or an empty folder, says so, and running it again finishes it. interrupted: a signal ended the run. |
+| `error` | string \| null | yes |  |
+| `problems` | array of object | yes |  |
+| `problems[].code` | `"missing"` \| `"notAFolder"` \| `"noRecord"` \| `"wrongFolder"` \| `"repository"` \| `"pinsForeign"` \| `"pinsUnreadable"` \| `"unsettled"` \| `"foreignEntry"` \| `"nestedQuarantine"` \| `"empty"` \| `"worktreesUnknown"` \| `"registered"` \| `"locked"` \| `"location"` \| `"planChanged"` | yes | As in the plan, and planChanged: the plan is not the one --expect named, not the one the question was asked about, or not the one read again under the folder's lock. |
+| `problems[].text` | string | yes | The problem in words. |
+| `pins` | array of object | yes | oid is as planned; result is read when the object is written. |
+| `pins[].name` | `"head"` \| `"tip"` \| `"dir"` | yes |  |
+| `pins[].ref` | string | yes |  |
+| `pins[].oid` | string \| null | yes | Where it was when the purge planned; null when it was gone already. |
+| `pins[].result` | `"deleted"` \| `"absent"` \| `"kept"` | yes | deleted: it was there and is gone. absent: it was gone already. kept: it is still there, or cannot be read. It is read when the object is written. |
+| `folderDeleted` | boolean | yes | The folder is gone. |
+| `recovery` | string \| null | yes | For interrupted: what wt printed. |
+<!-- json-docs:end -->
 
 ## `wt refs sweep --dry-run --json` — the ref sweep's plan
 
@@ -1258,46 +1379,47 @@ and a non-zero exit. So is an
 `--only` that names an id the plan does not have or a row it keeps: the items
 are there, the token is null.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema` | 1 | the major version |
-| `schemaVersion` | string | the full version, `1.<minor>.<patch>` |
-| `command` | `"refs sweep"` | |
-| `repo` | string \| null | the main checkout; null outside a repository |
-| `trunk` | string \| null | trunk's branch name |
-| `trunkSource` | string \| null | how `trunk` was found ([`trunkSource`](#trunksource--how-trunk-was-found)) |
-| `fetched` | bool | origin was fetched first |
-| `remote` | bool | `--remote` was given |
-| `patterns` | array of string | `ref_sweep_patterns`, in the order they are tried |
-| `keepPatterns` | array of string | `ref_keep_patterns`: a ref matching one is `kept` as a `deliberateBackup` and never selected, even when `patterns` matches it too |
-| `age` | string \| null | `ref_sweep_age`, e.g. `14d` |
-| `now` | int | unix seconds the plan was made at; age is measured from it |
-| `endpoint` | object \| null | with `--remote`: `{url, digest}` — the one URL with its userinfo removed, and `sha256:` with the lowercase hex SHA-256 of the full effective URL. The token covers the digest. Null without `--remote` |
-| `runId` | null | always null: the run that applies the plan mints it |
-| `token` | string \| null | `rs1-…`: names the plan; pass it to `--yes --expect`. It covers the rows, `--remote`, the patterns, the age, the repository and trunk — not the selection, so `--only` picks from the plan a token names. Null when no row could be swept, or on error |
-| `error` | string \| null | why no plan could be made |
-| `problems` | array | `{code, text}` for the refusals that have a code: `remoteAmbiguous`, `remoteCredentialsInUrl`; empty otherwise |
-| `items` | array | every backup, here first, then origin's |
-
-Each item:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `id` | string | `refs/heads/<name>` or `refs/tags/<name>`; on origin `origin:refs/heads/<name>` or `origin:refs/tags/<name>`. `--only` takes it — one id per `--only`, never split, since a ref name may contain a comma |
-| `kind` | `branch` \| `tag` \| `remoteBranch` \| `remoteTag` | |
-| `name` | string | the short name the pattern matched |
-| `pattern` | string | the first pattern it matched |
-| `category` | `backupContained` \| `backupOld` \| `backupYoung` \| `kept` | below |
-| `selected` | bool | a sweep with this plan moves it: `backupContained` and `backupOld` by default, or exactly what `--only` names |
-| `tip` | string \| null | the commit; null when it is not here (`objectMissing`) |
-| `object` | string | the ref's own value: the tag object of an annotated tag, else the tip |
-| `annotated` | bool \| null | tags: an annotated tag; null for branches |
-| `containedIn` | string \| null | the first container holding the tip — trunk (`refs/heads/<trunk>`, then `refs/remotes/origin/<trunk>`), then origin's branches, then the rest, each group by name. A remote row names origin's ref as `origin:<ref>` |
-| `uniqueCommits` | int \| null | commits on no container; null when contained or not known |
-| `date` | int \| null | unix seconds, a point in time: see `dateSource` |
-| `dateSource` | `reflog` \| `tagger` \| `commit` \| null | a branch here: the first entry of its reflog, which is when it was made; an annotated tag: its tagger date; anything else: its tip's committer date |
-| `kept` | array of string | every reason that holds it; empty unless `kept` is the category |
-| `subject` | string \| null | the tip's commit subject |
+<!-- json-docs:begin refs-sweep-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"refs sweep"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `trunk` | string \| null | yes | Trunk's branch name. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `null` | yes | How trunk was found: see trunkSource in wt status --json. |
+| `fetched` | boolean | yes | Whether origin was fetched first. |
+| `remote` | boolean | yes | Whether --remote was given. |
+| `patterns` | array of string | yes | ref_sweep_patterns, in the order they are tried. |
+| `keepPatterns` | array of string | yes | ref_keep_patterns: a ref matching one is listed as kept (deliberateBackup) and never selected, even when patterns matches it too. |
+| `age` | string \| null | yes | ref_sweep_age, e.g. 14d. |
+| `now` | integer | yes | Unix seconds the plan was made at; age is measured from it. |
+| `endpoint` | object \| null | yes | With --remote: the one URL all contact with origin goes through, and its digest, which the token covers. Null without --remote. It is {url, digest}: the one URL with its userinfo removed, and sha256: followed by the lowercase hex SHA-256 of the full effective URL. |
+| `endpoint.url` | string | yes | origin's one effective URL, fetch and push alike, insteadOf and pushInsteadOf applied, with all userinfo removed (git@host:o/r is host:o/r). |
+| `endpoint.digest` | string, matching `^sha256:[0-9a-f]{64}$` | yes | sha256: and the lowercase hex SHA-256 of the effective URL's UTF-8 bytes. |
+| `runId` | null | yes | Always null: the run that applies the plan mints it. |
+| `token` | string \| null, matching `^rs1-[0-9a-f]{32}$` | yes | rs1-…: names the plan; pass it to --yes --expect. It covers the rows, --remote, the patterns, the age, the repository and trunk, not the selection, so --only picks from the plan a token names. Null when no row could be swept, or on error. |
+| `error` | string \| null | yes | Why no plan could be made. |
+| `problems` | array of object | yes | {code, text} for the refusals that have a code: remoteAmbiguous, remoteCredentialsInUrl; empty otherwise. |
+| `problems[].code` | `"remoteAmbiguous"` \| `"remoteCredentialsInUrl"` \| `"planChanged"` \| `"runIdTaken"` | yes | remoteAmbiguous: --remote, and origin's effective fetch and push URLs are not one and the same URL. remoteCredentialsInUrl: --remote, and that URL carries a password (in any form, scp-like too), or any userinfo on http, https, ftp or ftps; a <transport>::<address> URL is judged on its address too. planChanged: the plan is not the one --expect named, or not the one the question was asked about. runIdTaken: --run-id names a run that has refs under refs/wt-swept/ already. |
+| `problems[].text` | string | yes | The refusal in words. |
+| `items` | array of object | yes | Every backup, here first, then origin's. |
+| `items[].id` | string | yes | refs/heads/<name> or refs/tags/<name> here; origin:refs/heads/<name> or origin:refs/tags/<name> on origin. --only takes it, one id per flag and never split: a ref name may contain a comma. |
+| `items[].kind` | `"branch"` \| `"tag"` \| `"remoteBranch"` \| `"remoteTag"` | yes | branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin. |
+| `items[].name` | string | yes | The short name the pattern matched. |
+| `items[].pattern` | string | yes | The first pattern it matched. |
+| `items[].category` | `"backupContained"` \| `"backupOld"` \| `"backupYoung"` \| `"kept"` | yes | backupContained: another ref contains it (selected). backupOld: it holds commits no other ref has and is older than age (selected). backupYoung: the same, younger (not selected unless --only names it). kept: something holds it, or it is a deliberate backup (ref_keep_patterns); kept says what. Never selected. |
+| `items[].selected` | boolean | yes | A sweep with this plan moves it: backupContained and backupOld by default, or what --only names. |
+| `items[].tip` | string \| null, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The commit; null when it is not here (objectMissing). |
+| `items[].object` | string, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The ref's own value: the tag object of an annotated tag, else the tip. |
+| `items[].annotated` | boolean \| null | yes | Tags: an annotated tag. Null for branches. |
+| `items[].containedIn` | string \| null | yes | The first ref that contains the tip: trunk (refs/heads/<trunk>, then refs/remotes/origin/<trunk>), then origin's branches, then the rest, each group by name. A remote row names origin's ref as origin:<ref>. |
+| `items[].uniqueCommits` | integer \| null, at least 0 | yes | Commits on no container; null when contained or not known. |
+| `items[].date` | integer \| null | yes | Unix seconds: when the branch was created, the tag was made, or the tip was committed; see dateSource. See dateSource. |
+| `items[].dateSource` | `"reflog"` \| `"tagger"` \| `"commit"` \| `null` | yes | Which point in time date is: reflog, a branch here, the first entry of its reflog, which is when it was made; tagger, an annotated tag, its tagger date; commit, anything else, its tip's committer date. |
+| `items[].kept` | array of `"worktree"` \| `"heldByRebase"` \| `"heldByBisect"` \| `"quarantine"` \| `"protected"` \| `"objectMissing"` \| `"pullRequestOpen"` \| `"pullRequestUnknown"` \| `"notContained"` \| `"deliberateBackup"` | yes | Every reason that holds it; empty unless category is kept. |
+| `items[].subject` | string \| null | yes | The tip's commit subject. |
+<!-- json-docs:end -->
 
 The categories:
 
@@ -1360,28 +1482,42 @@ then exits 130 for SIGINT or 143 for SIGTERM: the rows done keep their result,
 the row in flight is `interrupted` with `pinned` and `deleted` read back, the
 rest are `notRun`. The same holds for `wt refs restore` and `wt refs purge`.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion`, `command`, `repo`, `trunk`, `fetched`, `remote` | | as in the plan |
-| `token` | string \| null | the token of the plan the run went by |
-| `runId` | string \| null | the run's id; null when the run never began: refused, or nothing selected. A run that ends having moved nothing drops its meta, so nothing of it is left under `refs/wt-swept/` |
-| `outcome` | `done` \| `refused` \| `partial` \| `interrupted` | done: every selected row was swept (also when none was selected). refused: nothing was pinned or deleted (`error` says why, e.g. `--expect`). partial: some rows were, some not. interrupted: a signal |
-| `error` | string \| null | why the run stopped before moving anything |
-| `problems` | array | `{code, text}`: the plan's, and `planChanged` (`--expect` named another plan, or the plan changed while the question was open) or `runIdTaken` |
-| `recovery` | string \| null | for `interrupted`: what wt printed |
-| `items` | array | every row of the plan |
+<!-- json-docs:begin refs-sweep -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"refs sweep"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `trunk` | string \| null | yes | Trunk's branch name. |
+| `fetched` | boolean | yes | Whether origin was fetched first. |
+| `remote` | boolean | yes | Whether --remote was given. |
+| `token` | string \| null, matching `^rs1-[0-9a-f]{32}$` | yes | The token of the plan the run went by. |
+| `runId` | string \| null, matching `^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$` | yes | The run's id, which names its pins; null when the run never began: it was refused, or nothing was selected. A run that ends having moved nothing drops its meta, so nothing of it is left under refs/wt-swept/. |
+| `outcome` | `"done"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | done: every selected row was swept. refused: nothing was pinned or deleted (error says why, e.g. --expect). partial: some were, some not. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | Why the run stopped before moving anything. |
+| `problems` | array of object | yes | {code, text}: the plan's, and planChanged (--expect named another plan, or the plan changed while the question was open) or runIdTaken. |
+| `problems[].code` | `"remoteAmbiguous"` \| `"remoteCredentialsInUrl"` \| `"planChanged"` \| `"runIdTaken"` | yes | remoteAmbiguous: --remote, and origin's effective fetch and push URLs are not one and the same URL. remoteCredentialsInUrl: --remote, and that URL carries a password (in any form, scp-like too), or any userinfo on http, https, ftp or ftps; a <transport>::<address> URL is judged on its address too. planChanged: the plan is not the one --expect named, or not the one the question was asked about. runIdTaken: --run-id names a run that has refs under refs/wt-swept/ already. |
+| `problems[].text` | string | yes | The problem in words. |
+| `recovery` | string \| null | yes | For interrupted: what wt printed. |
+| `items` | array of object | yes | Every row of the plan, in its order. |
+| `items[].id` | string | yes | refs/heads/<name> or refs/tags/<name> here; origin:refs/heads/<name> or origin:refs/tags/<name> on origin. --only takes it, one id per flag and never split: a ref name may contain a comma. |
+| `items[].kind` | `"branch"` \| `"tag"` \| `"remoteBranch"` \| `"remoteTag"` | yes | branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin. |
+| `items[].name` | string | yes | The short name the pattern matched. |
+| `items[].category` | `"backupContained"` \| `"backupOld"` \| `"backupYoung"` \| `"kept"` | yes | backupContained: another ref contains it (selected). backupOld: it holds commits no other ref has and is older than age (selected). backupYoung: the same, younger (not selected unless --only names it). kept: something holds it, or it is a deliberate backup (ref_keep_patterns); a kept row is never selected. |
+| `items[].selected` | boolean | yes | Whether a sweep with this plan moves it: backupContained and backupOld by default, or exactly what --only names. |
+| `items[].tip` | string \| null, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The commit; null when it is not here (objectMissing). |
+| `items[].object` | string, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The ref's own value: the tag object of an annotated tag, else the tip. |
+| `items[].result` | `"swept"` \| `"kept"` \| `"failed"` \| `"notRun"` \| `"interrupted"` \| `"notSelected"` | yes | swept: pinned and deleted. kept: the plan kept it, or it moved or was taken after the plan (reason says). failed: tried and not finished (pinned and deleted say what did happen). notRun: the run ended before it. interrupted: a signal caught it. notSelected: the plan did not select it. |
+| `items[].reason` | string \| null | yes | Why, for kept and failed. For a row the plan kept, the codes that hold it; for a row kept when the run reached it, what changed after the plan was made (it moved, it was deleted, it was checked out). |
+| `items[].pin` | string \| null | yes | refs/wt-swept/<runId>/{heads,tags,remote-heads,remote-tags}/<name>, for a selected row once the run began. |
+| `items[].pinned` | boolean | yes | The pin holds object, read back after the row. |
+| `items[].deleted` | boolean | yes | The ref is gone, here or on origin, read back after the row. |
+| `items[].restoreCommand` | array of string \| null | yes | For a row pinned and deleted: the argv that puts it back, ["wt", "refs", "restore", <runId>, "--only", <id>, "--yes"], whatever the row's kind (a branch, a tag, or a remote ref). Run it in repo. |
+<!-- json-docs:end -->
 
 Each item: `id`, `kind`, `name`, `category`, `selected`, `tip`, `object` as in
-the plan, and:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `result` | `swept` \| `kept` \| `failed` \| `notRun` \| `interrupted` \| `notSelected` | swept: pinned and deleted. kept: the plan keeps it (`reason` is its codes) or it moved or was taken after the plan. failed: tried and not finished. notRun: the run ended before it. interrupted: a signal caught it. notSelected: the plan did not select it |
-| `reason` | string \| null | why, for kept and failed |
-| `pin` | string \| null | the pin, for a selected row once the run began |
-| `pinned` | bool | the pin holds `object`, read back after the row |
-| `deleted` | bool | the ref is gone, here or on origin, read back after the row |
-| `restoreCommand` | array \| null | for a row pinned and deleted: `["wt","refs","restore",<runId>,"--only",<id>,"--yes"]` |
+the plan, and. Its fields are in the field table above.
 
 ## `wt refs restore <runId> --dry-run --json` — the plan
 
@@ -1391,15 +1527,25 @@ origin (`ls-remote`) what is at the name. `wt refs restore <runId> --json`
 without `--yes` prints the same plan. `--only <id>`, one id per flag, restores
 just those; an id the run does not have, or one whose name is taken, refuses.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | |
-| `command` | `"refs restore"` | |
-| `repo` | string \| null | |
-| `runId` | string | as given, also when it is not a run id (then `error` says so) |
-| `token` | string \| null | `rr1-…`: covers the repository, the run, each pin with its object and action, and, when a remote ref can go back and origin resolves to one URL now, that URL's digest. Null when nothing can go back, or on error |
-| `error` | string \| null | a run id that is not one, a run with nothing under `refs/wt-swept/<runId>/`, `--only` refused |
-| `items` | array | `{id, kind, name, pin, object, action, selected}` |
+<!-- json-docs:begin refs-restore-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"refs restore"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `runId` | string | yes | The run id as given, also when it is not a run id (then error says so). |
+| `token` | string \| null, matching `^rr1-[0-9a-f]{32}$` | yes | rr1-…: names the plan; pass it to --yes --expect. It covers the repository, the run, each pin with its object and action, and, when a remote ref can go back and origin resolves to one URL now, that URL's digest. Null when nothing can go back, or on error. |
+| `error` | string \| null | yes | Why no plan could be made: a run id that is not one, a run with nothing under refs/wt-swept/<runId>/, or --only refused. |
+| `items` | array of object | yes | The refs the run pinned, each with its id, kind, name, pin, object, action and whether it is selected. |
+| `items[].id` | string | yes | refs/heads/<name> or refs/tags/<name> here; origin:refs/heads/<name> or origin:refs/tags/<name> on origin. --only takes it, one id per flag and never split: a ref name may contain a comma. |
+| `items[].kind` | `"branch"` \| `"tag"` \| `"remoteBranch"` \| `"remoteTag"` | yes | branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin. |
+| `items[].name` | string | yes | The short name of the ref. |
+| `items[].pin` | string | yes | The pin under refs/wt-swept/ that holds the object. |
+| `items[].object` | string, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The ref's own value: the tag object of an annotated tag, else the tip. |
+| `items[].action` | `"create"` \| `"none"` \| `"occupied"` \| `"remoteOccupied"` \| `"pinGone"` \| `"endpointChanged"` \| `"endpointUnknown"` | yes | create: the name is free; it is made at object. none: it is already there at object; only the pin goes. occupied: the name holds another object here. remoteOccupied: origin has something there. endpointChanged: a remote ref, and origin no longer resolves to the URLs the run recorded in its meta. endpointUnknown: a remote ref, and the run has no meta. pinGone: the pin is not there any more; a pin that goes between the plan and the run is reported as kept, its reason starting pinGone. |
+| `items[].selected` | boolean | yes | A restore with this plan acts on it: every row whose action is create or none, or what --only names. |
+<!-- json-docs:end -->
 
 `action` is `create` (the name is free: the ref is made at `object`), `none` (it
 is there at `object` already: only the pin goes), `occupied` (the name holds
@@ -1426,12 +1572,31 @@ meta goes once its last pin does.
 `--expect <token>` refuses unless the plan made now has that token. The human
 output goes to stderr; a handled SIGINT or SIGTERM writes the object too.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion`, `command`, `repo`, `runId`, `token` | | as in the plan it went by |
-| `outcome` | `done` \| `refused` \| `partial` \| `interrupted` | done: every selected row restored. refused: nothing changed. partial: some. interrupted: a signal |
-| `error`, `recovery` | string \| null | as in the sweep |
-| `items` | array | the plan's items, each with `result` (`restored`, `kept`, `failed`, `notRun`, `interrupted`, `notSelected`), `reason`, `restored` (the ref is at `object`, read back) and `pinDeleted` (the pin is gone, read back) |
+<!-- json-docs:begin refs-restore -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"refs restore"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `runId` | string | yes | The run id as given; one not in wt's format is an error. |
+| `token` | string \| null, matching `^rr1-[0-9a-f]{32}$` | yes | The token of the plan the run went by. |
+| `outcome` | `"done"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | done: every selected row was restored. refused: nothing changed. partial: some were, some not. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | Why the run stopped before moving anything; as in the sweep. |
+| `recovery` | string \| null | yes | For interrupted: what wt printed. |
+| `items` | array of object | yes | The plan's items, each with its result (restored, kept, failed, notRun, interrupted, notSelected), reason, restored (the ref is at object, read back) and pinDeleted (the pin is gone, read back). |
+| `items[].id` | string | yes | refs/heads/<name> or refs/tags/<name> here; origin:refs/heads/<name> or origin:refs/tags/<name> on origin. --only takes it, one id per flag and never split: a ref name may contain a comma. |
+| `items[].kind` | `"branch"` \| `"tag"` \| `"remoteBranch"` \| `"remoteTag"` | yes | branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin. |
+| `items[].name` | string | yes | The short name of the ref. |
+| `items[].pin` | string | yes | The pin under refs/wt-swept/ that holds the object. |
+| `items[].object` | string, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The ref's own value: the tag object of an annotated tag, else the tip. |
+| `items[].action` | `"create"` \| `"none"` \| `"occupied"` \| `"remoteOccupied"` \| `"pinGone"` \| `"endpointChanged"` \| `"endpointUnknown"` | yes | create: the name is free; it is made at object. none: it is already there at object; only the pin goes. occupied: the name holds another object here. remoteOccupied: origin has something there. endpointChanged: a remote ref, and origin no longer resolves to the URLs the run recorded in its meta. endpointUnknown: a remote ref, and the run has no meta. pinGone: the pin is not there any more; a pin that goes between the plan and the run is reported as kept, its reason starting pinGone. |
+| `items[].selected` | boolean | yes | Whether the restore takes it: every row whose action is create or none, or exactly what --only names. |
+| `items[].result` | `"restored"` \| `"kept"` \| `"failed"` \| `"notRun"` \| `"interrupted"` \| `"notSelected"` | yes | restored: the ref is at object and the pin is gone. kept: left alone on purpose (reason says). failed: tried and not finished. notRun: the run ended before it. interrupted: a signal caught it. notSelected: not selected. |
+| `items[].reason` | string \| null | yes | Why, for kept and failed. |
+| `items[].restored` | boolean | yes | The ref holds object, read back after the row. |
+| `items[].pinDeleted` | boolean | yes | The pin is gone, read back after the row. |
+<!-- json-docs:end -->
 
 ## `wt refs purge (<runId>… | --older-than <age>) --dry-run --json` — the plan
 
@@ -1441,15 +1606,31 @@ meta's, else the time in its id. It deletes nothing. A run named that has
 nothing under `refs/wt-swept/<runId>/` is an error; one with only its meta (a
 run stopped before it moved anything) is purged like any other.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | |
-| `command` | `"refs purge"` | |
-| `repo` | string \| null | |
-| `olderThan` | string \| null | `--older-than` as given; null when runs were named |
-| `token` | string \| null | `rp1-…`: covers the runs, their pins, each pin's object and what deleting it would lose (`unreachable`). Null when there is nothing to purge, or on error |
-| `error` | string \| null | |
-| `runs` | array | `{runId, sweptAt, meta, endpoint, refs, unreachable}`: `sweptAt` unix seconds, the meta's, else from the id; `meta` the run's meta ref or null; `endpoint` as the meta records it, or null; `refs` `{pin, id, object}`; `unreachable` `{id, count}` for each pin whose commits no ref outside this purge and no worktree's HEAD reaches — what `git gc` may take once it goes. A commit two purged pins share counts for both; reflogs are not counted |
+<!-- json-docs:begin refs-purge-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"refs purge"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `olderThan` | string \| null | yes | --older-than as given; null when runs were named. |
+| `token` | string \| null, matching `^rp1-[0-9a-f]{32}$` | yes | rp1-…: names the plan; pass it to --yes --expect. It covers the runs, their pins, each pin's object and what deleting it would lose (unreachable). Null when there is nothing to purge, or on error. |
+| `error` | string \| null | yes | Why no plan could be made. |
+| `runs` | array of object | yes | The runs to purge, each with its runId, sweptAt, meta, endpoint, refs and unreachable. |
+| `runs[].runId` | string, matching `^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$` | yes | The run's id. |
+| `runs[].sweptAt` | integer | yes | Unix seconds the run began: its meta's sweptAt, else the time in its id. Unix seconds: the meta's, else from the id. |
+| `runs[].meta` | string \| null | yes | refs/wt-swept/<runId>/meta, deleted last; null when the run has none. The run's meta ref, or null. |
+| `runs[].endpoint` | object \| null | yes | The origin the run's meta records; null for a local run or a run with no meta. As the meta records it, or null. |
+| `runs[].endpoint.url` | string | yes | origin's one effective URL, fetch and push alike, insteadOf and pushInsteadOf applied, with all userinfo removed (git@host:o/r is host:o/r). |
+| `runs[].endpoint.digest` | string, matching `^sha256:[0-9a-f]{64}$` | yes | sha256: and the lowercase hex SHA-256 of the effective URL's UTF-8 bytes. |
+| `runs[].refs` | array of object | yes | The run's pins, each with its pin, id and object. |
+| `runs[].refs[].pin` | string | yes | The pin ref under refs/wt-swept/. |
+| `runs[].refs[].id` | string | yes | refs/heads/<name> or refs/tags/<name> here; origin:refs/heads/<name> or origin:refs/tags/<name> on origin. --only takes it, one id per flag and never split: a ref name may contain a comma. |
+| `runs[].refs[].object` | string, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The pin's object. |
+| `runs[].unreachable` | array of object | yes | The pins whose commits no ref outside this purge and no worktree's HEAD reaches: what git gc may take once the pin goes. A commit two purged pins share counts for both; reflogs are not counted. |
+| `runs[].unreachable[].id` | string | yes | refs/heads/<name> or refs/tags/<name> here; origin:refs/heads/<name> or origin:refs/tags/<name> on origin. --only takes it, one id per flag and never split: a ref name may contain a comma. |
+| `runs[].unreachable[].count` | integer, at least 1 | yes | How many commits nothing else holds. |
+<!-- json-docs:end -->
 
 ## `wt refs purge … --yes --json` — the result
 
@@ -1459,12 +1640,29 @@ the value read. A pin that appeared meanwhile (a sweep still running under that
 id) keeps the meta. The human output goes to
 stderr; a handled SIGINT or SIGTERM writes the object too.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion`, `command`, `repo`, `token` | | as in the plan it went by |
-| `outcome` | `purged` \| `refused` \| `partial` \| `interrupted` | purged: every pin is gone (also when there was nothing to purge). refused: nothing was deleted. partial: some pins are gone; run it again. interrupted: a signal |
-| `error`, `recovery` | string \| null | |
-| `runs` | array | `{runId, sweptAt, refs, meta, metaDeleted}`: `metaDeleted` read back; each ref `{pin, id, object, result, reason}`: `result` `deleted`, `absent` (gone already), `kept` (still there: it moved, or git refused), `notRun` or `interrupted` |
+<!-- json-docs:begin refs-purge -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"refs purge"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `token` | string \| null, matching `^rp1-[0-9a-f]{32}$` | yes | The token of the plan the purge went by. |
+| `outcome` | `"purged"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | purged: every pin planned is gone. refused: nothing was deleted (error says why). partial: some pins are gone, some not; running it again finishes it. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | Why the run stopped before deleting anything. |
+| `recovery` | string \| null | yes | For interrupted: what wt printed. |
+| `runs` | array of object | yes | Each run, with its runId, sweptAt, refs, meta and metaDeleted (read back); each ref has pin, id, object, result and reason. |
+| `runs[].runId` | string, matching `^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$` | yes | The run's id. |
+| `runs[].sweptAt` | integer | yes | Unix seconds: the meta's, else from the id. |
+| `runs[].refs` | array of object | yes | The run's pins, each with its pin, id, object, result and reason. |
+| `runs[].refs[].pin` | string | yes | The pin ref under refs/wt-swept/. |
+| `runs[].refs[].id` | string | yes | refs/heads/<name> or refs/tags/<name> here; origin:refs/heads/<name> or origin:refs/tags/<name> on origin. --only takes it, one id per flag and never split: a ref name may contain a comma. |
+| `runs[].refs[].object` | string, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The pin's object. |
+| `runs[].refs[].result` | `"deleted"` \| `"absent"` \| `"kept"` \| `"notRun"` \| `"interrupted"` | yes | deleted: it was at object and is gone. absent: it was gone already. kept: it is still there (it moved, or git refused; reason says). notRun: the run ended before it. interrupted: a signal caught it and it is still there. |
+| `runs[].refs[].reason` | string \| null | yes | Why, for kept: it moved, or git refused. |
+| `runs[].meta` | string \| null | yes | The run's meta ref; null when it had none. |
+| `runs[].metaDeleted` | boolean | yes | The meta is gone, read back. It is deleted only once every pin of the run is. |
+<!-- json-docs:end -->
 
 ## `wt refs swept --json` — the runs
 
@@ -1472,13 +1670,27 @@ Every run with pins or a meta still under `refs/wt-swept/`, oldest first. A run
 that wrote its meta and was stopped before it moved anything is listed with no
 refs. It changes nothing.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | |
-| `command` | `"refs swept"` | |
-| `repo` | string \| null | |
-| `error` | string \| null | |
-| `runs` | array | `{runId, sweptAt, endpoint, refs}`: `sweptAt` unix seconds, the meta's, else from the id; `endpoint` as the meta records it, or null; each ref `{id, kind, name, pin, object}` |
+<!-- json-docs:begin refs-swept -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"refs swept"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `error` | string \| null | yes | Why the runs could not be listed. |
+| `runs` | array of object | yes | The runs under refs/wt-swept/, each with its runId, sweptAt, endpoint and refs. |
+| `runs[].runId` | string, matching `^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$` | yes | The run's id. |
+| `runs[].sweptAt` | integer | yes | Unix seconds the run began: its meta's sweptAt, else the time in its id. Unix seconds: the meta's, else from the id. |
+| `runs[].endpoint` | object \| null | yes | The origin the run's meta records; null for a local run or a run with no meta. As the meta records it, or null. |
+| `runs[].endpoint.url` | string | yes | origin's one effective URL, fetch and push alike, insteadOf and pushInsteadOf applied, with all userinfo removed (git@host:o/r is host:o/r). |
+| `runs[].endpoint.digest` | string, matching `^sha256:[0-9a-f]{64}$` | yes | sha256: and the lowercase hex SHA-256 of the effective URL's UTF-8 bytes. |
+| `runs[].refs` | array of object | yes | Empty for a run that wrote its meta and moved nothing. |
+| `runs[].refs[].id` | string | yes | refs/heads/<name> or refs/tags/<name> here; origin:refs/heads/<name> or origin:refs/tags/<name> on origin. --only takes it, one id per flag and never split: a ref name may contain a comma. |
+| `runs[].refs[].kind` | `"branch"` \| `"tag"` \| `"remoteBranch"` \| `"remoteTag"` | yes | branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin. |
+| `runs[].refs[].name` | string | yes | The short name of the ref. |
+| `runs[].refs[].pin` | string | yes | The pin under refs/wt-swept/ that holds the object. |
+| `runs[].refs[].object` | string, matching `^[0-9a-f]{40}([0-9a-f]{24})?$` | yes | The ref's own value: the tag object of an annotated tag, else the tip. |
+<!-- json-docs:end -->
 
 ### `needs` — what a step cannot run without
 
@@ -1519,60 +1731,171 @@ one per repository, in the selection's order; `wt status --json` takes none of
 those, so there is nothing to mirror. A repository that could not be read is an
 object with `error` set and no worktrees, and the exit code is non-zero.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema` | 1 | the major version |
-| `schemaVersion` | string | the full version, `1.<minor>.<patch>` |
-| `command` | `"sync"` | |
-| `repo` | string | the main checkout, as in `wt sweep --json` |
-| `name` | string | the repository's name: the main checkout's directory name |
-| `trunk`, `trunkRef` | string \| null | `main`, `origin/main`; null when nothing names trunk, and `error` says so |
-| `trunkSource` | string \| null | since 1.1.0: how `trunk` was found ([`trunkSource`](#trunksource--how-trunk-was-found)) |
-| `onto` | string \| null | the commit assessed against: trunk's, or since 1.8.0 the target `--onto` names; null when trunk is not known |
-| `target` | object \| null | since 1.8.0: [what `onto` is](#target--trunk-or---onto), trunk or the ref `--onto` names; null when trunk is not known |
-| `fetched` | bool | trunk was fetched first |
-| `fetchError` | string \| null | the fetch failed; the overview is against trunk as last fetched |
-| `declared` | bool | trunk declares `.wt-sync.yaml`; without it nothing is rebased |
-| `token` | string \| null | names what a run would start on; pass it to `wt sync rebase --expect` or `wt sync --rebase --expect`. Null when a run would start on nothing and no worktree's `ownRemote.blocks` is `diverged`: a diverged one makes it non-null, also when something else (a busy session) keeps a run off it |
-| `error` | string \| null | why there is no overview: trunk not known here, the repository not readable. The exit code is then non-zero |
-| `sessionsError` | string \| null | Agent sessions could not be listed; `sessions` are then empty, not known empty |
-| `eachCommitDeclared` | array | since 1.6.0: the `each_commit` checks trunk declares, `step`, `paths` and `needs` as in [`deferredDeclared`](#deferreddeclared--the-deferred-steps-trunk-declares); each runs after every replayed commit changing a path its `paths` match (every commit when empty). `[]` when there are none |
-| `needs` | array | since 1.6.0: every need a declared step has, once each: `need` (`docker`, or since 1.10.0 `env:<NAME>`), `probed` (a step with it would run for some worktree, so the probe ran), `ok` (it answered; false when not probed), `error` (why it did not; null otherwise). See [needs](#needs--what-a-step-cannot-run-without) |
-| `worktrees` | array | every worktree but the main checkout, in git's order |
-| `stack` | object \| null | since 1.7.0: the [stack held on one line](#stack--a-stack-held-on-one-line) of the worktree `--stack` names, its layers and what holds each; null without `--stack` |
-
-Each worktree:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `work`, `path` | string | |
-| `branch` | string \| null | null when detached |
-| `group` | `ready` \| `needsYou` \| `skipped` \| `current` | the overview's group; `current` (on trunk already) is left out of the human overview |
-| `class` | `conflict-free` \| `recipe` \| `contested` \| `divergent` \| `stale` \| `current` \| `detached` \| `unknown` | what the simulated rebase found; `unknown` when the assessment failed |
-| `verified` | bool | false is the overview's `recipe?`: a script owns a path and the replay could not be carried past it |
-| `verdict` | `proceed` \| `skip` \| `refuse` | what `wt sync rebase <work>` would do with it: start on it (a contested one is rebased up to its stop and handed over), skip it, or refuse it untouched |
-| `runnable` | bool | `wt sync --rebase`, with nothing named, takes it |
-| `reason` | string \| null | why it is not runnable; null when it is |
-| `behind`, `ahead` | int | commits against trunk |
-| `dirty` | bool | tracked changes |
-| `handedOver` | bool | an earlier run left a conflict here for a person |
-| `planFile` | string \| null | that handover's plan |
-| `sessions` | array | [agent sessions](#sessions--claude-and-codex) in it: `work`, `name`, `kind` (`claude` \| `codex`, the latter since 1.2.0), `state` (`busy` \| `idle`) |
-| `stack` | array | every worktree a run on this one moves, parents first: `work`, `branch`, `path` |
-| `stops` | array | every stop the simulated rebase reached, in order |
-| `stops[].index`, `.total` | int | the commit's place in the replay, `1/3` |
-| `stops[].commit` | string \| null | the commit replayed there |
-| `stops[].subject` | string | |
-| `stops[].resolved` | bool | every conflicted file there resolved by a strategy |
-| `stops[].yours` | bool | the first stop no strategy resolves: a run hands it to a person |
-| `stops[].files[]` | object | `path`, `resolved`, `strategy` (null when nothing claims it), `note` (why a strategy refused it, or what a lift did) |
-| `deferredDeclared` | array | since 1.4.0: the [deferred steps trunk declares](#deferreddeclared--the-deferred-steps-trunk-declares), which a run may perform once it has rebased this worktree; `[]` when there are none |
-| `checks` | int | since 1.6.0: how many of the branch's commits a run would check with the `each_commit` steps, those changing a path a step's `paths` match; nothing is run to say so. 0 for a worktree a run would not rebase. A commit whose resolution leaves no such change is not checked by the run, so this is an upper bound |
-| `checkCommits` | array | since 1.6.0: those commits, oldest first, as they are on the branch now: `commit`, `subject` |
-| `strategies` | array of string | the declared strategies that resolved something, each once |
-| `notes` | array of string | advisory; they never change the class |
-| `error` | string \| null | the assessment failed |
-| `ownRemote` | object | since 1.3.0: the branch against [its own remote](#ownremote--a-branch-against-its-own-remote), fetched with trunk unless `--no-fetch` |
+<!-- json-docs:begin sync -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows. |
+| `command` | `"sync"` | yes |  |
+| `repo` | string | yes | The main checkout, as wt sweep --json names the repository. |
+| `name` | string | yes | The repository's name: its main checkout's directory name. |
+| `trunk` | string \| null | yes | Trunk's name, such as main; null when nothing names trunk, and error says so. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | How trunk was determined, first match wins, from local refs alone (since 1.1.0): config — MAIN_BRANCH in the wt configuration file; originHead — refs/remotes/origin/HEAD; conventional — the first of development, main, master that exists locally or on origin (since 1.1.1; before, main, master, trunk, development, develop, ranked by where each exists); currentBranchGuess — no longer produced since 1.1.1: when nothing names trunk, detection fails and the repository reports noConfiguration. Null when trunk is. |
+| `trunkRef` | string \| null | yes | origin/<trunk>, what every worktree is assessed against. Such as origin/main; null when nothing names trunk, and error says so. |
+| `onto` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit assessed against, or rebased onto: trunk, or --onto's target (since 1.8.0). Null when it was never determined. Null when trunk is not known. |
+| `target` | object \| null | yes | What onto is: trunk, or the ref --onto names (since 1.8.0). Null when it was never determined. Null when trunk is not known. |
+| `target.ref` | string | yes | The ref as given to --onto, or origin/<trunk>. |
+| `target.trunk` | boolean | yes | The target is trunk: no --onto was given. |
+| `target.upstream` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit --upstream names: only the commits above it are replayed. Null without it. |
+| `fetched` | boolean | yes | Trunk was fetched first. |
+| `fetchError` | string \| null | yes | The fetch failed: the overview is against trunk as last fetched. |
+| `declared` | boolean | yes | Trunk declares .wt-sync.yaml. Without it the worktrees are assessed but a run rebases none. |
+| `token` | string \| null | yes | Names what a run would start on; pass it to wt sync rebase --expect or wt sync --rebase --expect. Since 1.3.0 a worktree refused only for having diverged from its own remote is in it too, with the remote commit, for a run under --allow-diverged. Null when a run would start on nothing. |
+| `error` | string \| null | yes | Why there is no overview: trunk not known, the repository not readable. The exit code is then non-zero. |
+| `sessionsError` | string \| null | yes | Agent sessions could not be listed; sessions are then empty, not known empty. |
+| `eachCommitDeclared` | array of object | yes | Since 1.6.0. The each_commit checks .wt-sync.yaml declares on the trunk commit in onto, in the declared order: each runs after every replayed commit that changes a path its paths match, every commit when it lists none. Empty when trunk declares none. |
+| `eachCommitDeclared[].step` | string | yes | Its run line: the string deferred[].step carries for it in wt sync rebase --json. |
+| `eachCommitDeclared[].paths` | array of string | yes | The globs that gate it, as declared. For a deferred step: empty, it runs after every finished rebase; otherwise only when the rebase changed a path one of them matches, which is not known before the rebase. For an each_commit step: empty, it runs at every replayed commit; otherwise at each one changing a path one of them matches. |
+| `eachCommitDeclared[].needs` | array of string, matching `^(docker\|env:[A-Za-z_][A-Za-z0-9_]*)$` | yes | Since 1.6.0 (env:<NAME> since 1.10.0). What the step cannot run without, as declared; the overview's needs says what each probe answered. |
+| `needs` | array of object | yes | Since 1.6.0. Every need a declared step has, once each, with what its probe said. A need is probed only when a step with it would run for some worktree of the overview: an each_commit step with a commit to check, or a deferred step whose paths match a path the rebase may change. A run probes the same way before it moves anything, and refuses a worktree whose step needs one that did not answer, unless started with --allow-owed. |
+| `needs[].need` | string, matching `^(docker\|env:[A-Za-z_][A-Za-z0-9_]*)$` | yes | A declared need: docker, or env:<NAME> for an environment variable that must be set and not empty (since 1.10.0). |
+| `needs[].probed` | boolean | yes | The probe ran: some worktree has a step with this need that would run. |
+| `needs[].ok` | boolean | yes | The probe answered. False when it did not, or was not run. |
+| `needs[].error` | string \| null | yes | Why the probe failed; null when it answered or was not run. |
+| `worktrees` | array of object | yes | Every worktree but the main checkout, in git's order. |
+| `worktrees[].work` | string | yes | The work name, as wt list prints it. |
+| `worktrees[].branch` | string \| null | yes | Null when detached. |
+| `worktrees[].path` | string | yes | The worktree's absolute path. |
+| `worktrees[].group` | `"ready"` \| `"needsYou"` \| `"skipped"` \| `"current"` | yes | The overview's group. current is on trunk already, which the human overview leaves out. Since 1.3.0 a worktree whose class is current or stale only at its remote's commit, which a run fast-forwards it to, is ready. |
+| `worktrees[].class` | `"conflict-free"` \| `"recipe"` \| `"contested"` \| `"divergent"` \| `"stale"` \| `"current"` \| `"detached"` \| `"unknown"` | yes | What the simulated rebase found; unknown when the assessment failed (error). |
+| `worktrees[].verified` | boolean | yes | false is the overview's question mark (recipe?): a script owns a path and the replay could not be carried past it. |
+| `worktrees[].verdict` | `"proceed"` \| `"skip"` \| `"refuse"` | yes | What wt sync rebase <work> would do: start on it, skip it, or refuse it untouched. A contested one is rebased up to its stop and handed over. |
+| `worktrees[].runnable` | boolean | yes | wt sync --rebase, with nothing named, takes it. |
+| `worktrees[].reason` | string \| null | yes | Why it is not runnable; null when it is. |
+| `worktrees[].behind` | integer | yes | Commits it lacks against trunk. |
+| `worktrees[].ahead` | integer | yes | Commits it has that trunk lacks. |
+| `worktrees[].dirty` | boolean | yes | Tracked changes. |
+| `worktrees[].handedOver` | boolean | yes | An earlier run left a conflict here for a person: wt sync resume or wt sync undo. |
+| `worktrees[].planFile` | string \| null | yes | The plan file of a handover. |
+| `worktrees[].sessions` | array of object | yes | The agent sessions in it, each with work, name, kind and state. |
+| `worktrees[].sessions[].work` | string | yes | The work name of the worktree it is in. |
+| `worktrees[].sessions[].name` | string | yes | The session's name. |
+| `worktrees[].sessions[].kind` | `"claude"` \| `"codex"` | yes | Since 1.2.0 also codex: a Codex session. |
+| `worktrees[].sessions[].state` | `"busy"` \| `"idle"` | yes | busy or idle; a busy session keeps a run off the worktree. |
+| `worktrees[].stack` | array of object | yes | Every worktree a run on this one would move, parents first; just this one without a stack; empty when detached. |
+| `worktrees[].stack[].work` | string | yes |  |
+| `worktrees[].stack[].branch` | string | yes |  |
+| `worktrees[].stack[].path` | string | yes |  |
+| `worktrees[].stops` | array of object | yes | Every stop the simulated rebase reached, in order. |
+| `worktrees[].stops[].index` | integer, at least 1 | yes | The commit's place in the replay: with total, 1/3. |
+| `worktrees[].stops[].total` | integer, at least 1 | yes | How many commits the replay has; with index, 1/3. |
+| `worktrees[].stops[].commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit replayed there. |
+| `worktrees[].stops[].subject` | string | yes |  |
+| `worktrees[].stops[].resolved` | boolean | yes | Every conflicted file here was resolved by a strategy. |
+| `worktrees[].stops[].yours` | boolean | yes | The first stop no strategy resolves: a run hands it to a person. |
+| `worktrees[].stops[].files` | array of object | yes | The conflicted files at the stop, each with path, resolved, strategy and note. |
+| `worktrees[].stops[].files[].path` | string | yes |  |
+| `worktrees[].stops[].files[].resolved` | boolean | yes |  |
+| `worktrees[].stops[].files[].strategy` | string \| null | yes | The strategy that claims it; null when none does. |
+| `worktrees[].stops[].files[].note` | string \| null | yes | Why a strategy refused it, or what a lift did. |
+| `worktrees[].strategies` | array of string | yes | The declared strategies that resolved a file at some stop, each once. |
+| `worktrees[].deferredDeclared` | array of object | yes | Since 1.4.0. The deferred steps .wt-sync.yaml declares on the trunk commit in onto, in the declared order: what a run goes through once it has rebased this worktree, itself or through wt sync resume after a handover. Declared, not predicted: each may run. A step with no paths does, after every finished rebase; one with paths only when the rebase changed one of them; none after a step that failed. The same list on every worktree, also one a run would skip or refuse, where nothing is rebased and so none runs: verdict says which. Empty when trunk declares none or has no .wt-sync.yaml. |
+| `worktrees[].deferredDeclared[]` | object | yes | Fields as at `eachCommitDeclared[]`. |
+| `worktrees[].checks` | integer, at least 0 | yes | Since 1.6.0. How many of the branch's commits a run would check with the each_commit steps: those changing a path a step's paths match. Nothing is run to say so. A commit a resolution leaves with no matching change is not checked by the run, so this is an upper bound. It is 0 for a worktree a run would not rebase. |
+| `worktrees[].checkCommits` | array of object | yes | Since 1.6.0. The commits checks counts, oldest first, as they are on the branch now. |
+| `worktrees[].checkCommits[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `worktrees[].checkCommits[].subject` | string | yes |  |
+| `worktrees[].notes` | array of string | yes | Advisory; never change the class. |
+| `worktrees[].error` | string \| null | yes | The assessment failed. |
+| `worktrees[].ownRemote` | object | yes | Since 1.3.0. A worktree a run would refuse for it has verdict refuse, runnable false and the reason in words; its group is needsYou, or skipped when a busy session is in it, whatever blocks says; class stays about trunk. For a branch that is behind and will be fast-forwarded, class, behind, ahead and stops are those of the remote commit: what the run rebases. When that class is current or stale there is nothing to rebase: the row is verdict proceed, runnable true, group ready, and a run fast-forwards the branch and is done. |
+| `worktrees[].ownRemote.ref` | string \| null | yes | The remote-tracking ref, as remote/branch (origin/feat/x); null only when no ref could be named: for none, and for unknown unless it is a ref that could not be compared. |
+| `worktrees[].ownRemote.state` | `"none"` \| `"gone"` \| `"unknown"` \| `"inSync"` \| `"ahead"` \| `"behind"` \| `"rebased"` \| `"diverged"` | yes | none: nothing to check: the ref is trunk's, or does not exist. gone: the branch names a ref the remote no longer has. unknown: where a push lands cannot be read from a tracking ref (a mirror remote, several push URLs, a push URL that is another repository than the fetch URL), or the branches or the remotes cannot be read at all, or the two tips cannot be compared; a run goes on unchecked. Since 1.5.0 also a branch a run would rebase and not push: noPushReason is then non-null. inSync: the same commit. ahead: only the branch has commits of its own. behind: only the remote has; a run fast-forwards the branch first. rebased: both have, and the remote's are old versions of the branch's (its tip is a tip the branch once had, or every commit only it has is matched patch for patch); a run goes on. diverged: both have, otherwise; a run refuses unless --allow-diverged. |
+| `worktrees[].ownRemote.commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The remote commit compared with; null for none, gone and unknown. |
+| `worktrees[].ownRemote.ahead` | integer \| null, at least 0 | yes | Commits only the branch has; null for none, gone and unknown. |
+| `worktrees[].ownRemote.behind` | integer \| null, at least 0 | yes | Commits only the remote has; null for none, gone and unknown. |
+| `worktrees[].ownRemote.fetched` | boolean | yes | true: the remote side is from this command's fetch. false: as last fetched (--no-fetch, trunk's fetch or this branch's own failed, or a remote whose fetch refspec is not the standard one). |
+| `worktrees[].ownRemote.blocks` | `"diverged"` \| `"operation"` \| `"dirty"` \| `"session"` \| `null` | yes | Why a run would refuse for it; non-null only when a run would. diverged with state diverged, for a branch a run would rebase: --allow-diverged goes on. operation, dirty, session with state behind: it cannot be fast-forwarded, because a git operation is in progress there, the checkout has tracked changes, or an agent session is busy in it. |
+| `worktrees[].ownRemote.noPushReason` | string \| null | yes | Since 1.5.0: why a run would rebase the branch and not push it, in words; null when a run would push it, and for state none. It tracks a remote branch of another name and nothing is recorded for it (state unknown, fixCommand settles it); what is recorded for it cannot be used (state unknown); or it is recorded as pushing to a branch of another name that has commits it never had, is at a commit it was never at, or cannot be compared with it (state diverged, behind, rebased or unknown). See docs/json.md. |
+| `worktrees[].ownRemote.fixCommand` | array of string \| null, at least 1 items | yes | Since 1.5.0: the command that settles noPushReason, as an argv, when one does: wt sync push-to <branch> <remote>/<branch>, which records the branch it tracks as where it pushes. The same command with the branch's own name on the remote records that instead. It names no directory: run it in the repository. Null otherwise. |
+| `stack` | object \| null | yes | Since 1.7.0: the stack held on the line of the worktree wt sync <work> --stack names: its layers and what holds each. Null without --stack. |
+| `stack.branch` | string | yes | The line's own branch: the worktree named. |
+| `stack.base` | string, matching `^[0-9a-f]{40,64}$` | yes | Where the line leaves trunk: the merge base. |
+| `stack.head` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's tip before the run. |
+| `stack.autosquash` | boolean | yes | A fold of the line's fixups (--autosquash): onto its own base, or, with --onto, as the line moves onto the target. |
+| `stack.layers` | array of object | yes |  |
+| `stack.layers[].branch` | string | yes | The layer branch. |
+| `stack.layers[].oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip before the run. |
+| `stack.layers[].commits` | integer, at least 1 | yes | Its commits from the line's base, its tip included. |
+| `stack.layers[].subject` | string | yes | Its tip's subject. |
+| `stack.layers[].foundBy` | `"tipOnLine"` \| `"named"` | yes | tipOnLine: a local branch whose tip is a commit of the line. named: named with --layer, by name or by a pattern. |
+| `stack.layers[].worktree` | string \| null | yes | The worktree the branch is checked out in; null when it is in none. |
+| `stack.layers[].state` | `"none"` \| `"clean"` \| `"dirty"` \| `"rebasing"` \| `"bisecting"` \| `"busy"` \| `"idle"` \| `"process"` \| `"unknown"` | yes | What holds the layer's worktree: none (in no worktree), clean (nothing), dirty (tracked changes), rebasing (a rebase in progress, there or in another worktree that will move it), bisecting (a bisect in another worktree started from it), busy or idle (an agent session), process (a process whose working directory is inside the worktree), unknown (it could not be read, which holds the layer). In a run, as read when the layer was moved. |
+| `stack.layers[].stateDetail` | string \| null | yes | Who or what holds it: the session, the process, or why it could not be read. |
+| `stack.layers[].newTip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The run's: the layer's new tip, read from the rebase and checked. Null in the look, and when the run moved no layer. |
+| `stack.layers[].commitsAfter` | integer \| null, at least 0 | yes | The run's: commits of the new tip from the new base, as the check compared them with the plan. |
+| `stack.layers[].mapped` | `"tip"` \| `"tipDropped"` \| `"emptied"` \| `null` | yes | The run's: tip (the new tip is its own tip rebased), tipDropped (its tip was left out because trunk already carries it, dropped as empty, or folded into an earlier commit by --autosquash; the new tip is its last commit left), emptied (every commit of it was left out because trunk carries it, dropped as empty, or folded into an earlier commit by --autosquash; it ends where the layer below does). |
+| `stack.layers[].patch` | `"same"` \| `"changed"` \| `"unknown"` \| `null` | yes | The run's: whether what the layer brings to the line is the same patch as before, by git's stable patch-id. Never a refusal. |
+| `stack.layers[].patchWhy` | string \| null | yes | The run's: why the patch changed. |
+| `stack.layers[].result` | `"moved"` \| `"held"` \| `"unchanged"` \| `"planned"` \| `"moving"` \| `"needsRecovery"` \| `null` | yes | The run's: moved (the branch is at newTip, its worktree reset with it), held (left where it was; held says why and moveCommand moves it by hand), unchanged (its new tip is its old one), planned (recorded and not moved: the moves stopped before it), moving (its move was under way when the moves stopped: undo puts its ref back), needsRecovery (a move that went part way and could not be put back: held says what to look at, the layer keeps its pins, and wt sync undo puts it back). |
+| `stack.layers[].how` | `"ref"` \| `"worktree"` \| `null` | yes | The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (in its worktree, under that worktree's lock: the same guarded update-ref, then its files follow with read-tree -m -u). |
+| `stack.layers[].held` | string \| null | yes | The run's: why the layer was held, or for needsRecovery what to look at. |
+| `stack.layers[].moveCommand` | string \| null | yes | The run's: what moves a held layer by hand. |
+| `stack.layers[].pushCommand` | array of string \| null, at least 1 items | yes | The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run does not push layers. Null otherwise. |
+| `stack.layers[].noPushReason` | string \| null | yes | The run's: for a moved layer with no safe push command, why: no remote branch of its own yet, or the remote has commits the branch never had. |
+| `stack.layers[].note` | string \| null | yes | The run's: what else happened to a moved layer, such as a checkout of it that landed during its move, at its new tip. |
+| `stack.top` | object | yes | Since 1.13.0: the line's own branch, the top of the stack: the last row of the look's layer table. Not one of layers, which are the branches a run moves after its rebase; the rebase itself moves the top. |
+| `stack.top.branch` | string | yes | The line's own branch. |
+| `stack.top.oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip before the run: head. |
+| `stack.top.commits` | integer, at least 0 | yes | Its commits from the line's base, its tip included; 0 for a branch with nothing ahead of trunk. |
+| `stack.top.subject` | string | yes | Its tip's subject. |
+| `stack.top.worktree` | string \| null | yes | The worktree it is checked out in. |
+| `stack.skipped` | array of object | yes |  |
+| `stack.skipped[].branch` | string | yes |  |
+| `stack.skipped[].tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `stack.skipped[].reason` | string | yes |  |
+| `stack.sideBranches` | array of object | yes | Since 1.12.0: the local branches that hang off the line, parents first: forked from a commit of it above its base, or above its top. Empty with --no-side-branches. |
+| `stack.sideBranches[].branch` | string | yes |  |
+| `stack.sideBranches[].kind` | `"forked"` \| `"above"` | yes | forked: it leaves the line at a commit below its top. above: it carries the line's top. |
+| `stack.sideBranches[].oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip before the run. |
+| `stack.sideBranches[].fork` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit of the line it leaves the line at: its merge base with the line's tip. |
+| `stack.sideBranches[].forkSubject` | string | yes |  |
+| `stack.sideBranches[].on` | string \| null | yes | The side branch it is stacked on, which moves first; null when it sits on the line itself. A backup is never what a branch is on, and neither is a branch at its own tip (see sameTip). On branches at one tip, it names the one that stands for them: one with an upstream, then the oldest, then the first by name. |
+| `stack.sideBranches[].base` | string, matching `^[0-9a-f]{40,64}$` | yes | Where its own commits start: the tip of the branch it is on, or fork. |
+| `stack.sideBranches[].commits` | integer, at least 0 | yes | Its own commits, from base to its tip. A branch at the same tip as another is never on it: both count the same commits. |
+| `stack.sideBranches[].backup` | boolean | yes | Its name is a backup (wt refs sweep's patterns): listed, never moved. |
+| `stack.sideBranches[].worktree` | string \| null | yes | The worktree it is checked out in; null when it is in none. |
+| `stack.sideBranches[].state` | `"none"` \| `"clean"` \| `"dirty"` \| `"rebasing"` \| `"bisecting"` \| `"busy"` \| `"idle"` \| `"process"` \| `"unknown"` | yes | What holds its worktree, as for a layer. |
+| `stack.sideBranches[].stateDetail` | string \| null | yes |  |
+| `stack.sideBranches[].carry` | boolean | yes | The look's: the run would carry it. False for a backup, a branch with a merge commit or on more than one branch, one whose worktree something holds, one stacked on a branch that is not carried, and every one under --alone. |
+| `stack.sideBranches[].left` | string \| null | yes | Why it would not be carried; null when it would. |
+| `stack.sideBranches[].newBase` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The run's: where it goes: for a branch forked mid-line, where the rebase put the commit it forks from, read from the run's own marker and checked as a layer's is; above the top, the line's new tip; on another side branch, that branch's new tip. Null when it is not known. |
+| `stack.sideBranches[].newTip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The run's: its own commits replayed onto newBase. Null when it was not replayed. |
+| `stack.sideBranches[].result` | `"moved"` \| `"held"` \| `"unchanged"` \| `"planned"` \| `"moving"` \| `"needsRecovery"` \| `null` | yes | The run's, as for a layer. A backup is always held, with no moveCommand. |
+| `stack.sideBranches[].how` | `"ref"` \| `"worktree"` \| `null` | yes |  |
+| `stack.sideBranches[].held` | string \| null | yes | The run's: why it was held. |
+| `stack.sideBranches[].moveCommand` | string \| null | yes | The run's: for a held branch, the command that moves it later, with real commits and branch names shell-quoted: wt sync rebase '<branch>' --onto <newBase> --upstream <base> for a branch in a worktree, git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in the main checkout, git rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in none; for a branch on a held side branch, --onto names that branch, to run once it has moved. Null for a backup, for a branch with a merge commit of its own (move it by hand), and when where it goes is not known. |
+| `stack.sideBranches[].sameTip` | array of string | yes | Since 1.13.0: the other side branches at its very tip, by name: siblings, carried or held together onto one new commit. Empty for most. |
+| `stack.refusal` | string \| null | yes | The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held. |
+| `stack.edit` | object \| null | yes | Since 1.9.0: what a run with --edit did to the commit it stopped at. Null in the look and for any other run. |
+| `stack.edit.commit` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit as the line had it. |
+| `stack.edit.subject` | string | yes | Its subject. |
+| `stack.edit.amended` | string, matching `^([0-9a-f]{40,64})?$` | yes | What the run went on from at the edit stop: the amended commit, or the last commit added there; empty if the run never went on from it. |
+| `stack.edit.paths` | array of string | yes | The paths the amend changed, sorted; empty when it changed nothing. |
+| `stack.edit.emptied` | array of object | yes | The commits above it that the amend emptied, which the rebase dropped, oldest first. |
+| `stack.edit.emptied[].sha` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit as the old line had it. |
+| `stack.edit.emptied[].subject` | string | yes |  |
+| `stack.contextGaps` | array of object | yes | Since 1.11.0: for a fold (--autosquash), in the look and in the run, every hunk of a fixup that does not apply behind its target, where autosquash puts it, because only a later commit of the line carries its context; line order. Empty for any other look or run. A warning: the run goes ahead. |
+| `stack.contextGaps[].fixup` | string, matching `^[0-9a-f]{40,64}$` | yes | The fixup commit, as the line has it. |
+| `stack.contextGaps[].fixupSubject` | string | yes |  |
+| `stack.contextGaps[].target` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit autosquash folds it into. |
+| `stack.contextGaps[].targetSubject` | string | yes |  |
+| `stack.contextGaps[].path` | string | yes | The hunk's file. |
+| `stack.contextGaps[].lines` | string, matching `^[0-9]+(-[0-9]+)?$` | yes | The lines the hunk changes in the fixup's own file: 13, or 13-15. |
+| `stack.contextGaps[].needs` | string, matching `^[0-9a-f]{40,64}$` | yes | The first commit after the target, in line order, that carries the hunk's context. |
+| `stack.contextGaps[].needsSubject` | string | yes |  |
+| `stack.contextGaps[].message` | string | yes | The line wt prints for it: fixup moved ahead of its context: <path>:<lines> needs <sha> "<subject>", which comes later on the line. |
+| `stack.contextUnchecked` | array of string | yes | Since 1.11.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run. |
+<!-- json-docs:end -->
 
 A worktree its own remote refuses (`ownRemote.blocks` set, or its fetch failed)
 has `verdict` `refuse`, `runnable` false and `reason` in words. Its `group` is
@@ -1637,35 +1960,209 @@ deferred steps and rebases nothing onto trunk) (`"sync run"` is what the verb ca
 before `sync-run` 1.3.0; no wt prints it since 1.4.1, and the schema keeps the
 value for results saved before that), and:
 
-| Field | Type | Meaning |
-|---|---|---|
-| `repo` | string \| null | the main checkout, as in `wt sweep --json`; null when the verb stopped before reading it |
-| `onto` | string \| null | the commit rebased onto: trunk's, or since 1.8.0 the target `--onto` names; for resume, the one the handed-over run recorded; null for undo |
-| `target` | object \| null | since 1.8.0: [what `onto` is](#target--trunk-or---onto); for resume, what the handed-over run rebased onto; null for undo |
-| `trunkSync` | object \| null | as for `wt up`; always null for resume and undo, which do not fetch |
-| `error` | string \| null | as for `wt up`; also a question answered no (or nobody there to answer it), and for undo, why it stopped after putting some back |
-| `leftAlone` | array | since 1.13.0: for `wt sync rebase <work> --alone`, each worktree stacked on the same history that the run left as it was (not rebased, not refused on, not touched, on the old commits), and each branch in no worktree on the line it replayed (it is not moved), or with `--stack` each layer branch of the line (none is moved, held or reset), as `work`, `branch` and `path`, the first and last null for a branch in no worktree; `[]` for every other run, and for an `--alone` run with nothing stacked on its worktree |
-
-Each participant has `wt up`'s fields, and:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `safetyRef` | string \| null | the ref pinning the branch's tip from before the run, `refs/wt-sync/<branch>/<epoch>` |
-| `deferred` | array | what each deferred step of a finished rebase came to: `step` (its `run` line), `result` (`done` \| `committed` \| `failed` \| `skipped` \| `owed`), `reason` (why failed, skipped or owed), `commit` (for committed). `owed` since 1.5.0: not run, because a [need](#needs--what-a-step-cannot-run-without) of it did not answer in a run started with `--allow-owed` |
-| `checked` | int | since 1.5.0: how many replayed commits the `each_commit` checks ran at, in this run or this resume |
-| `checkFailed` | object \| null | since 1.5.0: the `each_commit` check that stopped the rebase: `step`, `commit` (the replayed commit it failed at), `subject`, `error` (an exit status, a timeout, the tracked files it changed, or, for a step with a `retry`, the exit of the `run` and of the retry that failed too). The participant is `handedOver` at that commit, HEAD the commit, nothing unmerged, and `wt sync resume` runs the check again there once the fix is amended in or committed; a stack parent is `restored` instead, and its children `notRun`. Null when no check failed |
-| `undoCommand` | array of string \| null | what puts it back where the run found it, as an argv (`["wt", "sync", "undo", work]`); null when nothing is there to undo |
-| `planFile` | string \| null | for `handedOver`: the plan saying what is yours |
-| `ownRemoteSync` | object \| null | since 1.2.0: [`ownRemoteSync`](#ownremotesync--what-a-run-did-about-it), an object from `wt sync rebase`; always null from resume and undo |
-| `stack` | object \| null | since 1.6.0: for `wt sync rebase <work> --stack`, and the resume of one it handed over, the [stack held on this worktree's line](#stack--a-stack-held-on-one-line) and what came of each layer; null for any other run, and from undo |
-| `fold` | object \| null | since 1.18.0: for a `--stack` run that folds the line (`--autosquash`, `--edit`, `wt sync steps`), [what it folded on and what its tree guard compared](#fold--what-a-fold-compared); null for any other run |
-| `eachCommit` | string | since 1.11.0: where the run's `each_commit` checks ran, as `wt sync rebase --each-commit` named it: `all` (every replayed commit that touches a step's paths, the default), `tips` (only the tip of each layer of a `--stack` line, or of the branch; the commits between are neither checked nor owed), `targets` (since 1.19.0: the tip of each layer and each commit a fixup, squash or `amend!` folded into, in an in-place `--stack --autosquash` fold; the commits between are neither checked nor owed) or `off` (no `each_commit` check). A resume says its run's mode; `wt sync undo` checks nothing and says `all` |
-| `rechecked` | int | since 1.7.0: how many commits the `each_commit` checks that read a per-layer step's files ran at again, once the step folded its output into them or committed it |
-| `layerSteps` | array | since 1.7.0: what each [per-layer step](#layersteps--a-step-at-every-layer-tip) came to at the end of each layer, bottom first; empty when none is declared or the rebase did not finish |
-| `emptied` | array | since `sync-run` 1.10.0: each commit a finished rebase set out to replay that left no commit in the result (trunk already has its change, or a conflict was resolved to trunk's side), oldest first, as [`dropped`](#dropped--a-commit-a-rebase-emptied); empty when none, and when the rebase did not finish |
-| `testsOnly` | array | since `sync-run` 1.10.0: each commit whose replay changed only paths matching the declaration's [`test_paths`](sync-declaration.md#test_paths--the-test-files) while the original changed others too, as `dropped`; empty when none or when none are declared |
-| `adopted` | object \| null | since `sync-run` 1.12.0: for `wt sync resume --adopt`, the [rebase finished by hand](sync-declaration.md#wt-sync-resume---adopt--a-rebase-finished-by-hand) it took over: `keptRef` (the ref that keeps the tip it found, made before anything moved: `refs/wt-sync-kept/<branch>/<epoch>-adopted`, or `-adopted-2` and on when that is taken; undo leaves it), `rebaseTip` (where the rebase itself finished, which the layers are moved against) and `commits` (the commits made after the rebase, oldest first, each `commit` and `subject`; they stay on the branch). A check that failed at a tip is in `failedSteps`. Null for every other run, and for a resume `--adopt` refused |
-| `timings` | object | since `sync-run` 1.20.0: how long the run's `each_commit` checks and per-layer steps took, as [`timings`](#timings--where-the-time-went). A resume's covers what that resume ran; empty lists when nothing ran, and for `wt sync undo` |
+<!-- json-docs:begin sync-run -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows. |
+| `command` | `"sync rebase"` \| `"sync run"` \| `"sync resume"` \| `"sync undo"` \| `"sync steps"` | yes | The verb. sync steps since 1.7.0. sync rebase since 1.3.0: before it the verb was spelled wt sync run and named itself sync run. No wt prints sync run since 1.4.1; the value stays for results saved before it. |
+| `repo` | string \| null | yes | The main checkout, as wt sweep --json names the repository; null when the verb stopped before reading it. |
+| `trunk` | string \| null | yes |  |
+| `trunkRef` | string \| null | yes |  |
+| `onto` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit assessed against, or rebased onto: trunk, or --onto's target (since 1.8.0). Null when it was never determined. For resume, the one the handed-over run recorded; null for undo. |
+| `target` | object \| null | yes | What onto is: trunk, or the ref --onto names (since 1.8.0). Null when it was never determined, and for undo. For resume, what the handed-over run rebased onto. |
+| `target.ref` | string | yes | The ref as given to --onto, or origin/<trunk>. |
+| `target.trunk` | boolean | yes | The target is trunk: no --onto was given. |
+| `target.upstream` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit --upstream names: only the commits above it are replayed. Null without it. |
+| `fetched` | boolean | yes |  |
+| `trunkSync` | object \| null | yes | What the run did to local trunk after its fetch, as for wt up. Null when it did not fetch, and always for resume and undo. |
+| `trunkSync.local` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | Local trunk after the run (as found unless fast-forwarded); null when there is none. |
+| `trunkSync.remote` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The origin/<trunk> commit compared with; null when there is none. |
+| `trunkSync.localAhead` | integer \| null, at least 0 | yes | Commits local trunk has that origin lacks, as found. |
+| `trunkSync.remoteAhead` | integer \| null, at least 0 | yes | Commits origin has that local trunk lacks, as found. |
+| `trunkSync.fastForwarded` | boolean | yes |  |
+| `trunkSync.skippedReason` | `"optedOut"` \| `"ahead"` \| `"diverged"` \| `"dirty"` \| `"operation"` \| `"session"` \| `"notFastForward"` \| `"failed"` \| `null` | yes | Why local trunk was left; null when fast-forwarded or with nothing to do. |
+| `outcome` | `"done"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | done: every participant rebased, fastForwarded, undone or skipped. refused: nothing changed, or error stopped the verb first. partial: something changed and not everything finished. interrupted: a signal ended it. |
+| `error` | string \| null | yes | Why the verb stopped before touching any participant, as for wt up; also a question answered no (or nobody there to answer it), and for undo, why it stopped after putting some back. |
+| `worktrees` | array of object | yes | The participants, parents first. |
+| `worktrees[].work` | string | yes | The work name, as wt list prints it. |
+| `worktrees[].branch` | string | yes | The worktree's branch. |
+| `worktrees[].path` | string | yes | The worktree's absolute path. |
+| `worktrees[].result` | `"rebased"` \| `"fastForwarded"` \| `"rebasedStepFailed"` \| `"skipped"` \| `"refused"` \| `"notRun"` \| `"restored"` \| `"needsRecovery"` \| `"handedOver"` \| `"interrupted"` \| `"undone"` | yes | rebased, fastForwarded, rebasedStepFailed, needsRecovery, handedOver, interrupted and undone changed the branch or worktree; skipped, refused, notRun and restored left them as they were. fastForwarded (since 1.2.0): the branch was behind its own remote and has nothing to rebase at the remote's commit, so the run moved it there and that is all; after is that commit, pushCommand is null, undoCommand puts it back. |
+| `worktrees[].reason` | string \| null | yes |  |
+| `worktrees[].before` | string \| null, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `worktrees[].after` | string \| null, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `worktrees[].failedSteps` | array of string | yes |  |
+| `worktrees[].recovery` | string \| null | yes |  |
+| `worktrees[].pushCommand` | array of string \| null, at least 1 items | yes | For rebased: the push, as an argv. Since 1.4.0 null also for rebased, when wt has no push to make or offer for the branch, which noPushReason explains. |
+| `worktrees[].pushed` | boolean | yes |  |
+| `worktrees[].noPushReason` | string \| null | yes | Since 1.4.0: for rebased with a null pushCommand, why wt made and offered no push for the branch, in words, whatever the reason: among them that it tracks a remote branch of another name with nothing recorded for it, and that the branch of another name it is recorded as pushing to holds commits that cannot be shown to be old versions of its own. Null otherwise. |
+| `worktrees[].fixCommand` | array of string \| null, at least 1 items | yes | Since 1.4.0: the command that settles noPushReason, as an argv, when one does: wt sync push-to <branch> <remote>/<branch>, which records the branch it tracks as where it pushes. The same command with the branch's own name on the remote records that instead. It names no directory: run it in the repository. Null otherwise. |
+| `worktrees[].safetyRef` | string \| null | yes | The ref pinning the branch's tip from before the run: refs/wt-sync/<branch>/<epoch>. |
+| `worktrees[].deferred` | array of object | yes | What each deferred step of a finished rebase came to: step (its run line), result, reason (why failed, skipped or owed) and commit (for committed). |
+| `worktrees[].deferred[].step` | string | yes | The step's run line from .wt-sync.yaml. |
+| `worktrees[].deferred[].result` | `"done"` \| `"committed"` \| `"failed"` \| `"skipped"` \| `"owed"` | yes | owed since 1.5.0: not run, because a need of it did not answer its probe in a run started with --allow-owed; owed like a failed step. |
+| `worktrees[].deferred[].reason` | string \| null | yes | Why the step failed, was skipped or is owed. |
+| `worktrees[].deferred[].commit` | string \| null | yes | For committed: the commit. |
+| `worktrees[].undoCommand` | array of string \| null, at least 1 items | yes | What puts it back where the run found it, as an argv; null when there is nothing to undo. For example ["wt", "sync", "undo", work]. |
+| `worktrees[].planFile` | string \| null | yes | For handedOver: the plan file saying what is yours. |
+| `worktrees[].layers` | array of object | yes | Since sync-run 1.15.0: the branches in no worktree on this participant's line, bottom first, that the run moved with its rebase or left, and why. Empty when there are none, and for a participant the run did not rebase. |
+| `worktrees[].layers[].branch` | string | yes |  |
+| `worktrees[].layers[].before` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip when the run read the line. |
+| `worktrees[].layers[].after` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | Where the run moved it: the replay of its commit. Null for a branch left. |
+| `worktrees[].layers[].result` | `"moved"` \| `"left"` | yes | moved: the branch is at after, pinned with the run's safety and result refs, so wt sync undo puts it back with the worktrees. left: it stays at before; reason says why. |
+| `worktrees[].layers[].reason` | string \| null | yes | Why it was left: it is trunk, a backup name (also by a prefix at a slash), a tip that is a fixup!, squash! or amend! commit, a merge commit on the line, a rebase that dropped, folded or changed commits, one that stopped or failed, a branch checked out meanwhile. Null for a branch moved. |
+| `worktrees[].ownRemoteSync` | object \| null | yes | Since 1.2.0. Always an object from wt sync rebase; always null from resume and undo, which do not check: the check ran when the run started. |
+| `worktrees[].ownRemoteSync.ref` | string \| null | yes | The remote-tracking ref, as remote/branch; null only when no ref could be named. |
+| `worktrees[].ownRemoteSync.state` | `"none"` \| `"gone"` \| `"unknown"` \| `"inSync"` \| `"ahead"` \| `"behind"` \| `"rebased"` \| `"diverged"` | yes | As found, before anything moved; the states are those of ownRemote in wt status --json. |
+| `worktrees[].ownRemoteSync.local` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The branch as found, before any fast-forward: where wt sync undo puts it back. |
+| `worktrees[].ownRemoteSync.remote` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The remote commit compared with; null for none, gone and unknown. |
+| `worktrees[].ownRemoteSync.localAhead` | integer \| null, at least 0 | yes | Commits only the branch had; null for none, gone and unknown. |
+| `worktrees[].ownRemoteSync.remoteAhead` | integer \| null, at least 0 | yes | Commits only the remote had; null for none, gone and unknown. |
+| `worktrees[].ownRemoteSync.fastForwarded` | boolean | yes | The run moved the branch from local to remote before rebasing it. It stays true as a record when the rebase after it was put back, which takes the branch back to local. |
+| `worktrees[].ownRemoteSync.allowed` | boolean | yes | state is diverged and the run went on over it under --allow-diverged; false when the participant was refused for something else. |
+| `worktrees[].ownRemoteSync.skippedReason` | `"diverged"` \| `"operation"` \| `"dirty"` \| `"session"` \| `"failed"` \| `"fetchFailed"` \| `null` | yes | Why the own remote refuses the participant; null when it does not. diverged: --allow-diverged goes on. operation, dirty, session: behind, and it cannot be fast-forwarded. failed: the fast-forward itself did not go through; nothing of this participant was touched. fetchFailed: the branch's own remote could not be fetched, so the run could not look; trunk's fetch failing is the run's error instead. |
+| `worktrees[].checked` | integer, at least 0 | yes | Since 1.5.0: how many replayed commits the each_commit checks ran at, in this run or this resume. 0 when nothing was checked. |
+| `worktrees[].eachCommit` | `"all"` \| `"tips"` \| `"targets"` \| `"off"` | yes | Since 1.11.0 (targets since 1.19.0): where the run's each_commit checks ran, as wt sync rebase --each-commit named it. all: at every replayed commit that touches a step's paths, the default. tips: only at the tip of each layer of a --stack line, or of the branch; the commits between are not checked and not owed. targets: at each layer's tip and at each commit a fixup, squash or amend! folded into, in an in-place --stack --autosquash fold; the commits between are not checked and not owed. off: no each_commit check ran. A resume says its run's; wt sync undo, which checks nothing, says all. |
+| `worktrees[].rechecked` | integer, at least 0 | yes | Since 1.7.0: how many commits the each_commit checks that read a per-layer step's files ran at again, once the step had folded its output into them or committed it. 0 when none. |
+| `worktrees[].checkFailed` | object \| null | yes | Since 1.5.0: the each_commit check that stopped the rebase: handedOver at that commit, or restored for a stack parent. Null when none failed. The step, the commit (the replayed commit it failed at), its subject and its error. The participant is handedOver at that commit, HEAD the commit, nothing unmerged, and wt sync resume runs the check again there once the fix is amended in or committed; a stack parent is restored instead, and its children notRun. |
+| `worktrees[].checkFailed.step` | string | yes | The check's run line from .wt-sync.yaml. |
+| `worktrees[].checkFailed.commit` | string, matching `^[0-9a-f]{40,64}$` | yes | The replayed commit it failed at. |
+| `worktrees[].checkFailed.subject` | string | yes |  |
+| `worktrees[].checkFailed.error` | string | yes | What failed: an exit status, a timeout, the tracked files it changed, or, for a step with a retry, the exit of the run and of the retry that failed too. |
+| `worktrees[].stack` | object \| null | yes | Since 1.6.0: for a --stack run, the stack held on this worktree's line: its layers and what came of each. Null for any other run. Also for the resume of a --stack run it handed over; null from undo. |
+| `worktrees[].stack.branch` | string | yes | The line's own branch: the worktree named. |
+| `worktrees[].stack.base` | string, matching `^[0-9a-f]{40,64}$` | yes | Where the line leaves trunk: the merge base. |
+| `worktrees[].stack.head` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's tip before the run. |
+| `worktrees[].stack.autosquash` | boolean | yes | A fold of the line's fixups (--autosquash): onto its own base, or, with --onto, as the line moves onto the target. |
+| `worktrees[].stack.layers` | array of object | yes | The layer branches, bottom first: what a run moves once its rebase has finished. The line's own branch is never one of them. |
+| `worktrees[].stack.layers[].branch` | string | yes | The layer branch. |
+| `worktrees[].stack.layers[].oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip before the run. |
+| `worktrees[].stack.layers[].commits` | integer, at least 1 | yes | Its commits from the line's base, its tip included. |
+| `worktrees[].stack.layers[].subject` | string | yes | Its tip's subject. |
+| `worktrees[].stack.layers[].foundBy` | `"tipOnLine"` \| `"named"` | yes | tipOnLine: a local branch whose tip is a commit of the line. named: named with --layer, by name or by a pattern. |
+| `worktrees[].stack.layers[].worktree` | string \| null | yes | The worktree the branch is checked out in; null when it is in none. |
+| `worktrees[].stack.layers[].state` | `"none"` \| `"clean"` \| `"dirty"` \| `"rebasing"` \| `"bisecting"` \| `"busy"` \| `"idle"` \| `"process"` \| `"unknown"` | yes | What holds the layer's worktree: none (in no worktree), clean (nothing), dirty (tracked changes), rebasing (a rebase in progress, there or in another worktree that will move it), bisecting (a bisect in another worktree started from it), busy or idle (an agent session), process (a process whose working directory is inside the worktree), unknown (it could not be read, which holds the layer). In a run, as read when the layer was moved. A process is any process, a dev server in a terminal tab included. |
+| `worktrees[].stack.layers[].stateDetail` | string \| null | yes | Who or what holds it: the session, the process, or why it could not be read. The process is named as pid 123 npm run dev. |
+| `worktrees[].stack.layers[].newTip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The run's: the layer's new tip, read from the rebase and checked. Null in the look, and when the run moved no layer. Git wrote it as the rebase passed it, and it is checked before any layer moved. |
+| `worktrees[].stack.layers[].commitsAfter` | integer \| null, at least 0 | yes | The run's: the new tip's commits from the new base: the layer's commits up to it, less those trunk already carries and the fixups folded into an earlier commit. |
+| `worktrees[].stack.layers[].mapped` | `"tip"` \| `"tipDropped"` \| `"emptied"` \| `null` | yes | The run's: tip (the new tip is its own tip rebased), tipDropped (its tip was left out because trunk already carries it, dropped as empty, or folded into an earlier commit by --autosquash; the new tip is its last commit left), emptied (every commit of it was left out because trunk carries it, dropped as empty, or folded into an earlier commit by --autosquash; it ends where the layer below does). |
+| `worktrees[].stack.layers[].patch` | `"same"` \| `"changed"` \| `"unknown"` \| `null` | yes | The run's: whether what the layer brings to the line is the same patch as before, by git's stable patch-id. Never a refusal. |
+| `worktrees[].stack.layers[].patchWhy` | string \| null | yes | The run's: why the patch changed. |
+| `worktrees[].stack.layers[].result` | `"moved"` \| `"held"` \| `"unchanged"` \| `"planned"` \| `"moving"` \| `"needsRecovery"` \| `null` | yes | The run's: moved (the branch is at newTip, its worktree reset with it), held (left where it was; held says why and moveCommand moves it by hand), unchanged (its new tip is its old one), planned (recorded and not moved: the moves stopped before it), moving (its move was under way when the moves stopped: undo puts its ref back), needsRecovery (a move that went part way and could not be put back: held says what to look at, the layer keeps its pins, the run fails, and wt sync undo <line> puts it back). |
+| `worktrees[].stack.layers[].how` | `"ref"` \| `"worktree"` \| `null` | yes | The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (in its worktree, under that worktree's lock: the same guarded update-ref, then its files follow with read-tree -m -u). For a layer in a worktree: update-ref, then read-tree -m -u <old> <new>. |
+| `worktrees[].stack.layers[].held` | string \| null | yes | The run's: why the layer was held, or for needsRecovery what to look at. It is also held for a tip that moved during the run, or another run's lock on its worktree, which holds while that run's process runs, however long, and otherwise until the lock is 30 minutes old. |
+| `worktrees[].stack.layers[].moveCommand` | string \| null | yes | The run's: what moves a held layer by hand. |
+| `worktrees[].stack.layers[].pushCommand` | array of string \| null, at least 1 items | yes | The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run does not push layers. Null otherwise. |
+| `worktrees[].stack.layers[].noPushReason` | string \| null | yes | The run's: for a moved layer with no safe push command, why: no remote branch of its own yet, or the remote has commits the branch never had. |
+| `worktrees[].stack.layers[].note` | string \| null | yes | The run's: what else happened to a moved layer, such as a checkout of it that landed during its move, at its new tip. |
+| `worktrees[].stack.top` | object | yes | Since 1.17.0: the line's own branch, the top of the stack: the last row of the look's layer table. Not one of layers, which are the branches a run moves after its rebase; the rebase itself moves the top. Its fields: branch, oldTip, commits (from the line's base, its tip included; 0 for a branch with nothing ahead of trunk), subject (its tip's), worktree (where it is checked out). |
+| `worktrees[].stack.top.branch` | string | yes | The line's own branch. |
+| `worktrees[].stack.top.oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip before the run: head. |
+| `worktrees[].stack.top.commits` | integer, at least 0 | yes | Its commits from the line's base, its tip included; 0 for a branch with nothing ahead of trunk. |
+| `worktrees[].stack.top.subject` | string | yes | Its tip's subject. |
+| `worktrees[].stack.top.worktree` | string \| null | yes | The worktree it is checked out in. |
+| `worktrees[].stack.skipped` | array of object | yes | Branches on the line not taken, each with branch, tip and reason. |
+| `worktrees[].stack.skipped[].branch` | string | yes |  |
+| `worktrees[].stack.skipped[].tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `worktrees[].stack.skipped[].reason` | string | yes | A backup name, unless --layer names it (a pattern never does); without --layer, a branch with no commits of its own that has uncommitted tracked changes in another worktree, which --layer by name or by pattern takes; or a branch a --layer pattern matched whose tip is not on the line. |
+| `worktrees[].stack.sideBranches` | array of object | yes | Since 1.16.0: the local branches that hang off the line, parents first: forked from a commit of it above its base, or above its top. Empty with --no-side-branches. |
+| `worktrees[].stack.sideBranches[].branch` | string | yes |  |
+| `worktrees[].stack.sideBranches[].kind` | `"forked"` \| `"above"` | yes | forked: it leaves the line at a commit below its top. above: it carries the line's top. |
+| `worktrees[].stack.sideBranches[].oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip before the run. |
+| `worktrees[].stack.sideBranches[].fork` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit of the line it leaves the line at: its merge base with the line's tip. |
+| `worktrees[].stack.sideBranches[].forkSubject` | string | yes |  |
+| `worktrees[].stack.sideBranches[].on` | string \| null | yes | The side branch it is stacked on, which moves first; null when it sits on the line itself. A backup is never what a branch is on, and neither is a branch at its own tip (see sameTip). On branches at one tip, it names the one that stands for them: one with an upstream, then the oldest, then the first by name. |
+| `worktrees[].stack.sideBranches[].base` | string, matching `^[0-9a-f]{40,64}$` | yes | Where its own commits start: the tip of the branch it is on, or fork. |
+| `worktrees[].stack.sideBranches[].commits` | integer, at least 0 | yes | Its own commits, from base to its tip. A branch at the same tip as another is never on it: both count the same commits. |
+| `worktrees[].stack.sideBranches[].backup` | boolean | yes | Its name is a backup (wt refs sweep's patterns): listed, never moved. |
+| `worktrees[].stack.sideBranches[].worktree` | string \| null | yes | The worktree it is checked out in; null when it is in none. |
+| `worktrees[].stack.sideBranches[].state` | `"none"` \| `"clean"` \| `"dirty"` \| `"rebasing"` \| `"bisecting"` \| `"busy"` \| `"idle"` \| `"process"` \| `"unknown"` | yes | What holds its worktree, as for a layer. |
+| `worktrees[].stack.sideBranches[].stateDetail` | string \| null | yes |  |
+| `worktrees[].stack.sideBranches[].carry` | boolean | yes | The look's: the run would carry it. In a run, it was moved or is unchanged. False for a backup, a branch with a merge commit or on more than one branch, one whose worktree something holds, one stacked on a branch that is not carried, and every branch with --alone. |
+| `worktrees[].stack.sideBranches[].left` | string \| null | yes | Why it is not carried: a backup, a merge commit of its own (a replay drops it), on more than one branch, what holds its worktree (said short: a process in its worktree: bash (pid 31227), +10 more), a branch at its tip that is held, stacked on a branch that is not carried, --alone; null when it is carried. |
+| `worktrees[].stack.sideBranches[].newBase` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The run's: where it goes: for a branch forked mid-line, where the rebase put the commit it forks from, read from the run's own marker and checked as a layer's is; above the top, the line's new tip; on another side branch, that branch's new tip. Null when it is not known. |
+| `worktrees[].stack.sideBranches[].newTip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The run's: its own commits replayed onto newBase. Null when it was not replayed. |
+| `worktrees[].stack.sideBranches[].result` | `"moved"` \| `"held"` \| `"unchanged"` \| `"planned"` \| `"moving"` \| `"needsRecovery"` \| `null` | yes | The run's, as for a layer. A backup is always held, with no moveCommand. |
+| `worktrees[].stack.sideBranches[].how` | `"ref"` \| `"worktree"` \| `null` | yes | Same as for a layer. |
+| `worktrees[].stack.sideBranches[].held` | string \| null | yes | The run's: why it was held. It is held for what holds its worktree, a conflict of its own commits where it goes (the commit and paths), the branch it is on being held, the fork's marker failing its check, or --alone. |
+| `worktrees[].stack.sideBranches[].moveCommand` | string \| null | yes | The run's: what moves a held branch later, with real commits and every branch name shell-quoted: wt sync rebase '<branch>' --onto <newBase> --upstream <base> for a branch in a worktree, which is a run of its own with stops, resume and undo; git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>' for one checked out in the main checkout, which wt sync rebase does not take; git rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in no worktree; --onto '<branch>' for one on a held side branch, to run once that has moved. For a branch that moves with the sibling standing for its tip: one shell line whose guards refuse, changing nothing, unless the branch is still at the tip the run recorded and the sibling is at the commit it lands on: test "$(git [-C '<worktree>'] rev-parse --verify --quiet 'refs/heads/<branch>')" = <old tip> && test "$(… 'refs/heads/<sibling>')" = <its new tip> && git [-C '<worktree>'] rebase --no-update-refs --no-autostash --onto <its new tip> <old tip> '<branch>'. With the sibling held too, no commit exists to check it against: it gets no command, and held says to move the sibling first, then this branch by hand onto the sibling's new tip, once that is checked to carry all of its commits. Nothing is replayed, so the branch lands on that very commit; the refs are refs/heads/, so no tag of the same name is taken; --no-autostash keeps the refusal over tracked changes with rebase.autoStash set. Null for a backup, for a branch with a merge commit of its own (a rebase would drop the merge: move it by hand), and when newBase is not known. |
+| `worktrees[].stack.sideBranches[].sameTip` | array of string | yes | Since 1.17.0: the other side branches at its very tip, by name: siblings, carried or held together onto one new commit. Empty for most. |
+| `worktrees[].stack.refusal` | string \| null | yes | The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held. The line itself is left rebased, and wt sync undo puts it back. |
+| `worktrees[].stack.edit` | object \| null | yes | Since 1.9.0: what a run with --edit did to the commit it stopped at. Null in the look and for any other run. |
+| `worktrees[].stack.edit.commit` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit as the line had it. |
+| `worktrees[].stack.edit.subject` | string | yes | Its subject. |
+| `worktrees[].stack.edit.amended` | string, matching `^([0-9a-f]{40,64})?$` | yes | What the run went on from at the edit stop: the amended commit, or the last commit added there; empty if the run never went on from it. |
+| `worktrees[].stack.edit.paths` | array of string | yes | The paths the amend changed, sorted; empty when it changed nothing. |
+| `worktrees[].stack.edit.emptied` | array of object | yes | The commits above it that the amend emptied, which the rebase dropped, oldest first. Each is sha (as the old line had it) and subject. A layer all of whose commits emptied is mapped emptied and ends where the layer below does. |
+| `worktrees[].stack.edit.emptied[].sha` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit as the old line had it. |
+| `worktrees[].stack.edit.emptied[].subject` | string | yes |  |
+| `worktrees[].stack.contextGaps` | array of object | yes | Since 1.14.0: for a fold (--autosquash), in the look and in the run, every hunk of a fixup that does not apply behind its target, where autosquash puts it, because only a later commit of the line carries its context; line order. Empty for any other look or run. A warning: the run goes ahead. |
+| `worktrees[].stack.contextGaps[].fixup` | string, matching `^[0-9a-f]{40,64}$` | yes | The fixup commit, as the line has it. It is the fixup!, squash! or amend! commit. |
+| `worktrees[].stack.contextGaps[].fixupSubject` | string | yes |  |
+| `worktrees[].stack.contextGaps[].target` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit autosquash folds it into. |
+| `worktrees[].stack.contextGaps[].targetSubject` | string | yes |  |
+| `worktrees[].stack.contextGaps[].path` | string | yes | The hunk's file. |
+| `worktrees[].stack.contextGaps[].lines` | string, matching `^[0-9]+(-[0-9]+)?$` | yes | The lines the hunk changes in the fixup's own file: 13, or 13-15. |
+| `worktrees[].stack.contextGaps[].needs` | string, matching `^[0-9a-f]{40,64}$` | yes | The first commit after the target, in line order, that carries the hunk's context. |
+| `worktrees[].stack.contextGaps[].needsSubject` | string | yes |  |
+| `worktrees[].stack.contextGaps[].message` | string | yes | The line wt prints for it: fixup moved ahead of its context: <path>:<lines> needs <sha> "<subject>", which comes later on the line. |
+| `worktrees[].stack.contextUnchecked` | array of string | yes | Since 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run. |
+| `worktrees[].fold` | object \| null | yes | Since 1.18.0: for a --stack run that folds the line (--autosquash, --edit, or wt sync steps), what it folded on and what its tree guard compared. Null for any other run. |
+| `worktrees[].fold.inPlace` | boolean | yes | The line is folded on its own base, not moved onto a target. |
+| `worktrees[].fold.base` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's own base: what an in-place fold rebases onto. |
+| `worktrees[].fold.guard` | object \| null | yes | The tree guard once the rebase finished: oldTip, newTip, onto (the commit a moving fold's old line was merged onto to compare, null for a fold in place), excludedGlobs (the declared per-layer step paths a changed file matched, left out), conflictAllowed (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), outcome (passed or failed) and reason (why it failed, else null). Null while the run has not finished, and for an edit. |
+| `worktrees[].fold.guard.oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `worktrees[].fold.guard.newTip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `worktrees[].fold.guard.onto` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | For a fold that moves the line: the commit the old line was merged onto to compare. Null for a fold in place, which compares with the old tip itself. |
+| `worktrees[].fold.guard.excludedGlobs` | array of string | yes | The declared per-layer step paths a changed file matched, left out of the comparison. |
+| `worktrees[].fold.guard.conflictAllowed` | array of string | yes | For a fold that moves the line: the files that conflicted when merged and were resolved at a stop; every line of the merge outside the conflicting regions must still be in them, in order. Not step paths. |
+| `worktrees[].fold.guard.outcome` | `"passed"` \| `"failed"` | yes |  |
+| `worktrees[].fold.guard.reason` | string \| null | yes | Why it failed; null when it passed. |
+| `worktrees[].layerSteps` | array of object | yes | Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish. |
+| `worktrees[].layerSteps[].layer` | integer, at least 1 | yes | The layer, from 1 at the bottom. In a --stack run the line's own commits above its top layer are one more layer; a rebase of one branch is one layer. |
+| `worktrees[].layerSteps[].layers` | integer, at least 1 | yes | How many layers the run stopped at. |
+| `worktrees[].layerSteps[].branch` | string | yes | The layer's branch: a layer branch, or the line's own for the commits above every layer. |
+| `worktrees[].layerSteps[].step` | string | yes | The step's run line from .wt-sync.yaml. |
+| `worktrees[].layerSteps[].ran` | boolean | yes | Whether the step ran at this layer. |
+| `worktrees[].layerSteps[].result` | `"unchanged"` \| `"folded"` \| `"committed"` \| `"skipped"` \| `"owed"` \| `"failed"` | yes | unchanged: ran and changed nothing. folded: its output was folded into owner. committed: no commit of the layer changed its paths, and its output is the step's own commit at the layer's tip. skipped: no listed path changed in the layer. owed: not run, because a need did not answer or it failed at a layer below. failed: ran and failed, changed files outside its paths, or its fold was not proved; owed, and owed at every layer above. |
+| `worktrees[].layerSteps[].reason` | string \| null | yes | Why it ran, or why not, or why it failed. |
+| `worktrees[].layerSteps[].owner` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | For folded, the commit its output was folded into, as rewritten: the last commit of the layer that changed one of its paths. |
+| `worktrees[].layerSteps[].ownerSubject` | string \| null | yes | The owner's subject. |
+| `worktrees[].layerSteps[].commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | For committed, the step's commit. |
+| `worktrees[].layerSteps[].proof` | string \| null | yes | For a fold: held when the rewritten tip's tree is the step's output and every rewritten commit is unchanged outside the step's paths; otherwise what did not hold. Null when nothing was folded. If it did not hold, nothing was folded. |
+| `worktrees[].layerSteps[].elapsedMs` | integer, at least 0 | yes | Since 1.20.0: how long the step took at this layer, in milliseconds. 0 when it did not run. |
+| `worktrees[].emptied` | array of object | yes | Since 1.10.0: each commit a finished rebase set out to replay that left no commit in the result: trunk already had its change, or a conflict was resolved to trunk's side. Oldest first. Fixups and squashes folded by --autosquash and the commit --edit amends are not listed. Empty when none, and when the rebase did not finish. |
+| `worktrees[].emptied[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes | The original commit's full id. |
+| `worktrees[].emptied[].subject` | string | yes | Its subject. |
+| `worktrees[].emptied[].layer` | string \| null | yes | The layer branch it was in for a --stack run; for a commit above every layer, the line's own branch. Null for any other run. |
+| `worktrees[].emptied[].unmatched` | boolean | yes | True when wt cannot tell whether the commit left no commit: its key (author, author date, subject) is missing from the result but a commit of the result has its author and date or its author and subject, or, with no record of the rebase's plan, a fixup or amend could have changed it, or more commits came out under one key than went in (one of them may be it, changed), or it is a fixup the plan lists as folded, in a rebase wt did not carry out start to finish, whose change is not in the result (it may have been skipped). Check the result for it. Only in emptied. |
+| `worktrees[].testsOnly` | array of object | yes | Since 1.10.0: each commit whose replay changed only paths matching the declaration's test_paths while the original changed others too. Empty when none, when no test_paths is declared, and when the rebase did not finish. |
+| `worktrees[].testsOnly[]` | object | yes | Fields as at `worktrees[].emptied[]`. |
+| `worktrees[].adopted` | object \| null | yes | Since 1.12.0: for wt sync resume --adopt, the rebase finished by hand that it took over. Null for every other run, and for a resume --adopt that refused. keptRef is the ref that keeps the tip it found, made before anything moved: refs/wt-sync-kept/<branch>/<epoch>-adopted, or -adopted-2 and on when that is taken; undo leaves it. rebaseTip is where the rebase itself finished, which the layers are moved against. commits are the commits made after the rebase, oldest first, each with commit and subject; they stay on the branch. A check that failed at a tip is in failedSteps. |
+| `worktrees[].adopted.keptRef` | string | yes | The ref that keeps the tip resume found, made before anything moved and never moved after: refs/wt-sync-kept/<branch>/<epoch>-adopted, or -adopted-2 and so on when that is taken. wt sync undo leaves it. |
+| `worktrees[].adopted.rebaseTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Where the rebase itself finished: the layers are read and moved against it. |
+| `worktrees[].adopted.commits` | array of object | yes | The commits made after the rebase, oldest first: rebaseTip..the tip resume found. They stay on the line's own branch. |
+| `worktrees[].adopted.commits[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `worktrees[].adopted.commits[].subject` | string | yes |  |
+| `worktrees[].timings` | object | yes | Since 1.20.0: how long the run's each_commit checks and per-layer steps took. A resume's covers what that resume ran. Empty lists when none ran; wt sync undo, which runs none, says 0 and empty. |
+| `worktrees[].timings.wallMs` | integer, at least 0 | yes | The wall time of the run, or of the resume, in milliseconds. |
+| `worktrees[].timings.runs` | array of object | yes | One row per each_commit step and per per-layer step that ran, in the order each first ran. |
+| `worktrees[].timings.runs[].kind` | `"check"` \| `"step"` | yes | check: an each_commit step, at every commit, tip or recheck it ran at. step: a per-layer step. |
+| `worktrees[].timings.runs[].run` | string | yes | The step's run line from .wt-sync.yaml. |
+| `worktrees[].timings.runs[].count` | integer, at least 1 | yes | How many times it ran. A check that failed and was retried is one run, its retry's time in it. |
+| `worktrees[].timings.runs[].totalMs` | integer, at least 0 | yes | The time of all of them, in milliseconds. |
+| `worktrees[].timings.slowest` | array of object | yes | The slowest runs of any check or step, slowest first; at most three. |
+| `worktrees[].timings.slowest[].kind` | `"check"` \| `"step"` | yes |  |
+| `worktrees[].timings.slowest[].run` | string | yes |  |
+| `worktrees[].timings.slowest[].at` | string | yes | Where it ran: a commit's short id and subject for a check, a layer and its branch for a step. |
+| `worktrees[].timings.slowest[].ms` | integer, at least 0 | yes |  |
+| `leftAlone` | array of object | yes | Since 1.13.0: what a `--alone` run did not take along and left on the commits it was on, each named by `work`, `branch` and `path`: the worktrees stacked on the same history as the one it rebased, the branches in no worktree on the commits it replayed, or, with --stack, the layer branches of the line. [] for every other run. |
+| `leftAlone[].work` | string \| null | yes | The worktree; null for a branch that is in no worktree. Null for a branch in no worktree. |
+| `leftAlone[].branch` | string | yes |  |
+| `leftAlone[].path` | string \| null | yes | Null for a branch in no worktree. |
+| `recovery` | string \| null | yes | For interrupted: the way back wt printed. |
+<!-- json-docs:end -->
 
 ### `dropped` — a commit a rebase emptied
 
@@ -1678,13 +2175,6 @@ wt drove the rebase, the subject is the one the run's own plan says an `amend!` 
 the commit, and the folds are the ones the plan lists, so a fixup git left out
 because trunk carries its patch is named. The commits an `--edit` amend empties
 on purpose are in neither list, and a run whose line was put back reports neither.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `commit` | string | the original commit's full id, from before the rebase |
-| `subject` | string | its subject |
-| `layer` | string \| null | for a `--stack` run, the layer branch it was in (the line's own branch for a commit above every layer); null otherwise |
-| `unmatched` | bool | true when wt cannot tell whether the commit left no commit, and lists it in `emptied` rather than call it dropped: its author, author date and subject are not in the result, but a commit of the result has its author and date, or its author and subject (its date or subject changed); or, for a rebase wt has no record of the plan of (one a person finished by hand, or an older run), a fixup or an `amend!` could have changed it; or more commits came out under one key than went in, so one of them may be it, changed; or it is a fixup the plan lists as folded, in a rebase wt did not carry out start to finish (a person went on by hand), whose change is not in the result, so it may have been skipped. Always false in `testsOnly`, which leaves such a commit out |
 
 `result` has `wt up`'s values and one more, `undone`: `wt sync undo` put the
 branch back at its safety ref, or aborted its handed-over rebase. A branch undo
@@ -1701,44 +2191,6 @@ A stack of layer branches whose commits all sit on one first-parent line:
 `branch` is the worktree's branch at the top of it (a tmp branch at the top,
 or the top layer itself). The look (`wt sync <work> --stack --json`) fills
 what it sees; a run (`wt sync rebase <work> --stack --json`) fills the rest.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `branch` | string | the line's branch |
-| `base` | string | where the line leaves trunk, the merge base |
-| `head` | string | the line's tip before the run |
-| `autosquash` | bool | a fold of the line's fixups (`--autosquash`): onto its own base, or, with `--onto`, as the line moves onto the target |
-| `layers` | array | the layer branches, bottom first (below): what a run moves once its rebase has finished. The line's own branch is never one of them |
-| `top` | object | since `sync` 1.13.0 and `sync-run` 1.17.0: the line's own branch, the top of the stack, which the rebase itself moves: `branch`, `oldTip` (`head`), `commits` (from the line's base, its tip included; 0 for a branch with nothing ahead of trunk), `subject` (its tip's), `worktree` (where it is checked out). The look's text lists it as the last row of the layer table |
-| `skipped` | array | branches on the line not taken: `branch`, `tip`, `reason` (a backup name, unless `--layer` names it, which a pattern never does; without `--layer`, a branch with no commits of its own that has uncommitted tracked changes in another worktree, which `--layer` by name or by pattern takes; or a branch a `--layer` pattern matched whose tip is not on the line) |
-| `sideBranches` | array | since `sync` 1.12.0 and `sync-run` 1.16.0: the [side branches](#side-branches--what-hangs-off-the-line) that hang off the line, parents first; `[]` with `--no-side-branches` |
-| `refusal` | string \| null | the run's: why no layer moved, a new tip that failed its check, or a fold that changed the line's content; the line itself is left rebased, and `wt sync undo` puts it back. Null in the look, and when each layer was moved or held |
-| `edit` | object \| null | since 1.9.0: what a run with `--edit <rev>` did to that commit (below); null in the look and for any other run |
-| `contextGaps` | array | since `sync` 1.11.0 and `sync-run` 1.14.0: for a fold (`--autosquash`), in the look and in the run, every hunk of a fixup that does not apply where autosquash puts it, behind its target, because only a later commit of the line carries its context (below); line order. Empty for any other look or run. A warning: the run goes ahead |
-| `contextUnchecked` | array of string | since `sync` 1.11.0 and `sync-run` 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed, and for any other look or run |
-
-Each layer:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `branch` | string | |
-| `oldTip` | string | its tip before the run |
-| `commits` | int | its commits from the line's base, its tip included |
-| `subject` | string | its tip's subject |
-| `foundBy` | `tipOnLine` \| `named` | a local branch whose tip is on the line, or one `--layer` named or a `--layer` pattern matched |
-| `worktree` | string \| null | where it is checked out; null for none |
-| `state` | `none` \| `clean` \| `dirty` \| `rebasing` \| `bisecting` \| `busy` \| `idle` \| `process` \| `unknown` | what holds that worktree: nothing, tracked changes, a rebase (there, or a stopped one in another worktree that will move the branch), a bisect in another worktree started from the branch, an agent session busy or idle, a process whose working directory is inside it (any process, a dev server in a terminal tab included), or `unknown` when it could not be read, which holds the layer |
-| `stateDetail` | string \| null | the session, the process (`pid 123 npm run dev`), or why it could not be read |
-| `newTip` | string \| null | the run's: its new tip, which git wrote as the rebase passed it, checked before any layer moved |
-| `commitsAfter` | int \| null | the run's: the new tip's commits from the new base: the layer's commits up to it, less those trunk already carries and the fixups folded into an earlier commit |
-| `mapped` | `tip` \| `tipDropped` \| `emptied` \| null | the run's: its own tip rebased; its tip already on trunk, dropped as empty or folded into an earlier commit, so the new tip is its last commit left; every commit already on trunk or dropped as empty (or, with `--autosquash`, folded into an earlier commit), so it ends where the layer below does |
-| `patch`, `patchWhy` | `same` \| `changed` \| `unknown`, string \| null | the run's: whether the change the layer brings is the same patch (git's stable patch-id), and why not; never a refusal |
-| `result` | `moved` \| `held` \| `unchanged` \| `planned` \| `moving` \| `needsRecovery` \| null | the run's: at `newTip` (its worktree with it); left where it was; its new tip is its old one; recorded but not reached, because the moves stopped; under way when the moves stopped (undo puts its ref back); a move that went part way and could not be put back, so `held` says what to look at, the layer keeps its pins, the run fails and `wt sync undo <line>` puts it back |
-| `how` | `ref` \| `worktree` \| null | the run's: `update-ref` guarded by its old tip, for a branch in no worktree; the same `update-ref`, then `read-tree -m -u <old> <new>`, under that worktree's lock |
-| `held`, `moveCommand` | string \| null | the run's: why it was held (tracked changes, a rebase, a session, a process, a tip that moved during the run, another run's lock on its worktree, which holds while that run's process runs, however long, and otherwise until the lock is 30 minutes old), and the command that moves it by hand |
-| `pushCommand` | array of string \| null | the run's: for a moved layer, its push to its own remote as an argv, with `--force-with-lease` on the commit wt last fetched there. The run pushes the line's branch only |
-| `noPushReason` | string \| null | the run's: for a moved layer with no safe push, why: no remote branch of its own yet, or the remote has commits the branch never had |
-| `note` | string \| null | the run's: what else happened to a moved layer, such as a checkout of it that landed during its move, at its new tip |
 
 A moved layer has a safety ref and a result ref under the run's epoch, so
 `wt sync undo <line>` puts it back with the line; a held one has none and is no
@@ -1773,26 +2225,6 @@ so `wt sync undo <line>` puts it back with the line. A backup is listed and
 never moved. A branch that is not moved is `held`, with `moveCommand` when
 where it goes is known.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `branch` | string | |
-| `kind` | `forked` \| `above` | it leaves the line below its top; it carries the top |
-| `oldTip` | string | its tip before the run |
-| `fork`, `forkSubject` | string | the commit of the line it leaves the line at |
-| `on` | string \| null | the side branch it is stacked on, which moves first; null when it sits on the line |
-| `base` | string | where its own commits start: the tip of the branch it is on, or `fork` |
-| `commits` | int | its own commits, `base` to its tip. Branches at one tip count the same |
-| `backup` | bool | its name is a backup: listed, never moved |
-| `worktree`, `state`, `stateDetail` | | where it is checked out and what holds it, as for a layer |
-| `carry` | bool | the look's: the run would carry it; in a run, it was moved or is unchanged |
-| `left` | string \| null | why not: a backup, a merge commit of its own (a replay drops it), on more than one branch, what holds its worktree (said short: `a process in its worktree: bash (pid 31227), +10 more`), a branch at its tip that is held, stacked on a branch that is not carried, `--alone`; null when it is carried |
-| `newBase` | string \| null | the run's: where it goes: the commit the rebase made of `fork` (for a fork the rebase dropped or folded, the last commit below it that is left), the line's new tip for one `above`, the new tip of the branch it is `on`; null when that is not known |
-| `newTip` | string \| null | the run's: its commits replayed onto `newBase`; null when not replayed |
-| `result`, `how` | | the run's, as for a layer; a backup is always `held` |
-| `held` | string \| null | the run's: why it was held: what holds its worktree, a conflict of its own commits where it goes (the commit and paths), the branch it is on being held, the fork's marker failing its check, `--alone` |
-| `sameTip` | array of string | since `sync` 1.13.0 and `sync-run` 1.17.0: the other side branches at its very tip, by name; `[]` for a branch alone at its tip |
-| `moveCommand` | string \| null | the run's: what moves a held branch later, with real commits and every branch name shell-quoted: `wt sync rebase '<branch>' --onto <newBase> --upstream <base>` for a branch in a worktree, which is a run of its own with stops, resume and undo; `git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>'` for one checked out in the main checkout, which wt sync rebase does not take; `git rebase --no-update-refs --onto <newBase> <base> '<branch>'` for one in no worktree; `--onto '<branch>'` for one on a held side branch, to run once that has moved; for a branch that moves with the sibling standing for its tip, one shell line whose guards refuse, changing nothing, unless the branch is still at the tip the run recorded and the sibling is at the commit it lands on: `test "$(git [-C '<worktree>'] rev-parse --verify --quiet 'refs/heads/<branch>')" = <old tip> && test "$(… 'refs/heads/<sibling>')" = <its new tip> && git [-C '<worktree>'] rebase --no-update-refs --no-autostash --onto <its new tip> <old tip> '<branch>'`. With the sibling held too, no commit exists to check it against: it gets no command, and `held` says to move the sibling first, then this branch by hand onto the sibling's new tip, once that is checked to carry all of its commits. Nothing is replayed, so the branch lands on that very commit; refs are `refs/heads/`, so no tag of the same name is taken; `--no-autostash` keeps the refusal over tracked changes with `rebase.autoStash` set. Null for a backup, for a branch with a merge commit of its own (a rebase would drop the merge: move it by hand), and when `newBase` is not known |
-
 A side branch's commits are replayed by merging each onto the new parent
 (`git merge-tree`), as a rebase picks them; the declaration's conflict rules
 and checks do not run on them, so a conflict holds the branch with its
@@ -1807,14 +2239,6 @@ fixups of the same target before it, from its own parent; a file that does not
 merge clean is looked at hunk by hunk. The trees are the line's own, before any
 move onto `--onto`'s ref.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `fixup`, `fixupSubject` | string | the fixup!, squash! or amend! commit, as the line has it |
-| `target`, `targetSubject` | string | the commit autosquash folds it into |
-| `path`, `lines` | string | the hunk: its file, and the lines it changes in the fixup's own file, `13` or `13-15` |
-| `needs`, `needsSubject` | string | the first commit after the target, in line order, that carries the hunk's context |
-| `message` | string | the line wt prints: `fixup moved ahead of its context: <path>:<lines> needs <sha> "<subject>", which comes later on the line` |
-
 A stop at such a fixup says the same in its plan and output, and suggests
 `wt sync undo <work>` and moving that hunk into a fixup of `needs`. A
 `wt sync resume` there refuses a resolution that drops lines of the fixup the
@@ -1823,13 +2247,6 @@ participant is `refused`, with the lines in `reason`.
 
 `edit`, since 1.9.0, for `wt sync rebase <work> --stack --edit <rev>`: the line
 replayed in place with a stop at `<rev>` for a person to amend.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `commit`, `subject` | string | the commit `--edit` named, as the line had it |
-| `amended` | string | what the run went on from at the edit stop: the amended commit, or the last commit added there; empty if it never went on |
-| `paths` | array of string | the paths the amend changed, sorted; empty when it changed nothing |
-| `emptied` | array | the commits above it that the amend emptied and the rebase dropped, oldest first: `sha` (as the old line had it), `subject`. A layer all of whose commits emptied is `mapped` `emptied` and ends where the layer below does |
 
 The line's content was held, before its branch or any layer moved, to the old
 line with the amend merged in. A run whose content was refused is not here: it
@@ -1844,31 +2261,12 @@ line. For a fold in place (`--autosquash` without `--onto`, `--edit`,
 line was assessed against and where the declaration is read from, trunk;
 the rebase goes onto `base`.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `inPlace` | bool | the line is folded on its own base, not moved onto a target |
-| `base` | string | the line's own base: what an in-place fold rebases onto |
-| `guard` | object \| null | the tree guard once the rebase finished: `oldTip`, `newTip`, `onto` (the commit a moving fold's old line was merged onto to compare, null for a fold in place), `excludedGlobs` (the declared per-layer step paths a changed file matched, left out), `conflictAllowed` (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), `outcome` (`passed` or `failed`) and `reason` (why it failed, else null). Null while the run has not finished, and for an edit |
-
 ### `layerSteps` — a step at every layer tip
 
 A deferred step with `each: layer` or `fold: owner` runs inside the rebase, at
 the end of each layer: in a `--stack` run every layer branch, bottom first, and
 the line's own commits above the top layer as one more; in any other run the
-branch is the one layer. One entry per layer and step:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `layer`, `layers` | int | the layer, from 1 at the bottom, of how many the run stopped at |
-| `branch` | string | the layer's branch |
-| `step` | string | the step's `run` line |
-| `ran` | bool | whether it ran at this layer |
-| `result` | `unchanged` \| `folded` \| `committed` \| `skipped` \| `owed` \| `failed` | ran and changed nothing; its output folded into `owner`; no commit of the layer changed its paths, so its output is its own commit, `commit`, at the layer's tip; no listed path changed in the layer; not run, because a need did not answer or it failed at a layer below; ran and failed, changed a tracked file outside its `paths`, or its fold was not proved, and it is owed here and at every layer above |
-| `reason` | string \| null | why it ran, why not, or why it failed |
-| `owner`, `ownerSubject` | string \| null | for `folded`: the commit it folded into, as rewritten (the layer's last commit that changed one of its paths), and its subject |
-| `commit` | string \| null | for `committed`: the step's commit |
-| `proof` | string \| null | for a fold: `held` when the folded tip's tree is the step's output and no rewritten commit changed outside the step's `paths`; otherwise what did not hold, and nothing was folded. Null when nothing was folded |
-| `elapsedMs` | int | since `sync-run` 1.20.0: how long the step took at this layer, in milliseconds; 0 when it did not run |
+branch is the one layer. One entry per layer and step. Its fields are in the field table above.
 
 ### `timings` — where the time went
 
@@ -1876,12 +2274,6 @@ On each participant of `wt sync rebase`, `wt sync steps`, `wt sync resume` and
 `wt sync undo`. The text output ends with the same numbers. A resume's covers
 only what that resume ran, not the run it continues. Every duration is an
 integer number of milliseconds.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `wallMs` | int | the wall time of the run, or of the resume |
-| `runs` | array | one row per `each_commit` step and per per-layer step that ran, in the order each first ran; `[]` when none did |
-| `slowest` | array | the slowest runs of any check or step, slowest first, at most three; `[]` when none ran |
 
 A `runs` row: `kind` (`check` for an `each_commit` step, at every commit, tip
 or recheck it ran at; `step` for a per-layer step), `run` (its `run` line),
@@ -1901,26 +2293,30 @@ command fails only outside a git repository.
 The provisioning flags (`--no-setup`, `--no-build`, `--no-superset`) change
 `provision`, `buildCommand` and `superset` as they would change the run.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema` | 1 | the major version |
-| `schemaVersion` | string | the full version, `1.<minor>.<patch>` |
-| `command` | `"new"` | |
-| `token` | string \| null | names the inputs of this plan; pass it to `wt new --json --expect`. Null when there is a problem |
-| `trunkSource` | string \| null | since `new-plan` 1.2.0, `checkout-plan` 1.3.0: how the repository's trunk was found ([`trunkSource`](#trunksource--how-trunk-was-found)) |
-| `configured` | bool | the repository has a wt configuration file that parses. False also on **detected defaults**: no file, and wt runs on what `wt init --yes` would write, with no problem named (since `new-plan` 1.1.0, `checkout-plan` 1.2.0; before, that repository was `noConfiguration`) |
-| `types` | array of string | the worktree types the repository declares |
-| `defaultType` | string \| null | the type a bare work name takes |
-| `type`, `work` | string \| null | as parsed from the argument; null when it does not parse |
-| `branch`, `path` | string \| null | the branch and the worktree path it would create; null when the name or type is not valid |
-| `base` | string \| null | what the branch is cut from: `--base`, else trunk |
-| `baseCommit` | string \| null | the commit `base` resolves to now; null when it does not |
-| `provision` | bool | the repository's `bin/worktree/provision.sh` would run |
-| `buildCommand` | string \| null | the build command that would run; null when build initialisation is off, or `--no-build`, `--no-setup` |
-| `superset` | bool | wt would try to register the worktree in Superset: you opted in, `SUPERSET_REGISTER` is `auto` or `on`. Whether Superset is running and tracks the repository is not checked |
-| `problems` | array | why it would not be created; empty when it would |
-| `problems[].code` | see below | |
-| `problems[].message` | string | the same as a sentence, as wt would print it |
+<!-- json-docs:begin new-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"new"` | yes |  |
+| `token` | string \| null | yes | Names the inputs of this plan; pass it to `wt new --json --expect`. Null when the plan has a problem. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | How trunk was determined, first match wins, from local refs alone (since 1.2.0): config — MAIN_BRANCH in the wt configuration file; originHead — refs/remotes/origin/HEAD; conventional — the first of development, main, master that exists locally or on origin (since 1.2.1; before, main, master, trunk, development, develop, ranked by where each exists); currentBranchGuess — no longer produced since 1.2.1: when nothing names trunk, detection fails and the repository reports noConfiguration. Null when trunk is. |
+| `configured` | boolean | yes | A wt configuration file that parses. Since 1.1.0, false also for a repository with no file, which runs on detected defaults (what `wt init --yes` would write) with no problem named; before, that repository had no configuration at all. |
+| `types` | array of string | yes | The worktree types this repository declares. |
+| `defaultType` | string \| null | yes | The type a bare work name takes. |
+| `type` | string \| null | yes | As parsed from the argument; null when it does not parse, or when the name or type is not valid. |
+| `work` | string \| null | yes | As parsed from the argument; null when it does not parse, or when the name or type is not valid. |
+| `branch` | string \| null | yes | The branch the worktree would be on; null when the name or type is not valid. |
+| `path` | string \| null | yes | The absolute path the worktree would be created at; null when the name or type is not valid. |
+| `base` | string \| null | yes | What the branch would be cut from, as given with --base, else trunk. |
+| `baseCommit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit base resolves to now; null when it does not resolve. |
+| `provision` | boolean | yes | The repository's bin/worktree/provision.sh would run. |
+| `buildCommand` | string \| null | yes | The build command that would run; null when build initialisation is off, --no-build or --no-setup. |
+| `superset` | boolean | yes | wt would try to register the worktree as a Superset workspace: you opted in and SUPERSET_REGISTER is auto or on. Whether Superset is running and knows this repository is not checked. |
+| `problems` | array of object | yes | Why the worktree would not be created; empty when it would. |
+| `problems[].code` | `"branchExists"` \| `"pathExists"` \| `"unknownType"` \| `"invalidName"` \| `"noConfiguration"` \| `"configurationInvalid"` \| `"branchMissing"` \| `"branchCheckedOut"` \| `"baseMissing"` | yes | branchExists, pathExists, unknownType, invalidName, noConfiguration (since 1.1.0 only when there is no file and no trunk to detect either; since 1.2.1 also a file with no MAIN_BRANCH when no trunk can be detected), configurationInvalid, branchMissing, branchCheckedOut (git gives a branch one worktree), baseMissing. |
+| `problems[].message` | string | yes | The same problem as a sentence, as wt would print it. |
+<!-- json-docs:end -->
 
 `problems[].code`: `branchExists`, `pathExists`, `unknownType`, `invalidName`
 (`.`, `/`, too many slashes, a branch name git refuses, nothing derivable), `noConfiguration`
@@ -1939,13 +2335,33 @@ upstream; `--base origin/main` would track `origin/main` under git's
 As `wt new`'s, with `command` `"checkout"`, `type` the default type, and in place
 of `base` and `baseCommit`:
 
-| Field | Type | Meaning |
-|---|---|---|
-| `branchCommit` | string \| null | the local branch's commit now; null when there is no such local branch, as for `source` `remote` |
-| `source` | `local` \| `remote` \| null | since 1.1.0: where the branch comes from (below); null when nothing has it |
-| `remote` | string \| null | since 1.1.0: for `remote`, the remote's name |
-| `remoteRef` | string \| null | since 1.1.0: for `remote`, its remote-tracking ref, `refs/remotes/<remote>/<branch>` |
-| `remoteCommit` | string \| null | since 1.1.0: for `remote`, the commit `remoteRef` is at now |
+<!-- json-docs:begin checkout-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"checkout"` | yes |  |
+| `token` | string \| null | yes | Names the inputs of this plan; pass it to `wt checkout --json --expect`. Null when the plan has a problem. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | How trunk was determined, first match wins, from local refs alone (since 1.3.0): config — MAIN_BRANCH in the wt configuration file; originHead — refs/remotes/origin/HEAD; conventional — the first of development, main, master that exists locally or on origin (since 1.3.1; before, main, master, trunk, development, develop, ranked by where each exists); currentBranchGuess — no longer produced since 1.3.1: when nothing names trunk, detection fails and the repository reports noConfiguration. Null when trunk is. |
+| `configured` | boolean | yes | A wt configuration file that parses. Since 1.2.0, false also for a repository with no file, which runs on detected defaults (what `wt init --yes` would write) with no problem named; before, that repository had no configuration at all. |
+| `types` | array of string | yes | The worktree types this repository declares. |
+| `defaultType` | string \| null | yes | The type a bare work name takes. |
+| `type` | string \| null | yes | As parsed from the argument; null when it does not parse, or when the name or type is not valid. |
+| `work` | string \| null | yes | As parsed from the argument; null when it does not parse, or when the name or type is not valid. |
+| `branch` | string \| null | yes | The branch the worktree would be on; null when the name or type is not valid. |
+| `path` | string \| null | yes | The absolute path the worktree would be created at; null when the name or type is not valid. |
+| `branchCommit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The local branch's commit now; null when there is no such local branch, as for source remote. |
+| `source` | `"local"` \| `"remote"` \| `null` | yes | Since 1.1.0. Where the branch comes from: local, a local branch of that exact name, checked out as it is; remote, a remote-tracking ref as last fetched (no fetch is made), from which the local branch would be created, tracking it. Null when neither has it. |
+| `remote` | string \| null | yes | Since 1.1.0. For source remote: the remote. Null otherwise. |
+| `remoteRef` | string \| null | yes | Since 1.1.0. For source remote: its remote-tracking ref, refs/remotes/<remote>/<branch>, which becomes the branch's upstream. Null otherwise. |
+| `remoteCommit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | Since 1.1.0. For source remote: the commit remoteRef is at now, which the branch would be created at and the token pins. Null otherwise. |
+| `provision` | boolean | yes | The repository's bin/worktree/provision.sh would run. |
+| `buildCommand` | string \| null | yes | The build command that would run; null when build initialisation is off, --no-build or --no-setup. |
+| `superset` | boolean | yes | wt would try to register the worktree as a Superset workspace: you opted in and SUPERSET_REGISTER is auto or on. Whether Superset is running and knows this repository is not checked. |
+| `problems` | array of object | yes | Why the worktree would not be created; empty when it would. |
+| `problems[].code` | `"branchExists"` \| `"pathExists"` \| `"unknownType"` \| `"invalidName"` \| `"noConfiguration"` \| `"configurationInvalid"` \| `"branchMissing"` \| `"branchCheckedOut"` \| `"baseMissing"` \| `"branchAmbiguous"` \| `"remoteBranchMissing"` | yes | branchExists (also: a branch to create from a remote exists locally), pathExists, unknownType, invalidName, noConfiguration (since 1.2.0 only when there is no file and no trunk to detect either; since 1.3.1 also a file with no MAIN_BRANCH when no trunk can be detected), configurationInvalid, branchMissing (not local, and no remote has it), branchCheckedOut (git gives a branch one worktree), baseMissing, branchAmbiguous (since 1.1.0: a bare name several remotes have, none of them checkout.defaultRemote), remoteBranchMissing (since 1.1.0: <remote>/<branch> that remote does not have as last fetched). |
+| `problems[].message` | string | yes | The same problem as a sentence, as wt would print it. |
+<!-- json-docs:end -->
 
 The argument is resolved from local state alone, in this order:
 
@@ -1998,26 +2414,64 @@ was running (see [Signals](#signals-and-what-wt-starts)). A usage error (a
 missing argument, an unknown flag, `--expect` without `--json`) is reported as
 without `--json`, with no object.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema` | 1 | the major version |
-| `schemaVersion` | string | the full version, `1.<minor>.<patch>` |
-| `command` | `"new"` \| `"checkout"` | one schema each |
-| `outcome` | see below | |
-| `error` | string \| null | why it was refused, or stopped before planning (not in a git repository) |
-| `problems` | array | as in the plan, plus `planChanged` and `headMoved` |
-| `source`, `remote`, `remoteRef` | string \| null | `wt checkout` only, since 1.1.0: from the plan |
-| `upstream` | string \| null | `wt checkout` only, since 1.1.0: the branch's upstream ref, read back after the run; null when it has none or there is no branch |
-| `type`, `work`, `branch`, `path` | string \| null | from the plan |
-| `base` | string \| null | `wt new`: what the branch was cut from. Null for `wt checkout` |
-| `expectedCommit` | string \| null | the commit the plan pinned: `baseCommit`, `branchCommit` or `remoteCommit` |
-| `commit` | string \| null | the new worktree's HEAD, read after `git worktree add`; null when there is none |
-| `steps` | array | every side effect, always all eight, in this order |
-| `steps[].step` | `worktree`, `branch`, `config`, `cache`, `provision`, `submodules`, `build`, `superset` | `cache` since 1.1.0 (`wt new`) and 1.2.0 (`wt checkout`); before, seven steps |
-| `steps[].result` | see below | |
-| `steps[].commit` | string \| null | `worktree`: its HEAD; `branch`: its tip |
-| `steps[].reason` | string \| null | why, for `skipped`, `failed` and `interrupted`; a note on a step that went through, as `worktree`, `branch` and `cache` give |
-| `addresses` | array | `wt new` only, since `new` 1.2.0: where the new worktree's dev servers are reached, one `{app, url}` per app that `devports config --json` gives a `domain`, in the order it lists them, the url being `https://<name>.<domain>` with the name [devports](https://github.com/anlindstrom/devports) gives the worktree. Required, `[]` when no app has a domain or devports is not installed, fails, does not answer within two seconds or is too old to report domains (wt does not read `.dev-ports.yaml` itself). Nothing is routed by wt: the address works once the dev server runs |
+<!-- json-docs:begin new,checkout -->
+`wt new --json`, [`new.v1.json`](../schema/new.v1.json), schema 1.2.0:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"new"` | yes |  |
+| `outcome` | `"created"` \| `"createdWithProblems"` \| `"refused"` \| `"failed"` \| `"interrupted"` | yes | created: the worktree made, every step done or skipped. createdWithProblems: the worktree made, and a step failed or was not run, or it is not on expectedCommit. refused: nothing made, see problems. failed: git worktree add failed and left no worktree. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | Why it was refused, or stopped before planning (not in a git repository). |
+| `problems` | array of object | yes | Why it was refused, or what is wrong with the worktree made that no step names. As in the plan, plus planChanged and headMoved. |
+| `problems[].code` | `"branchExists"` \| `"pathExists"` \| `"unknownType"` \| `"invalidName"` \| `"noConfiguration"` \| `"configurationInvalid"` \| `"branchMissing"` \| `"branchCheckedOut"` \| `"baseMissing"` \| `"planChanged"` \| `"headMoved"` | yes | The plan's problems, and planChanged (--expect no longer holds), headMoved (the worktree is not on expectedCommit). |
+| `problems[].message` | string | yes | The problem as a sentence. |
+| `type` | string \| null | yes | From the plan. |
+| `work` | string \| null | yes | From the plan. |
+| `branch` | string \| null | yes | From the plan. |
+| `path` | string \| null | yes | From the plan. |
+| `base` | string \| null | yes | For wt new: what the branch was cut from. Null for wt checkout. |
+| `expectedCommit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit the plan pinned: the base's for wt new, the branch's for wt checkout. |
+| `commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The new worktree's HEAD, read after it was created; null when none was. |
+| `steps` | array of object | yes | Every side effect, always all eight, in this order: worktree, branch, config, cache (since 1.1.0 for wt new, 1.2.0 for wt checkout; before, seven steps), provision, submodules, build, superset. A step that was skipped or not reached still has its row. |
+| `steps[].step` | `"worktree"` \| `"branch"` \| `"config"` \| `"cache"` \| `"provision"` \| `"submodules"` \| `"build"` \| `"superset"` | yes |  |
+| `steps[].result` | `"created"` \| `"untouched"` \| `"done"` \| `"registered"` \| `"skipped"` \| `"failed"` \| `"notRun"` \| `"interrupted"` | yes | worktree: created (with a reason when git failed after making it), failed. branch: created (wt new), untouched (wt checkout). config, cache, provision, submodules, build: done, skipped, failed; cache is done with a reason naming any cache the filesystem could not clone. superset: registered, skipped, failed. Any step: notRun, interrupted. |
+| `steps[].commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | worktree: its HEAD. branch: its tip. |
+| `steps[].reason` | string \| null | yes | Why, for skipped, failed and interrupted; a note otherwise. |
+| `addresses` | array of object | yes | Since 1.2.0: where the new worktree's dev servers are reached, one {app, url} per app that devports config --json gives a domain, in the order it lists them, the url being https://<name>.<domain> with the name devports gives the worktree. Always present: empty when no app has a domain, or devports is not installed, fails, does not answer within two seconds, or is too old to report domains (wt does not read .dev-ports.yaml itself). Nothing is routed by wt: the address works once the dev server runs. |
+| `addresses[].app` | string | yes | The app's name, as `devports config --json` reports it. |
+| `addresses[].url` | string | yes | `https://<name>.<domain>`: where the app is reached when its dev server runs, with the name devports gives the worktree and the app's `domain:`. |
+
+`wt checkout --json`, [`checkout.v1.json`](../schema/checkout.v1.json), schema 1.2.0:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"checkout"` | yes |  |
+| `outcome` | `"created"` \| `"createdWithProblems"` \| `"refused"` \| `"failed"` \| `"interrupted"` | yes | created: the worktree made, every step done or skipped. createdWithProblems: the worktree made, and a step failed or was not run, or it is not on expectedCommit. refused: nothing made, see problems. failed: git worktree add failed and left no worktree. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | Why it was refused, or stopped before planning (not in a git repository). |
+| `problems` | array of object | yes | Why it was refused, or what is wrong with the worktree made that no step names. As in the plan, plus planChanged and headMoved. |
+| `problems[].code` | `"branchExists"` \| `"pathExists"` \| `"unknownType"` \| `"invalidName"` \| `"noConfiguration"` \| `"configurationInvalid"` \| `"branchMissing"` \| `"branchCheckedOut"` \| `"baseMissing"` \| `"branchAmbiguous"` \| `"remoteBranchMissing"` \| `"planChanged"` \| `"headMoved"` | yes | The plan's problems, and planChanged (--expect no longer holds, or a local branch of that name appeared before wt could create it from the remote; it is never overwritten), headMoved (the worktree is not on expectedCommit). |
+| `problems[].message` | string | yes | The problem as a sentence. |
+| `type` | string \| null | yes | From the plan. |
+| `work` | string \| null | yes | From the plan. |
+| `branch` | string \| null | yes | From the plan. |
+| `path` | string \| null | yes | From the plan. |
+| `base` | string \| null | yes | For wt new: what the branch was cut from. Null for wt checkout. |
+| `expectedCommit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit the plan pinned: the base's for wt new, the branch's for wt checkout — for source remote, the remote-tracking ref's. |
+| `commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The new worktree's HEAD, read after it was created; null when none was. |
+| `source` | `"local"` \| `"remote"` \| `null` | yes | Since 1.1.0. Where the branch comes from: local, a local branch of that exact name, checked out as it is; remote, a remote-tracking ref as last fetched (no fetch is made), from which the local branch was created, tracking it. Null when neither has it. |
+| `remote` | string \| null | yes | Since 1.1.0. For source remote: the remote. Null otherwise. |
+| `remoteRef` | string \| null | yes | Since 1.1.0. For source remote: its remote-tracking ref, refs/remotes/<remote>/<branch>, which becomes the branch's upstream. Null otherwise. |
+| `upstream` | string \| null | yes | The branch's upstream ref, read back after the run; null when it has none or there is no branch. |
+| `steps` | array of object | yes | Every side effect, always all eight, in this order: worktree, branch, config, cache (since 1.1.0 for wt new, 1.2.0 for wt checkout; before, seven steps), provision, submodules, build, superset. A step that was skipped or not reached still has its row. |
+| `steps[].step` | `"worktree"` \| `"branch"` \| `"config"` \| `"cache"` \| `"provision"` \| `"submodules"` \| `"build"` \| `"superset"` | yes |  |
+| `steps[].result` | `"created"` \| `"untouched"` \| `"done"` \| `"registered"` \| `"skipped"` \| `"failed"` \| `"notRun"` \| `"interrupted"` | yes | worktree: created (with a reason when git failed after making it), failed. branch: created (wt new, and wt checkout from a remote, its reason tracking <remote>/<branch>), untouched (wt checkout of a local branch). config, cache, provision, submodules, build: done, skipped, failed; cache is done with a reason naming any cache the filesystem could not clone. superset: registered, skipped, failed. Any step: notRun, interrupted. |
+| `steps[].commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | worktree: its HEAD. branch: its tip. |
+| `steps[].reason` | string \| null | yes | Why, for skipped, failed and interrupted; a note otherwise. |
+<!-- json-docs:end -->
 
 `steps[].result`, by step:
 
@@ -2062,43 +2516,75 @@ A plan the removal would refuse is still the whole object, with `error` set, a
 null token and a non-zero exit; so is one that cannot be made (no such
 worktree, the main checkout), with the worktree fields null.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion`, `command` | 1, string, `"remove"` | |
-| `repo`, `trunk` | string \| null | the main checkout, trunk's name |
-| `trunkSource` | string \| null | since 1.3.0: how `trunk` was found ([`trunkSource`](#trunksource--how-trunk-was-found)); the token covers it |
-| `token` | string \| null | names this plan; pass it to `wt remove --yes --json --expect`. Null when it would refuse, or on error |
-| `error` | string \| null | why the removal would refuse, or why there is no plan |
-| `path` | string \| null | the checkout |
-| `adminDir` | string \| null | its git dir, `.git/worktrees/<id>` |
-| `head` | string \| null | the commit checked out; null before the first commit |
-| `detached` | bool | no branch is checked out, so none is touched |
-| `branch` | object \| null | null when detached |
-| `branch.name`, `branch.tip` | string, string \| null | the tip is null when the branch is already gone |
-| `branch.merge` | `merged` \| `applied` \| `unmerged` \| `unknown` | `base` contains the tip; every commit is on `base` under another id, byte for byte; `base` lacks commits of it; nothing to compare with |
-| `branch.base`, `branch.ahead` | string \| null, int | the base the standing is about, and the commits it lacks |
-| `branch.pullRequest` | int \| null | a pull request GitHub merged into trunk at exactly `tip`, as `wt list` or `wt sweep` recorded it; makes an `unmerged` branch deletable |
-| `branch.outcome` | `delete` \| `keep` \| `none` | deleted after the checkout, only at `tip`; renamed to `keepAs`; left as it is, `reason` says why. `recovery.json`'s `branch.plan` names |
-| `branch.keepAs`, `branch.reason` | string \| null | |
-| `bases` | array | `{name, tip}`: `origin/<trunk>`, then `<trunk>` |
-| `dirty`, `statusError` | bool, string \| null | anything uncommitted, submodules included; why the status could not be read |
-| `hiddenFiles` | array of string | unedited files `git status` is told not to look at |
-| `movedSubmodules` | array of string | submodules at another commit than the recorded one |
-| `hasSubmodules` | bool | the checkout has a `.gitmodules` |
-| `nestedWorktrees` | array of string | other worktrees inside this one |
-| `operation` | `rebase` \| `merge` \| `cherry-pick` \| `revert` \| `sequencer` \| `bisect` \| null | an operation stopped halfway there; `sequencer` is a cherry-pick or revert sequence whose HEAD marker is gone |
-| `sessions` | array | `{id, name, kind, pid, state}` for each [agent session](#sessions--claude-and-codex) in the checkout, `kind` `claude` or `codex` (since 1.4.0), `state` `idle` or `busy`; the one running wt is not listed |
-| `sessionsError` | string \| null | why they could not be listed |
-| `lock` | object \| null | git's lock: `reason`, `holder` (who wt worked out is behind it), `pid`, `held` (still running; a stale one is released) |
-| `unreachable` | array | each tip nothing surviving the removal holds: `{kind, oid, count, path, restoreCommand}`. `kind` `branch` is the branch it deletes — listed, not refused, with the `git branch` argv that brings its commits back; `head` and `submodule` (with `path`) refuse |
-| `reachError` | string \| null | why that could not be worked out |
-| `quarantine` | string \| null | with `--move-to <dir>`, the folder |
-| `keepSuperset` | bool | since 1.1.0: `--keep-superset` was given: the Superset workspace is left, and Superset is not asked |
-| `processes` | array | since 1.5.0: `{pid, command, reap}` for each [process still working in the checkout](#processes--what-still-runs-in-a-worktree); `reap` is true with `--reap`, which ends it before the checkout goes, and false without, when it is left running |
-| `processesError` | string \| null | since 1.5.0: why they could not be found; with `--reap` that refuses (`processesUnknown`) |
-| `force` | bool | bare `--force` was given: the problems with `force` true do not refuse. False for `--force=<list>`, which `forceWith` names |
-| `forceWith` | array of string | since 1.2.0: the `--force` categories given, all five for bare `--force`; empty without it |
-| `problems` | array | every problem: `{code, message, force, forceWith}`, `force` for one `--force` goes past, `forceWith` (since 1.2.0; null when `force` is false) the category that does. The removal refuses on any, less those whose `forceWith` is in the top-level `forceWith` |
+<!-- json-docs:begin remove-plan -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"remove"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `trunk` | string \| null | yes | Trunk's branch name. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | Since 1.3.0. How trunk was found, as in the other plans (see docs/json.md, trunkSource); null with trunk. |
+| `token` | string \| null | yes | Names this plan; pass it to wt remove --yes --json --expect. Null when the removal would refuse, or on error. |
+| `error` | string \| null | yes | Why the removal would refuse, or why no plan could be made. |
+| `path` | string \| null | yes | The checkout. |
+| `adminDir` | string \| null | yes | The worktree's own git dir, .git/worktrees/<id>; null when it cannot be read. |
+| `head` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit checked out; null before the first commit. |
+| `detached` | boolean | yes | No branch is checked out: no branch is touched. |
+| `branch` | object \| null | yes | The branch checked out; null when detached. |
+| `branch.name` | string | yes |  |
+| `branch.tip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | Null when the branch is already gone. |
+| `branch.merge` | `"merged"` \| `"applied"` \| `"unmerged"` \| `"unknown"` | yes | merged: base contains the tip. applied: every commit is on base under another id, byte for byte. unmerged: base lacks commits of it. unknown: no trunk to compare with, or the branch is gone. |
+| `branch.base` | string \| null | yes | The base the standing is about. |
+| `branch.ahead` | integer, at least 0 | yes | Commits base lacks; meaningful for unmerged and applied. |
+| `branch.pullRequest` | integer \| null | yes | A pull request GitHub merged into trunk at exactly tip, as wt list or wt sweep recorded it; it makes an unmerged branch deletable. |
+| `branch.outcome` | `"delete"` \| `"keep"` \| `"none"` | yes | delete: merged, applied or pullRequest; deleted after the checkout, only at tip. keep: an unmerged branch wt made; renamed to keepAs. none: left as it is; reason says why. The same names recovery.json's branch.plan uses. |
+| `branch.keepAs` | string \| null | yes |  |
+| `branch.reason` | string \| null | yes | For none: why. |
+| `bases` | array of object | yes | What merged is measured against, first first: origin/<trunk> as last fetched, then <trunk>. Remove never fetches. |
+| `bases[].name` | string | yes |  |
+| `bases[].tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `dirty` | boolean | yes | Anything uncommitted, submodules included, whatever git's config says. |
+| `statusError` | string \| null | yes | Why the status could not be read; the removal refuses. |
+| `hiddenFiles` | array of string | yes | Unedited files git status is told not to look at (assume-unchanged, skip-worktree). |
+| `movedSubmodules` | array of string | yes | Submodules checked out at another commit than the recorded one. |
+| `hasSubmodules` | boolean | yes | The checkout has a .gitmodules. |
+| `nestedWorktrees` | array of string | yes | Other worktrees whose checkouts are inside this one. |
+| `operation` | `"rebase"` \| `"merge"` \| `"cherry-pick"` \| `"revert"` \| `"sequencer"` \| `"bisect"` \| `null` | yes | A git operation stopped halfway there; sequencer is a cherry-pick or revert sequence whose HEAD marker is gone. |
+| `sessions` | array of object | yes | {id, name, kind, pid, state} for each agent session in the checkout, other than the one running wt: kind claude or codex (since 1.4.0), state idle or busy. |
+| `sessions[].id` | string | yes | Claude's session id. For a Codex session, codex-<pid> for a codex process working in the checkout, the thread id for a thread an app-server runs. |
+| `sessions[].kind` | `"claude"` \| `"codex"` | yes | Since 1.4.0. Whose session it is. |
+| `sessions[].name` | string \| null | yes |  |
+| `sessions[].pid` | integer \| null | yes |  |
+| `sessions[].state` | `"idle"` \| `"busy"` | yes |  |
+| `sessionsError` | string \| null | yes | Why the sessions could not be listed; the removal refuses without --force. |
+| `lock` | object \| null | yes | Git's lock on the worktree: reason, holder (who wt worked out is behind it), pid, and held (still running; a stale one is released). |
+| `lock.reason` | string \| null | yes | git's reason for the lock. |
+| `lock.holder` | string | yes | Whoever wt worked out is behind it. |
+| `lock.pid` | integer \| null | yes | The process the reason names. |
+| `lock.held` | boolean | yes | Its holder is still there. A held lock refuses without --force; a stale one is released. |
+| `unreachable` | array of object | yes | Each tip nothing surviving the removal holds, with kind, oid, count, path and restoreCommand. A branch is the branch the removal deletes: listed, not refused, with the git branch argv that brings its commits back. head and submodule (with path) refuse. |
+| `unreachable[].kind` | `"branch"` \| `"head"` \| `"submodule"` | yes | branch: the branch the removal deletes; listed, not refused. head: the checkout's HEAD; refuses. submodule: a submodule's commits; refuses. |
+| `unreachable[].oid` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `unreachable[].count` | integer, at least 1 | yes |  |
+| `unreachable[].path` | string \| null | yes | For submodule: the submodule, relative to the checkout. |
+| `unreachable[].restoreCommand` | array of string \| null | yes | For branch: the git branch argv that brings the commits back once the branch is gone, to run in the repository (git -C <repo> branch <name> <oid>). |
+| `reachError` | string \| null | yes | Why that could not be worked out; the removal refuses. |
+| `quarantine` | string \| null | yes | With --move-to <dir>: the folder, absolute. |
+| `keepSuperset` | boolean | yes | Since 1.1.0. --keep-superset was given: the worktree's Superset workspace is left, and Superset is not asked anything. The token covers it. |
+| `processes` | array of object | yes | Since 1.5.0. The processes working in the checkout, or in a directory inside it, that wt does not spare: a dev server, a watcher, a language server. Spared and never listed: another user's processes, any with a controlling terminal, wt itself with its children and ancestors, and agent processes, Claude's and Codex's, the caller's own included. Empty when there are none, or when they could not be found (processesError says why). Removal ends them only with --reap; the token covers them then. reap is true with --reap, which ends it before the checkout goes, and false without, when it is left running. |
+| `processes[].pid` | integer, at least 2 | yes |  |
+| `processes[].command` | string | yes | Its command line as ps shows it, arguments joined with spaces. |
+| `processes[].reap` | boolean | yes | --reap was given: the removal ends it, SIGTERM and then SIGKILL after 5 seconds, before the checkout goes. False: it is left running. |
+| `processesError` | string \| null | yes | Since 1.5.0. Why the processes could not be found: the process table could not be read, or the agent sessions could not be listed, so none is known to be safe to end. With --reap this refuses the removal (problem processesUnknown), whatever --force says; without it the removal goes ahead and leaves them. With --reap that refuses (processesUnknown). |
+| `force` | boolean | yes | Bare --force was given: the problems with force true do not refuse. False for --force=<list>, whose categories forceWith names. |
+| `forceWith` | array of `"idle-sessions"` \| `"busy-sessions"` \| `"sessions-unknown"` \| `"hidden-files"` \| `"lock"` | yes | Since 1.2.0. The --force categories given, all five for bare --force; empty without it. The token covers them. |
+| `problems` | array of object | yes | Every problem with the removal; those that refuse it are all of them, less the ones whose forceWith is in the top-level forceWith. |
+| `problems[].code` | `"dirty"` \| `"statusUnknown"` \| `"session"` \| `"sessionsUnknown"` \| `"lockHeld"` \| `"operation"` \| `"hiddenChanges"` \| `"headUnreachable"` \| `"reachUnknown"` \| `"submoduleUnreachable"` \| `"nestedWorktree"` \| `"quarantineUnusable"` \| `"processesUnknown"` \| `"planChanged"` | yes | dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there. |
+| `problems[].message` | string | yes | The problem as a sentence. |
+| `problems[].force` | boolean | yes | --force goes past it: somebody's claim on the checkout, not work that would be lost. |
+| `problems[].forceWith` | `"idle-sessions"` \| `"busy-sessions"` \| `"sessions-unknown"` \| `"hidden-files"` \| `"lock"` \| `null` | yes | Since 1.2.0. The --force category that goes past it; null when force is false. A session problem is either idle-sessions or busy-sessions: idle and busy sessions are two problems. Null when force is false (since 1.2.0). |
+<!-- json-docs:end -->
 
 `problems[].code`, exhaustively; the codes it shares with `sweep-plan`'s `kept`
 mean the same there:
@@ -2160,23 +2646,51 @@ or 143 for SIGTERM. SIGKILL or a crash may write none: `<dir>/recovery.json`
 still says how far the move got. A usage error is reported as without `--json`,
 with no object.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion`, `command` | 1, string, `"remove"` | |
-| `repo`, `trunk` | string \| null | |
-| `trunkSource` | string \| null | since 1.3.0: as in the plan |
-| `token` | string \| null | the plan's token |
-| `outcome` | see below | |
-| `error` | string \| null | why it refused or stopped |
-| `problems` | array | for `refused`: as in the plan, the ones that refused it, and `planChanged` |
-| `path`, `branch`, `tip`, `keepAs` | string \| null | from the plan |
-| `steps` | array | `worktree`, `branch`, `superset`, always all three, in that order: `{step, result, commit, reason, pin}`; `commit` is `branch`'s tip; `pin` (since 1.4.0) is, for `branch`, the ref the deleted branch was moved into, read back, and null otherwise |
-| `forced` | array of string | since 1.2.0: the `--force` categories the removal went past, in the plan or in the final read; empty when none, or when it did not get that far |
-| `quarantine` | object \| null | with `--move-to`, once its `recovery.json` is written: `dir`, `checkoutMoved`, `adminMoved` (each directory, by identity, in the folder), `recoveryFile`, and `steps` as `recovery.json` records them |
-| `restoreCommand` | array of string \| null | the argv that puts back what went: `wt restore <dir>` once a removal with `--move-to` wrote its `recovery.json`; since 1.4.0 `wt refs restore <runId> --only refs/heads/<name> --yes`, run in `repo`, for a branch moved into a pin; else `git -C <repo> branch <name> <tip>` for a branch gone from its name (renamed to `keepAs`) |
-| `recovery` | string \| null | for `interrupted`: what wt printed |
-| `runId` | string \| null | since 1.4.0: the run under `refs/wt-swept/` the deleted branch was moved into; null when it was not moved |
-| `reaped` | array | since 1.5.0, with `--reap`: `{pid, command, result}` for each process ended, or tried, right before the checkout went; empty without `--reap`, when there were none, and for `interrupted` |
+<!-- json-docs:begin remove -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"remove"` | yes |  |
+| `repo` | string \| null | yes | The main checkout; null outside a repository. |
+| `trunk` | string \| null | yes | Trunk's branch name. |
+| `trunkSource` | `"config"` \| `"originHead"` \| `"conventional"` \| `"currentBranchGuess"` \| `null` | yes | Since 1.3.0. How trunk was found, as in the other plans (see docs/json.md, trunkSource); null with trunk. |
+| `token` | string \| null | yes | The token of the plan this run made; with --expect, the one it was held to. |
+| `outcome` | `"removed"` \| `"removedWithBranchProblem"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | removed: the worktree is gone, or quarantined, and the branch step did what the plan said. removedWithBranchProblem: the worktree is gone and the branch was left as it was on purpose (it moved, is no longer merged, or a worktree took it); error says which. refused: nothing in the repository changed; problems says why, and reaped lists any process stopped before the refusal. partial: something changed and a later step failed — a quarantine that stopped after writing recovery.json, the second move, or the branch step; the steps and quarantine say which, and restoreCommand undoes a quarantine. interrupted: a signal ended the run. |
+| `error` | string \| null | yes | Why it refused or stopped. |
+| `problems` | array of object | yes | For refused: why, as the plan names it, and planChanged for --expect. |
+| `problems[].code` | `"dirty"` \| `"statusUnknown"` \| `"session"` \| `"sessionsUnknown"` \| `"lockHeld"` \| `"operation"` \| `"hiddenChanges"` \| `"headUnreachable"` \| `"reachUnknown"` \| `"submoduleUnreachable"` \| `"nestedWorktree"` \| `"quarantineUnusable"` \| `"processesUnknown"` \| `"planChanged"` | yes | dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there. |
+| `problems[].message` | string | yes | The problem as a sentence. |
+| `problems[].force` | boolean | yes | --force goes past it: somebody's claim on the checkout, not work that would be lost. |
+| `problems[].forceWith` | `"idle-sessions"` \| `"busy-sessions"` \| `"sessions-unknown"` \| `"hidden-files"` \| `"lock"` \| `null` | yes | Since 1.2.0. The --force category that goes past it; null when force is false. A session problem is either idle-sessions or busy-sessions: idle and busy sessions are two problems. |
+| `path` | string \| null | yes | From the plan: the checkout. |
+| `branch` | string \| null | yes | From the plan. |
+| `tip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | From the plan. |
+| `keepAs` | string \| null | yes | From the plan. |
+| `steps` | array of object | yes | worktree, branch and superset, always all three, in that order: step, result, commit, reason and pin. |
+| `steps[].step` | `"worktree"` \| `"branch"` \| `"superset"` | yes |  |
+| `steps[].result` | `"removed"` \| `"quarantined"` \| `"partlyMoved"` \| `"kept"` \| `"notRun"` \| `"interrupted"` \| `"deleted"` \| `"renamed"` \| `"untouched"` \| `"failed"` \| `"deregistered"` \| `"notRegistered"` \| `"skipped"` \| `"optedOut"` | yes | worktree: removed, quarantined (both moves done), partlyMoved (the checkout moved, its admin dir not), kept (still there). branch: deleted, renamed (to keepAs), untouched, kept (turned down on purpose), failed (git failed). superset: deregistered, notRegistered, skipped, failed, optedOut (since 1.1.0: --keep-superset; Superset was not asked). Any: notRun (not reached), interrupted (a signal caught it and its state does not say it finished). |
+| `steps[].commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | branch's tip. |
+| `steps[].reason` | string \| null | yes |  |
+| `steps[].pin` | string \| null, matching `^refs/wt-swept/` | yes | Since 1.4.0: for branch, the ref the deleted branch was moved into, read back; null otherwise. |
+| `forced` | array of `"idle-sessions"` \| `"busy-sessions"` \| `"sessions-unknown"` \| `"hidden-files"` \| `"lock"` | yes | Since 1.2.0. The --force categories the removal went past, in the plan or in the sessions and checkout read again right before the checkout went; empty when it went past none or did not get that far. |
+| `quarantine` | object \| null | yes | With --move-to, once its recovery.json is written: dir, checkoutMoved, adminMoved (each directory, by identity, in the folder), recoveryFile, and steps as recovery.json records them. |
+| `quarantine.dir` | string | yes | The worktree's own folder in the --move-to folder, the destination of the moves. It is there once recovery.json is written, whether or not either directory has moved: checkoutMoved and adminMoved say which have. |
+| `quarantine.checkoutMoved` | boolean | yes | Whether the checkout is in the folder, by identity. |
+| `quarantine.adminMoved` | boolean | yes | Whether the admin directory is in the folder, by identity. |
+| `quarantine.recoveryFile` | string | yes | <dir>/recovery.json: see wt schema recovery. |
+| `quarantine.steps` | array of object | yes | The removal's steps as recovery.json records them; empty when it has none. |
+| `quarantine.steps[].name` | `"lock"` \| `"pin"` \| `"moveCheckout"` \| `"moveAdmin"` \| `"relink"` \| `"branch"` | yes | The step, as recovery.json records it. |
+| `quarantine.steps[].state` | `"pending"` \| `"running"` \| `"done"` \| `"failed"` | yes |  |
+| `quarantine.steps[].error` | string \| null | yes |  |
+| `restoreCommand` | array of string \| null | yes | The argv that puts back what went, to run in repo: wt restore <dir> once a quarantine wrote its recovery.json; since 1.4.0 wt refs restore <runId> --only refs/heads/<name> --yes for a branch moved into a pin; else git -C <repo> branch <name> <tip> for a branch gone from its name (renamed to keepAs); null when nothing needs it. |
+| `recovery` | string \| null | yes | For interrupted: what wt printed. |
+| `runId` | string \| null, matching `^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$` | yes | Since 1.4.0. The run under refs/wt-swept/ the deleted branch was moved into, as wt refs sweep moves backups: wt refs swept lists it, wt refs restore puts it back, wt refs purge deletes it for good. null when the branch was not moved: renamed, untouched, kept, or deleted by a quarantine, which pins it itself. A run a signal ended may name a run that holds only its meta. |
+| `reaped` | array of object | yes | Since 1.5.0. With --reap: each process the removal ended, or tried to, right before the checkout went, found afresh then. Empty without --reap, when there were none, and for a run a signal ended. |
+| `reaped[].pid` | integer, at least 2 | yes |  |
+| `reaped[].command` | string | yes |  |
+| `reaped[].result` | `"terminated"` \| `"killed"` \| `"gone"` \| `"survived"` | yes | terminated: it exited after SIGTERM. killed: it outlived SIGTERM's 5 seconds and SIGKILL ended it. gone: it had exited before it was signalled. survived: it is still running, or wt may not signal it; the removal then stopped before anything was removed. |
+<!-- json-docs:end -->
 
 Since 1.4.0 a removal without `--move-to` deletes a merged branch the way a
 sweep does (see [Deleted branches are pinned](#deleted-branches-are-pinned)):
@@ -2244,37 +2758,39 @@ repository's sessions from one read of claude's, opening only the
 repositories that hold one. Codex sessions are listed too,
 and take no messages.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | |
-| `command` | `"session list"` | |
-| `sessions` | array | the sessions, the one that needs its person first, then the newest, the session wt runs under last; see below |
-| `sessionsError` | string \| null | why claude's sessions could not be read; `sessions` is then empty and the exit status 1 |
-| `codexError` | string \| null | why Codex's sessions could not be looked for; the Claude ones are listed regardless |
-| `error` | string \| null | why the worktree could not be found or chosen |
-
-Each session:
-
-| Field | Type | Meaning |
-|---|---|---|
-| `repo`, `work`, `path` | string | the repository, the worktree as `wt list` names it, and where it is |
-| `kind` | `"claude"` \| `"codex"` | a Codex session has no `sessionId`, inbox or transcript, and is `busy` or `idle` |
-| `id` | string \| null | the short id `claude attach` takes; null for a session open only in a terminal |
-| `sessionId` | string \| null | the conversation's full id, which `--expect-session` takes |
-| `name` | string \| null | cleaned of control characters |
-| `pid` | integer \| null | null for a parked background session: no process, no inbox |
-| `terminal` | boolean | an interactive session, open in a terminal |
-| `state` | `"busy"` \| `"idle"` | as everywhere in wt, see Sessions above |
-| `claudeState`, `claudeStatus`, `waitingFor` | string \| null | claude's own words from `claude agents --json`, raw: `working`, `blocked`, `done`…; `busy`, `waiting`, `idle`; `permission prompt`, `input needed`… |
-| `inbox` | string \| null | the socket path; the address to name in `--reply-to` has the same directory |
-| `inboxUnavailable` | string \| null | why `inbox` is null: `notRunning`, `own` (the session wt runs under), `codex` (a Codex session), `noRegistry` (claude's `~/.claude/sessions/<pid>.json` is missing, or names another session: a reused pid), `notASocket` (not a socket of yours, or in a directory others can write), `refused` (it did not accept a connection) |
-| `transcript` | string \| null | the session's `.jsonl` under `~/.claude/projects`, when found |
-| `startedAt` | string \| null | RFC 3339, UTC, `claude agents --json`'s `startedAt` |
-| `lastActivityAt` | string \| null | RFC 3339, UTC: the modification time of `transcript`, one stat and no read; null without a transcript, never guessed |
-| `activity` | enum | `needsInput` (a process, and blocked or waiting on a prompt), `working`, `idle`, `done` (claude's `done`, `failed` and `stopped`; `claudeState` keeps the word), `parked` (a background session with no process, whatever it was waiting for) |
-| `stateSince` | string \| null | RFC 3339, UTC: `statusUpdatedAt` in claude's registry file for the session; null for a session with no process or no file |
-| `background` | boolean | a `claude --bg` session (it has an attach id), open in a terminal or not |
-| `shown` | boolean | the session `wt list` shows for the worktree |
+<!-- json-docs:begin session-list -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"session list"` | yes |  |
+| `sessions` | array of object | yes | The worktree's sessions, the one that needs its person first and then the newest, the session wt runs under last. |
+| `sessions[].work` | string | yes | The worktree's name. |
+| `sessions[].path` | string | yes | The worktree's path. |
+| `sessions[].kind` | `"claude"` \| `"codex"` | yes | Whose session. A Codex session has no sessionId, no inbox and no transcript; its state is busy or idle. |
+| `sessions[].id` | string \| null | yes | The short id claude attach takes; null for a session open only in a terminal. |
+| `sessions[].sessionId` | string \| null | yes | The conversation's full id: what --expect-session takes. |
+| `sessions[].name` | string \| null | yes | The name the session goes by, cleaned of control characters; null when it has none. |
+| `sessions[].pid` | integer \| null, at least 2 | yes | Claude's process; null for a session with none, a parked background one. |
+| `sessions[].terminal` | boolean | yes | An interactive session, open in a terminal; false for a background one, even while attached. |
+| `sessions[].state` | `"busy"` \| `"idle"` | yes | As everywhere in wt: idle is a session waiting for its person; anything else, and anything not known to be idle, is busy. |
+| `sessions[].claudeState` | string \| null | yes | claude agents --json's state (working, blocked, done, failed, stopped), raw; null for a session with none. |
+| `sessions[].claudeStatus` | string \| null | yes | claude agents --json's status (busy, waiting, idle), raw; null while it has no process. |
+| `sessions[].waitingFor` | string \| null | yes | What a waiting session waits on (permission prompt, input needed), raw; null unless it is. |
+| `sessions[].inbox` | string \| null | yes | The inbox's socket, as uds: without the prefix: an absolute path. Null when inboxUnavailable says why. The address to name in --reply-to has the same directory. |
+| `sessions[].inboxUnavailable` | `"notRunning"` \| `"own"` \| `"codex"` \| `"noRegistry"` \| `"notASocket"` \| `"refused"` \| `null` | yes | Why there is no inbox. notRunning: no process. own: the session wt runs under; wt does not send to it. codex: a Codex session takes no messages. noRegistry: claude's registry file for the pid is missing, unreadable, or names another session. notASocket: the path is not a socket of yours in a directory closed to others. refused: it did not accept a connection. noRegistry covers a reused pid: the registry file names another session. |
+| `sessions[].transcript` | string \| null | yes | The session's transcript file, when one is found. It is the session's .jsonl under ~/.claude/projects. |
+| `sessions[].startedAt` | string \| null | yes | RFC 3339, UTC, from claude agents --json's startedAt; null when it has none. |
+| `sessions[].lastActivityAt` | string \| null | yes | RFC 3339, UTC: the modification time of the transcript file, one stat and no read, so it is there for a parked session too. Claude writes the transcript at every turn. Null when no transcript was found; never guessed. |
+| `sessions[].activity` | `"needsInput"` \| `"working"` \| `"idle"` \| `"done"` \| `"parked"` | yes | The one state word wt list and gittree agree on. parked: a background session with no process, whatever it was waiting for. needsInput: it has a process and is blocked or waiting on a prompt (waitingFor says which). done: claude's done, failed and stopped (claudeState has the raw word). working and idle as state busy and idle. A Codex session is working or idle. |
+| `sessions[].background` | boolean | yes | A claude --bg session, which has an attach id, whether or not it is open in a terminal now; false for one started in a terminal. |
+| `sessions[].shown` | boolean | yes | The session wt list shows for its worktree. |
+| `sessions[].repo` | string | yes | The repository's name; empty when it is not known. |
+| `sessions[].stateSince` | string \| null | yes | RFC 3339, UTC: when claude last changed the session's status, from statusUpdatedAt in its registry file ~/.claude/sessions/<pid>.json. Null for a session with no process, or no registry file. |
+| `sessionsError` | string \| null | yes | Why claude's sessions could not be read (claude is not on the PATH, it did not answer). The sessions are then empty and the exit status is 1. |
+| `error` | string \| null | yes | Why the worktree could not be found, or is ambiguous. |
+| `codexError` | string \| null | yes | Why Codex's sessions could not be looked for (the process table, its logs). The Claude sessions are listed regardless. |
+<!-- json-docs:end -->
 
 The registry file and the socket are Claude Code's, not a documented
 interface; `inboxUnavailable` is what a change there looks like.
@@ -2287,17 +2803,43 @@ One message to one running session's inbox. The text comes from stdin, or
 with the content in a `<cross-session-message>` header that names the sender.
 Nothing is retried. `--dry-run` goes as far as the frame and sends nothing.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | |
-| `command` | `"session send"` | |
-| `target` | object \| null | the session, as in `session list`; null when none was chosen |
-| `dryRun` | boolean | |
-| `sent` | boolean | the line was written and the connection closed cleanly. **Not** that the session's Claude has read it |
-| `msgId` | string \| null | the frame's `msg_id`; null unless sent |
-| `bytes` | integer | the message text's size, whole even when over the limit; 0 when not read |
-| `limit` | integer | 262144, what a message may be |
-| `error`, `errorCode` | string \| null | set on failure, with a non-zero exit |
+<!-- json-docs:begin session-send -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"session send"` | yes |  |
+| `target` | object \| null | yes | The session chosen; null when none was. |
+| `target.work` | string | yes | The worktree's name. |
+| `target.path` | string | yes | The worktree's path. |
+| `target.kind` | `"claude"` \| `"codex"` | yes | Whose session. A Codex session has no sessionId, no inbox and no transcript; its state is busy or idle. |
+| `target.id` | string \| null | yes | The short id claude attach takes; null for a session open only in a terminal. |
+| `target.sessionId` | string \| null | yes | The conversation's full id: what --expect-session takes. |
+| `target.name` | string \| null | yes | The name the session goes by, cleaned of control characters; null when it has none. |
+| `target.pid` | integer \| null, at least 2 | yes | Claude's process; null for a session with none, a parked background one. |
+| `target.terminal` | boolean | yes | An interactive session, open in a terminal; false for a background one, even while attached. |
+| `target.state` | `"busy"` \| `"idle"` | yes | As everywhere in wt: idle is a session waiting for its person; anything else, and anything not known to be idle, is busy. |
+| `target.claudeState` | string \| null | yes | claude agents --json's state (working, blocked, done, failed, stopped), raw; null for a session with none. |
+| `target.claudeStatus` | string \| null | yes | claude agents --json's status (busy, waiting, idle), raw; null while it has no process. |
+| `target.waitingFor` | string \| null | yes | What a waiting session waits on (permission prompt, input needed), raw; null unless it is. |
+| `target.inbox` | string \| null | yes | The inbox's socket, as uds: without the prefix: an absolute path. Null when inboxUnavailable says why. The address to name in --reply-to has the same directory. |
+| `target.inboxUnavailable` | `"notRunning"` \| `"own"` \| `"codex"` \| `"noRegistry"` \| `"notASocket"` \| `"refused"` \| `null` | yes | Why there is no inbox. notRunning: no process. own: the session wt runs under; wt does not send to it. codex: a Codex session takes no messages. noRegistry: claude's registry file for the pid is missing, unreadable, or names another session. notASocket: the path is not a socket of yours in a directory closed to others. refused: it did not accept a connection. noRegistry covers a reused pid: the registry file names another session. |
+| `target.transcript` | string \| null | yes | The session's transcript file, when one is found. It is the session's .jsonl under ~/.claude/projects. |
+| `target.startedAt` | string \| null | yes | RFC 3339, UTC, from claude agents --json's startedAt; null when it has none. |
+| `target.lastActivityAt` | string \| null | yes | RFC 3339, UTC: the modification time of the transcript file, one stat and no read, so it is there for a parked session too. Claude writes the transcript at every turn. Null when no transcript was found; never guessed. |
+| `target.activity` | `"needsInput"` \| `"working"` \| `"idle"` \| `"done"` \| `"parked"` | yes | The one state word wt list and gittree agree on. parked: a background session with no process, whatever it was waiting for. needsInput: it has a process and is blocked or waiting on a prompt (waitingFor says which). done: claude's done, failed and stopped (claudeState has the raw word). working and idle as state busy and idle. A Codex session is working or idle. |
+| `target.background` | boolean | yes | A claude --bg session, which has an attach id, whether or not it is open in a terminal now; false for one started in a terminal. |
+| `target.shown` | boolean | yes | The session wt list shows for its worktree. |
+| `target.repo` | string | yes | The repository's name; empty when it is not known. |
+| `target.stateSince` | string \| null | yes | RFC 3339, UTC: when claude last changed the session's status, from statusUpdatedAt in its registry file ~/.claude/sessions/<pid>.json. Null for a session with no process, or no registry file. |
+| `dryRun` | boolean | yes | Whether this was a dry run: nothing was written. |
+| `sent` | boolean | yes | True: the line was written to the inbox and the connection closed cleanly. Not that the session's Claude has read it. |
+| `msgId` | string \| null | yes | The message's id, a UUID, in the frame; null unless sent. |
+| `bytes` | integer, at least 0 | yes | The size of the message text read, in bytes, the whole of it even when over the limit; 0 when it was not read. |
+| `limit` | `262144` | yes | The most message text wt sends, in bytes. |
+| `error` | string \| null | yes | Set on failure, with a non-zero exit. |
+| `errorCode` | `"noSession"` \| `"ambiguous"` \| `"notRunning"` \| `"noInbox"` \| `"changed"` \| `"tooLarge"` \| `"empty"` \| `"writeFailed"` \| `"badArgument"` \| `"notExact"` \| `null` | yes | noSession: no worktree or no session matches. ambiguous: several match, nothing chosen (exit 2). notRunning: the session has no process. noInbox: it has no inbox wt may write to (target.inboxUnavailable says why). changed: the session is not the one --expect-session named. tooLarge: the message, or its frame, is over the limit. empty: no text. writeFailed: the connection or the write failed. badArgument: --from-name or --reply-to is not acceptable (exit 2). notExact: <work> only matched a worktree and is not its name, and no --expect-session was given. |
+<!-- json-docs:end -->
 
 `errorCode`:
 
@@ -2325,16 +2867,41 @@ Only a background Claude session is stopped: one open in a terminal, a Codex
 session and the session wt runs under are refused, and nothing is stopped.
 `--dry-run` resolves and checks, and runs nothing.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `schema`, `schemaVersion` | | |
-| `command` | `"session stop"` | |
-| `session` | object \| null | the session, as in `session list`; null when none was chosen |
-| `dryRun` | boolean | |
-| `outcome` | enum | `stopped`, `already-stopped` (no process: nothing to stop, exit 0), `would-stop` (`--dry-run`), `refused`, `failed` |
-| `reason` | string \| null | why, for `refused` and `failed`; a note for `already-stopped` |
-| `reasonCode` | enum \| null | see below |
-| `message` | string \| null | what `claude stop` printed, stdout then stderr; null when it printed nothing or did not run |
+<!-- json-docs:begin session-stop -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes |  |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes |  |
+| `command` | `"session stop"` | yes |  |
+| `session` | object \| null | yes | The session chosen; null when none was. |
+| `session.work` | string | yes | The worktree's name. |
+| `session.path` | string | yes | The worktree's path. |
+| `session.kind` | `"claude"` \| `"codex"` | yes | Whose session. A Codex session has no sessionId, no inbox and no transcript; its state is busy or idle. |
+| `session.id` | string \| null | yes | The short id claude attach takes; null for a session open only in a terminal. |
+| `session.sessionId` | string \| null | yes | The conversation's full id: what --expect-session takes. |
+| `session.name` | string \| null | yes | The name the session goes by, cleaned of control characters; null when it has none. |
+| `session.pid` | integer \| null, at least 2 | yes | Claude's process; null for a session with none, a parked background one. |
+| `session.terminal` | boolean | yes | An interactive session, open in a terminal; false for a background one, even while attached. |
+| `session.state` | `"busy"` \| `"idle"` | yes | As everywhere in wt: idle is a session waiting for its person; anything else, and anything not known to be idle, is busy. |
+| `session.claudeState` | string \| null | yes | claude agents --json's state (working, blocked, done, failed, stopped), raw; null for a session with none. |
+| `session.claudeStatus` | string \| null | yes | claude agents --json's status (busy, waiting, idle), raw; null while it has no process. |
+| `session.waitingFor` | string \| null | yes | What a waiting session waits on (permission prompt, input needed), raw; null unless it is. |
+| `session.inbox` | string \| null | yes | The inbox's socket, as uds: without the prefix: an absolute path. Null when inboxUnavailable says why. |
+| `session.inboxUnavailable` | `"notRunning"` \| `"own"` \| `"codex"` \| `"noRegistry"` \| `"notASocket"` \| `"refused"` \| `null` | yes | Why there is no inbox. notRunning: no process. own: the session wt runs under; wt does not send to it. codex: a Codex session takes no messages. noRegistry: claude's registry file for the pid is missing, unreadable, or names another session. notASocket: the path is not a socket of yours in a directory closed to others. refused: it did not accept a connection. |
+| `session.transcript` | string \| null | yes | The session's transcript file, when one is found. |
+| `session.startedAt` | string \| null | yes | RFC 3339, UTC, from claude agents --json's startedAt; null when it has none. |
+| `session.lastActivityAt` | string \| null | yes | RFC 3339, UTC: the modification time of the transcript file, one stat and no read, so it is there for a parked session too. Claude writes the transcript at every turn. Null when no transcript was found; never guessed. |
+| `session.activity` | `"needsInput"` \| `"working"` \| `"idle"` \| `"done"` \| `"parked"` | yes | The one state word wt list and gittree agree on. parked: a background session with no process, whatever it was waiting for. needsInput: it has a process and is blocked or waiting on a prompt (waitingFor says which). done: claude's done, failed and stopped (claudeState has the raw word). working and idle as state busy and idle. A Codex session is working or idle. |
+| `session.background` | boolean | yes | A claude --bg session, which has an attach id, whether or not it is open in a terminal now; false for one started in a terminal. |
+| `session.shown` | boolean | yes | The session wt list shows for its worktree. |
+| `session.repo` | string | yes | The repository's name; empty when it is not known. |
+| `session.stateSince` | string \| null | yes | RFC 3339, UTC: when claude last changed the session's status, from statusUpdatedAt in its registry file ~/.claude/sessions/<pid>.json. Null for a session with no process, or no registry file. |
+| `dryRun` | boolean | yes | Whether this was a dry run: nothing was stopped. |
+| `outcome` | `"stopped"` \| `"already-stopped"` \| `"would-stop"` \| `"refused"` \| `"failed"` | yes | stopped: claude stop ran and succeeded. already-stopped: the session has no process, so there was nothing to stop (exit 0). would-stop: --dry-run, the session would be stopped and nothing was. refused: the session is not one wt stops, or could not be told from another (exit 1; ambiguous is 2). failed: no worktree or session was found, or claude stop failed (exit 1). |
+| `reason` | string \| null | yes | Why for refused and failed, and a note for already-stopped; null otherwise. |
+| `reasonCode` | `"noSession"` \| `"ambiguous"` \| `"changed"` \| `"interactive"` \| `"codex"` \| `"own"` \| `"noId"` \| `"notBackground"` \| `"noProcess"` \| `"stopFailed"` \| `"ownUnknown"` \| `"notExact"` \| `null` | yes | noSession: no worktree or no session matches (failed). ambiguous: several match, nothing chosen (refused, exit 2). changed: the session is not the one --expect-session named (refused). notExact: <work> is not exactly a worktree's name and no --expect-session was given (refused). ownUnknown: the process table could not be read, so wt cannot tell whether the session is its own (refused). interactive: the session is open in a terminal (refused). codex: a Codex session (refused). own: the session wt runs under (refused). noId: the session has no attach id claude stop could take (refused). notBackground: the worktree has no background Claude session (refused). noProcess: with already-stopped, a parked session. stopFailed: claude stop failed or timed out (failed). |
+| `message` | string \| null | yes | What claude stop printed, stdout then stderr, trimmed; null when it printed nothing or did not run. |
+<!-- json-docs:end -->
 
 `reasonCode`:
 
