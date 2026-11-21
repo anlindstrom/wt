@@ -1,10 +1,10 @@
 # Testing wt
 
 Run the tests that cover what you changed while you work, and the whole
-check once before you hand the work back. The full suite takes about 2
-minutes on a busy machine. The packages run side by side, most of their
+check once before you hand the work back. The full suite takes about 4
+minutes on the shared Mac mini. The packages run side by side, most of their
 tests run in parallel within them, and they build real git repositories;
-the slowest are `internal/commands/retire` and `synckeep`. Run the suite
+the slowest are `internal/commands/synccmd` and `syncfix`. Run the suite
 once, in the background, and keep working; never run it in a loop.
 
 ## Targets
@@ -13,18 +13,25 @@ once, in the background, and keep working; never run it in a loop.
 |---|---|---:|
 | `make test-unit` | the packages whose tests build no git repository, with `-short` | about 8 s |
 | `make test-fast` | `go test -short -timeout 20m ./...` | minutes |
-| `make test` | `go test -timeout 30m ./...` | about 120 s |
+| `make test` | `go test -timeout 30m ./...` | about 4 minutes |
 | `make test-race` | `make test` under the race detector, as CI runs it | slower than `make test` |
 | `make bats` | builds `bin/wt`, then every `test/*.bats` | about 140 s |
 | `make test-mod` | the wt mod's suite, `claude plugin test mods/wt` | about 2 s |
 | `make lint` | `golangci-lint run` | |
 | `make check` | lint, test, bats and test-mod | about 7 minutes |
 
-The `make test` time was taken on a 16-core Mac where other sessions kept
-the load average at 10-20; the suite itself drives it past 50, so it is
-bound by CPU, and a machine with fewer cores gains less from the parallel
-tests. The other times are older and were taken under a heavier load.
-Several full runs at once can pass the 30 minute timeout.
+The `make test` time was measured on the Mac mini on 2026-11-21 with other
+jobs sharing it; the suite itself drives the load past 50, so it is bound by
+CPU, and a machine with fewer cores gains less from the parallel tests. The
+other times are older. Several full runs at once can pass the 30 minute
+timeout.
+
+The tests are written against git 2.56 (Homebrew's; `gittest.MinGit`). Apple's
+git 2.54 checks and replays some rebases differently, and two tests,
+`TestEachCommitTipsDoesNotCheckALayerTheTargetAlreadyCarries` and
+`TestFoldOfAStackEndToEnd`, call `gittest.Need(t, "2.56")` and fail with the
+version they found: put `/opt/homebrew/bin` first on the PATH. A new test that
+depends on a newer git's behaviour does the same.
 
 `make test-unit` covers internal/config, find, naming, about, quarantine,
 gittest, superset, textwrap, jsonout, refpins, schema, and
@@ -61,10 +68,10 @@ A package run with `-run` takes seconds here and needs no offload.
 | internal/agents | `go test ./internal/agents` (a few seconds); some of its tests read the real process table |
 | internal/commands/syncrun | `go test ./internal/commands/syncfix ./internal/commands/synccmd -run 'Push\|OwnRemote\|FastForward\|Finish'`: syncrun's behaviour is tested from those two packages, so `go test ./internal/commands/syncrun` alone covers almost nothing |
 | goroutines, locks, signals or anything shared between them | `make test-race` once, in the background: CI runs the suite with `-race` and `make check` does not |
-| internal/commands, one command family | `go test ./internal/commands/<pkg> -run '<Family>'`, see the examples below; the whole `./internal/commands/...` once before you finish (about 120 s) |
+| internal/commands, one command family | `go test ./internal/commands/<pkg> -run '<Family>'`, see the examples below; the whole `./internal/commands/...` once before you finish, on the mini |
 | a package-level hook variable or `Context` | `./internal/commands/...` once: the hooks live in kit (`FindGitHub`, `FindTmutil`, `MachineAgents`), supersetws (`Probe`, `HostCommand`) and session (`SessionsDeadline`); `testkit.Main` sets kit's, every TestMain the rest, and serial tests swap them, see "Parallel tests" |
 | the `--json` shape or `schema/*.json` | the schema test and the JSON tests, see the examples below, and update docs/json.md in the same commit |
-| cmd/wt flags, help text, completion | `go test ./cmd/wt` (about 16 s) |
+| cmd/wt flags, help text, completion | `go test ./cmd/wt -run` the family; the whole package takes about a minute |
 | mods/wt | `make test-mod`; a change to its fixtures also `go test ./internal/commands/testkit -run Mod` |
 | shell/, install.sh, stdout, stderr or exit codes | `make build && scripts/bats.sh test/<file>.bats`, the one file |
 | before handing the work back | `offload run check` once, waited on in the background (see "On the Mac mini"); after a fix, run the touched family only |
@@ -234,29 +241,34 @@ applies.
 
 ## Time per package
 
-Wall time of each package in one `go test -count=1 ./...` run, under the
-load above. "serial" is the part spent before the first parallel test
-started: the tests that stay serial run one after another.
+Wall time of each package in one `go test -count=1 ./...` run, measured on
+the Mac mini on 2026-11-21 while other sessions' jobs shared it (load 2 per
+core and more), so a quiet machine is faster: the same synccmd run took 117 s
+and syncfix 102 s when the mini was quiet. "serial" is the part spent before
+the first parallel test started; the tests that stay serial run one after
+another. Only the serial rows below were measured separately.
 
-| package | s | serial s | note |
-|---|---:|---:|---|
-| internal/commands/retire | 121 | 75 | the remove and sweep --reap tests: real processes, signals, a 5 s grace |
-| internal/commands/synccmd | 112 | 52 | |
-| internal/wtsync | 107 | 58 | |
-| internal/commands/quarantinecmd | 172 | 0 | wt restore and wt purge; measured later, at a load of about 950: purge alone was 220 in that run |
-| internal/commands/refs | 123 | 109 | measured later, at a load of about 950: was 272 there, wt restore with it |
-| internal/commands/admin | 53 | 41 | |
-| internal/commands | 51 | 27 | wt list and status, and tests across packages |
-| internal/commands/provision | 41 | 23 | |
-| internal/commands/syncfix | 40 | 0 | |
-| internal/commands/synckeep | 41 | 6 | measured later, at a load of about 130: was 158, all serial |
-| internal/commands/session | 20 | 4 | measured later, at a load of about 130: was 74, all serial |
-| internal/superset | 34 | 21 | about 4 s of it is real deadlines |
-| cmd/wt | 27 | 27 | in-process cobra; builds no binary |
-| internal/github | 15 | | fake `gh` shell scripts |
-| internal/repo | 13 | | |
-| internal/git | 10 | | |
-| schema, config, find, gittest, about, quarantine, naming, kit, refpins | 0-4 each | | no git |
+| package | s | note |
+|---|---:|---|
+| internal/commands/synccmd | 182 | the stack and fold tests build real repositories |
+| internal/commands/syncfix | 172 | the same |
+| internal/wtsync | 101 | |
+| internal/commands/retire | 85 | the remove and sweep --reap tests: real processes, signals, a 5 s grace |
+| cmd/wt | 62 | the sync-wait tests build a wt binary (`go build`) once and run it in child processes |
+| internal/commands/quarantinecmd | 55 | wt restore and wt purge |
+| internal/commands/provision | 32 | |
+| internal/commands/admin | 25 | |
+| internal/commands | 24 | wt list and status, and tests across packages |
+| internal/commands/refs | 21 | |
+| internal/commands/synckeep | 13 | |
+| internal/repo | 10 | |
+| internal/superset | 7 | about 4 s of it is real deadlines |
+| internal/git | 5 | |
+| everything else | under 5 each | most build no git repository |
+
+The whole `go test ./...` takes about 4 minutes there (3 min 46 s for main
+before the parallel fold tests); `offload run check`, with lint and bats, took
+4 min 21 s.
 
 Go runs the packages side by side, so the suite takes about as long as
 the slowest package. Before the split internal/commands alone took 785 s
