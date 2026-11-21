@@ -33,3 +33,14 @@ func MustRead(t *testing.T, p string) string {
 	}
 	return strings.TrimSpace(string(b))
 }
+
+// MustReadRaw is MustRead with the file exactly as it is, trailing newline
+// and all.
+func MustReadRaw(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}

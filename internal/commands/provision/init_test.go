@@ -134,7 +134,7 @@ func TestInitCommentsEveryRemainingKeyAtItsDefault(t *testing.T) {
 	if err := Init(r, InitOptions{}, &buf); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	body := string(mustReadFile(t, confPath(r)))
+	body := testkit.MustReadRaw(t, confPath(r))
 
 	for _, key := range []string{
 		"WORKTREE_TYPE_SUFFIX", "WORKTREE_DEFAULT_TYPE", "WORKTREE_TYPES",
@@ -161,7 +161,7 @@ func TestInitCommentedDefaultsParseAndChangeNothingWhenUncommented(t *testing.T)
 
 	assignment := regexp.MustCompile(`^# ([A-Z_]+=)`)
 	var lines []string
-	for _, line := range strings.Split(string(mustReadFile(t, confPath(r))), "\n") {
+	for _, line := range strings.Split(testkit.MustReadRaw(t, confPath(r)), "\n") {
 		lines = append(lines, assignment.ReplaceAllString(line, "$1"))
 	}
 	if err := os.WriteFile(confPath(r), []byte(strings.Join(lines, "\n")), 0o644); err != nil {
@@ -188,15 +188,6 @@ func resolvedConfig(t *testing.T, r *repo.Repo) string {
 		t.Fatalf("Config: %v", err)
 	}
 	return buf.String()
-}
-
-func mustReadFile(t *testing.T, path string) []byte {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
 }
 
 func TestInitReAsksWhenAnAnswerWouldNotValidate(t *testing.T) {
@@ -299,7 +290,7 @@ func TestInitRefusesToOverwriteAnExistingConfig(t *testing.T) {
 			if !strings.Contains(err.Error(), name) {
 				t.Errorf("error does not name the file in the way: %v", err)
 			}
-			if got := string(mustReadFile(t, existing)); got != "MAIN_BRANCH=keep\n" {
+			if got := testkit.MustReadRaw(t, existing); got != "MAIN_BRANCH=keep\n" {
 				t.Errorf("existing configuration was modified: %q", got)
 			}
 		})
