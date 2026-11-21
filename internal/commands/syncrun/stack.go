@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"io"
-	"slices"
 	"strings"
 	"time"
 
@@ -600,7 +599,7 @@ type stackFinisher struct {
 func (f *stackFinisher) refuse(why string) (*Stack, string, error) {
 	w, s, rec, main := f.w, f.s, f.rec, f.main
 	if rec.Edit != nil {
-		why, s.Restored = putBackLine(main, rec, why)
+		why, s.Restored = wtsync.PutBackLine(main, rec, why)
 	}
 	fmt.Fprintf(w, "  ✗ no layer moved: %s\n", why)
 	s.Refusal = jsonout.Strp(why)
@@ -894,93 +893,19 @@ func (f *stackFinisher) moveSides(forks []wtsync.LayerPlan, merr error, held, mo
 	return s, strings.Join(failures, ", "), nil
 }
 
-// foldChanged is how a fold changed the line's content, outside the
-// per-layer steps' paths (folds), which their output may change; "" for not
-// at all, and never "" for a difference it cannot account for.
-//
-// A fold in place (onto is the line's own base) keeps the tree.
-//
-// A fold that moves the line onto another commit is held to what git merges
-// the old line onto that commit with: every file that merges cleanly comes
-// out as merged, so a hunk lost in a file the target also changed is caught.
-// A file that does not merge cleanly and that a stop resolved, by a strategy
-// or a person, is theirs in its conflicting region only; the rest of the
-// merge must still be in it. The steps' own paths are the steps'. A moving
-// fold is never accepted on the old tree alone.
+// foldChanged is why the tree guard refuses a fold, "" for none; see
+// wtsync.TreeGuard.
 func foldChanged(main, base, onto, oldTip, newTip string, folds, stopped []string) string {
 	return foldCheck(main, base, onto, oldTip, newTip, folds, stopped).Why
 }
 
-// foldResult is what foldChanged found and what it let through to find it:
-// Why is the difference it could not account for, "" when there is none;
-// Excluded the declared step paths a changed file matched, and
-// ConflictAllowed the conflicted files a stop resolved that differ from the
-// merge, which it held only to keeping the merge's lines outside the conflict.
-type foldResult struct {
-	Why             string
-	Excluded        []string
-	ConflictAllowed []string
-}
+// foldResult is what the tree guard found; see wtsync.GuardResult.
+type foldResult = wtsync.GuardResult
 
-func foldCheck(main, base, onto, oldTip, newTip string, folds, stopped []string) (res foldResult) {
-	excluded := func(p string) bool {
-		g := globMatching(folds, p)
-		if g != "" && !slices.Contains(res.Excluded, g) {
-			res.Excluded = append(res.Excluded, g)
-		}
-		return g != ""
-	}
-	was, err1 := git.Run(main, "rev-parse", oldTip+"^{tree}")
-	is, err2 := git.Run(main, "rev-parse", newTip+"^{tree}")
-	if onto == base && err1 == nil && err2 == nil && was == is {
-		return res
-	}
-	tree := fmt.Sprintf("tree %s before, %s after", git.ShortID(was, 7), git.ShortID(is, 7))
-	if err1 != nil || err2 != nil {
-		res.Why = tree
-		return res
-	}
-	if onto == base {
-		paths, err := wtsync.ChangedPaths(main, was, newTip)
-		if err != nil {
-			res.Why = tree + ": " + err.Error()
-			return res
-		}
-		for _, p := range paths {
-			if !excluded(p) {
-				res.Why = tree + ", " + p + " among them"
-				return res
-			}
-		}
-		return res
-	}
-	ref, conflicted, err := wtsync.MergedTree(main, base, onto, oldTip)
-	if err != nil {
-		res.Why = tree + ": the old line merged onto the target could not be read: " + err.Error()
-		return res
-	}
-	paths, err := wtsync.ChangedPaths(main, ref, newTip)
-	if err != nil {
-		res.Why = tree + ": " + err.Error()
-		return res
-	}
-	for _, p := range paths {
-		switch {
-		case excluded(p):
-		case slices.Contains(conflicted, p) && slices.Contains(stopped, p):
-			// A stop resolved this file: its conflicting region is the
-			// stop's, the rest of the merge must still be there.
-			if why := lostMergedLines(main, ref, newTip, p); why != "" {
-				res.Why = tree + ", " + p + ": " + why
-				return res
-			}
-			res.ConflictAllowed = append(res.ConflictAllowed, p)
-		default:
-			res.Why = tree + ", " + p + " differs from the old line merged onto the target"
-			return res
-		}
-	}
-	return res
+// foldCheck holds newTip's tree to what the fold may change; see
+// wtsync.TreeGuard.
+func foldCheck(main, base, onto, oldTip, newTip string, folds, stopped []string) foldResult {
+	return wtsync.TreeGuard(main, wtsync.GuardInput{Base: base, Onto: onto, OldTip: oldTip, NewTip: newTip, Folds: folds, Stopped: stopped})
 }
 
 // guardPassed is what a passed tree guard compared, as one line: the old
@@ -1001,49 +926,8 @@ func guardPassed(g *FoldGuard) string {
 	return line
 }
 
-// lostMergedLines is why newTip's p lost something of ref's p outside the
-// conflicting regions ref carries markers for: a line of the merge that is
-// not in the new file in order. "" when every such line is there.
-func lostMergedLines(main, ref, newTip, p string) string {
-	merged, err1 := git.Run(main, "show", ref+":"+p)
-	now, err2 := git.Run(main, "show", newTip+":"+p)
-	if err1 != nil || err2 != nil {
-		return "the merged file or the new one could not be read, so it is not checked"
-	}
-	have := strings.Split(now, "\n")
-	at, inConflict := 0, false
-	for _, line := range strings.Split(merged, "\n") {
-		switch {
-		case strings.HasPrefix(line, "<<<<<<< "):
-			inConflict = true
-			continue
-		case strings.HasPrefix(line, ">>>>>>> "):
-			inConflict = false
-			continue
-		case inConflict:
-			continue
-		}
-		for at < len(have) && have[at] != line {
-			at++
-		}
-		if at == len(have) {
-			return fmt.Sprintf("the line %q of the merge is not in the resolution", line)
-		}
-		at++
-	}
-	return ""
-}
-
-func matchesAnyGlob(patterns []string, path string) bool { return globMatching(patterns, path) != "" }
-
-// globMatching is the first pattern that matches path, "" for none.
-func globMatching(patterns []string, path string) string {
-	for _, g := range patterns {
-		if wtsync.MatchGlob(g, path) {
-			return g
-		}
-	}
-	return ""
+func matchesAnyGlob(patterns []string, path string) bool {
+	return wtsync.GlobMatching(patterns, path) != ""
 }
 
 // layerPush is the push of a moved layer: to the branch's own remote, with a
