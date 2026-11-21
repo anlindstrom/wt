@@ -61,6 +61,9 @@ func TestPathAndBranchFallBackToTheDefaultTypeWhenNothingExists(t *testing.T) {
 	if got, err := kit.Branch(ctx, "login-crash"); err != nil || got != "feat_wt/login-crash" {
 		t.Errorf("Branch = %q, %v; want feat_wt/login-crash", got, err)
 	}
+	if got, err := kit.Branch(ctx, "fix/login-crash"); err != nil || got != "fix_wt/login-crash" {
+		t.Errorf("explicit type: Branch = %q, %v; want fix_wt/login-crash", got, err)
+	}
 	want := filepath.Join(ctx.Repo.Parent, "demo_wt", "feat_wt", "login-crash")
 	if got, err := kit.Path(ctx, "login-crash"); err != nil || got != want {
 		t.Errorf("Path = %q, %v; want %q", got, err, want)

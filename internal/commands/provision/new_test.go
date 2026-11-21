@@ -59,6 +59,8 @@ func TestNewRefusesDuplicateWork(t *testing.T) {
 	}
 }
 
+// New parses the work name itself (kit.ParseWork), which the JSON path's plan
+// does not reach: an unknown type is refused here too.
 func TestNewRejectsUnknownType(t *testing.T) {
 	t.Parallel()
 	ctx, _ := kit.Open(testkit.CommittedRepo(t, testkit.MinimalConf), io.Discard)

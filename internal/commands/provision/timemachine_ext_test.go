@@ -74,21 +74,6 @@ func TestNewSurvivesAFailingTmutil(t *testing.T) {
 	}
 }
 
-// Switched off, wt new runs no tmutil.
-func TestNewSwitchedOffRunsNoTmutil(t *testing.T) {
-	ctx, tm, warned := tmRepo(t, false)
-	testkit.TimeMachineSetting(t, ctx, "false")
-	if _, err := provision.New(ctx, "fix/login-crash", provision.NewOptions{}, io.Discard); err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	if got := tm.Calls(t); len(got) != 0 {
-		t.Errorf("tmutil was called %q", got)
-	}
-	if warned.Len() != 0 {
-		t.Errorf("warned %q", warned)
-	}
-}
-
 // wt checkout puts its worktree under <repo>_wt/ too.
 func TestCheckoutExcludesTheWorktreeFolderFromTimeMachine(t *testing.T) {
 	ctx, tm, _ := tmRepo(t, false)

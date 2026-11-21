@@ -10,24 +10,6 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 )
 
-func TestBranchAppliesDefaultType(t *testing.T) {
-	t.Parallel()
-	ctx, err := kit.Open(testkit.FixtureRepo(t, testkit.MinimalConf), io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := kit.Branch(ctx, "login-crash")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "feat_wt/login-crash" {
-		t.Errorf("got %q", got)
-	}
-	if got, _ = kit.Branch(ctx, "fix/login-crash"); got != "fix_wt/login-crash" {
-		t.Errorf("explicit type: got %q", got)
-	}
-}
-
 // Superset offers no type when a workspace is created — every branch it makes
 // takes one fixed prefix — so the type has to be readable from the name.
 func TestBranchReadsTheTypeOutOfABareName(t *testing.T) {
