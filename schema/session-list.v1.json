@@ -164,7 +164,7 @@
             "string",
             "null"
           ],
-          "description": "The inbox's socket, as uds: without the prefix: an absolute path. Null when inboxUnavailable says why."
+          "description": "The inbox's socket, as uds: without the prefix: an absolute path. Null when inboxUnavailable says why. The address to name in --reply-to has the same directory."
         },
         "inboxUnavailable": {
           "oneOf": [
@@ -182,14 +182,14 @@
               ]
             }
           ],
-          "description": "Why there is no inbox. notRunning: no process. own: the session wt runs under; wt does not send to it. codex: a Codex session takes no messages. noRegistry: claude's registry file for the pid is missing, unreadable, or names another session. notASocket: the path is not a socket of yours in a directory closed to others. refused: it did not accept a connection."
+          "description": "Why there is no inbox. notRunning: no process. own: the session wt runs under; wt does not send to it. codex: a Codex session takes no messages. noRegistry: claude's registry file for the pid is missing, unreadable, or names another session. notASocket: the path is not a socket of yours in a directory closed to others. refused: it did not accept a connection. noRegistry covers a reused pid: the registry file names another session."
         },
         "transcript": {
           "type": [
             "string",
             "null"
           ],
-          "description": "The session's transcript file, when one is found."
+          "description": "The session's transcript file, when one is found. It is the session's .jsonl under ~/.claude/projects."
         },
         "startedAt": {
           "type": [

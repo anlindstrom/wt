@@ -25,13 +25,13 @@
     "fetched": { "type": "boolean", "description": "origin was fetched first (false with --no-fetch, without an origin, or when the plan stopped before)." },
     "token": { "type": ["string", "null"], "description": "Names this plan; pass it to `wt sweep --expect <token> --yes --json`. Null when there is nothing to remove or delete, or on error." },
     "error": { "type": ["string", "null"], "description": "Why no plan could be made: not the main checkout, no trunk, the fetch failed — items is then empty — or a --move-to folder that cannot be used." },
-    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" }, "description": "The rows, in the order wt sweep prints them."  },
     "quarantine": { "type": ["string", "null"], "description": "Since 1.2.0. With --move-to <dir>: the folder the worktrees go to, absolute, which the token covers; a folder that exists or is on another volume refuses the plan (error set, token null, items kept). null without it." },
     "keepSuperset": { "type": "boolean", "description": "Since 1.4.0. --keep-superset was given: the removed worktrees' Superset workspaces are left, and Superset is not asked anything. The token covers it." },
     "reap": { "type": "boolean", "description": "Since 1.6.0. --reap was given: the processes still working in each worktree that goes are stopped first, and they no longer keep it. The token covers it, and the processes of each remove item." },
     "configFingerprint": {
       "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9a-f]{64}$" }],
-      "description": "Since 1.5.0. The wt configuration the token covers: the lowercase hex SHA-256 of the configuration file wt read (bin/worktree/worktree.toml or worktree.conf). Two plans with the same value read the same file. null when there is none."
+      "description": "Since 1.5.0. The wt configuration the token covers: the lowercase hex SHA-256 of the configuration file wt read (bin/worktree/worktree.toml or worktree.conf). Two plans with the same value read the same file. null when there is none. It is the worktree's own file before the main checkout's."
     }
   },
   "$defs": {
@@ -54,7 +54,7 @@
         },
         "pullRequest": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/pullRequest" }],
-          "description": "What GitHub says about the branch's pull request; null when there is none, or GitHub was not asked."
+          "description": "What GitHub says about the branch's pull request, merged or not: its number, state, base and url. Null when there is none, or GitHub was not asked."
         },
         "kept": {
           "type": "array",
@@ -90,20 +90,20 @@
       "properties": {
         "how": {
           "enum": ["ancestor", "patch", "pullRequest"],
-          "description": "ancestor: into contains the tip. patch: every commit is on into under another id, byte for byte. pullRequest: GitHub merged its pull request into trunk at exactly this tip."
+          "description": "ancestor: into contains the tip. patch: every commit is on into under another id, byte for byte. pullRequest: GitHub merged its pull request into trunk at exactly this tip. The first is a merge or fast-forward; the second a rebase merge or a cherry-pick; the third a squash merge."
         },
-        "into": { "type": "string", "description": "The base it is on; trunk's name for pullRequest." },
-        "pullRequest": { "type": ["integer", "null"], "description": "For pullRequest: its number." }
+        "into": { "type": "string", "description": "The base it is on (origin/main, main); trunk's name for pullRequest." },
+        "pullRequest": { "type": ["integer", "null"], "description": "For pullRequest: its number; null otherwise." }
       }
     },
     "pullRequest": {
       "type": "object",
       "required": ["number", "state", "base", "url"],
       "properties": {
-        "number": { "type": "integer" },
-        "state": { "enum": ["OPEN", "MERGED", "CLOSED"] },
-        "base": { "type": ["string", "null"] },
-        "url": { "type": ["string", "null"] }
+        "number": { "type": "integer", "description": "The pull request's number."  },
+        "state": { "enum": ["OPEN", "MERGED", "CLOSED"], "description": "OPEN, MERGED or CLOSED, as GitHub says."  },
+        "base": { "type": ["string", "null"], "description": "The branch the pull request targets."  },
+        "url": { "type": ["string", "null"], "description": "The pull request's URL."  }
       }
     }
   }

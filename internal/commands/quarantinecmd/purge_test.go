@@ -421,7 +421,7 @@ func TestPurgeComparesFoldersNotSpellings(t *testing.T) {
 	ctx, _, _, _, dir := retiretest.Quarantined(t, "fix/cased", false)
 	upper := filepath.Join(filepath.Dir(dir), strings.ToUpper(filepath.Base(dir)))
 	if _, err := os.Lstat(upper); err != nil {
-		t.Skip("this volume tells case apart")
+		t.Skip("this volume tells case apart") //skip-ok: the test needs a case-insensitive volume; the upper-cased path does not exist here, so this volume tells case apart
 	}
 	testkit.GitIn(t, ctx.Repo.MainRoot, "worktree", "add", "-q", "--detach", filepath.Join(dir, "checkout", "nested"))
 	PurgeRefused(t, ctx, upper, quarantine.ProblemRegistered)

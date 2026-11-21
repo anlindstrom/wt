@@ -10,19 +10,19 @@
     "schema": { "const": 1, "description": "The major version: a new one only for a change that breaks readers." },
     "schemaVersion": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$", "description": "The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording." },
     "command": { "const": "up" },
-    "trunk": { "type": ["string", "null"] },
-    "trunkSource": { "enum": ["config", "originHead", "conventional", "currentBranchGuess", null], "description": "How trunk was determined, first match wins, from local refs alone (since 1.3.0): config — MAIN_BRANCH in the wt configuration file; originHead — refs/remotes/origin/HEAD; conventional — the first of development, main, master that exists locally or on origin (since 1.3.1; before, main, master, trunk, development, develop, ranked by where each exists); currentBranchGuess — no longer produced since 1.3.1: when nothing names trunk, detection fails and the repository reports noConfiguration. Null when trunk is." },
-    "trunkRef": { "type": ["string", "null"] },
-    "onto": { "$ref": "#/$defs/shaOrNull", "description": "The commit assessed against, or rebased onto: trunk, or --onto's target (since 1.6.0). Null when it was never determined." },
+    "trunk": { "type": ["string", "null"], "description": "Trunk as wt up resolved it; null when the run stopped before resolving it."  },
+    "trunkSource": { "enum": ["config", "originHead", "conventional", "currentBranchGuess", null], "description": "How trunk was determined, first match wins, from local refs alone (since 1.3.0): config — MAIN_BRANCH in the wt configuration file; originHead — refs/remotes/origin/HEAD; conventional — the first of development, main, master that exists locally or on origin (since 1.3.1; before, main, master, trunk, development, develop, ranked by where each exists); currentBranchGuess — no longer produced since 1.3.1: when nothing names trunk, detection fails and the repository reports noConfiguration. Null when trunk is. Null with trunk." },
+    "trunkRef": { "type": ["string", "null"], "description": "origin/<trunk>, what the run rebases onto after its fetch; null when the run stopped before resolving it."  },
+    "onto": { "$ref": "#/$defs/shaOrNull", "description": "The commit the run rebased onto: trunk's after its fetch, or since 1.6.0 the target --onto names. Null when it was never determined." },
     "target": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/target" }], "description": "What onto is: trunk, or the ref --onto names (since 1.6.0). Null when it was never determined." },
-    "fetched": { "type": "boolean" },
-    "trunkSync": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/trunkSync" }], "description": "What the run did to local trunk after its fetch: fast-forwarded to origin/<trunk> when safe, or why not. Null when it did not fetch." },
+    "fetched": { "type": "boolean", "description": "Whether trunk was fetched: false with --no-fetch, or when the run stopped first."  },
+    "trunkSync": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/trunkSync" }], "description": "What the run did to local trunk after its fetch: fast-forwarded to origin/<trunk> when safe, or why not. Null when it did not fetch. See trunkSync in wt status --json for the fields." },
     "outcome": {
       "enum": ["done", "refused", "partial", "interrupted"],
       "description": "done: every participant rebased, fastForwarded or skipped. refused: nothing changed, or error stopped the run first. partial: something changed and not everything finished. interrupted: a signal ended the run."
     },
-    "error": { "type": ["string", "null"], "description": "Why the run stopped before touching any participant." },
-    "worktrees": { "type": "array", "description": "The participants, parents first.", "items": { "$ref": "#/$defs/participant" } },
+    "error": { "type": ["string", "null"], "description": "Why the run stopped before touching any participant: configuration, fetch, --expect, the main checkout named, or a worktree not found." },
+    "worktrees": { "type": "array", "description": "The participants, parents first; empty when error stopped the run first.", "items": { "$ref": "#/$defs/participant" } },
     "recovery": { "type": ["string", "null"], "description": "For interrupted: the way back wt printed." }
   },
   "$defs": {
@@ -32,9 +32,9 @@
       "required": ["ref", "trunk", "upstream"],
       "description": "What is assessed against or rebased onto (since 1.6.0): trunk, or the ref --onto names.",
       "properties": {
-        "ref": { "type": "string", "description": "The ref as given to --onto, or origin/<trunk>." },
+        "ref": { "type": "string", "description": "The ref as given to --onto, or origin/<trunk>. Examples: integ, origin/release." },
         "trunk": { "type": "boolean", "description": "The target is trunk: no --onto was given." },
-        "upstream": { "$ref": "#/$defs/shaOrNull", "description": "The commit --upstream names: only the commits above it are replayed. Null without it." }
+        "upstream": { "$ref": "#/$defs/shaOrNull", "description": "The commit --upstream names: only the commits above it are replayed. Null without it. The run is then git rebase --onto <ref> <upstream>." }
       }
     },
     "trunkSync": {
@@ -42,14 +42,14 @@
       "description": "Local trunk against origin/<trunk>, and what was done about it. See docs/json.md.",
       "required": ["local", "remote", "localAhead", "remoteAhead", "fastForwarded", "skippedReason"],
       "properties": {
-        "local": { "$ref": "#/$defs/shaOrNull", "description": "Local trunk after the run (as found unless fast-forwarded); null when there is none." },
+        "local": { "$ref": "#/$defs/shaOrNull", "description": "Local trunk's commit after the run (as found, unless fast-forwarded); null when there is no local trunk." },
         "remote": { "$ref": "#/$defs/shaOrNull", "description": "The origin/<trunk> commit compared with; null when there is none." },
-        "localAhead": { "type": ["integer", "null"], "minimum": 0, "description": "Commits local trunk has that origin lacks, as found." },
-        "remoteAhead": { "type": ["integer", "null"], "minimum": 0, "description": "Commits origin has that local trunk lacks, as found." },
+        "localAhead": { "type": ["integer", "null"], "minimum": 0, "description": "Commits local trunk has that origin lacks, as found; null when either side is missing." },
+        "remoteAhead": { "type": ["integer", "null"], "minimum": 0, "description": "Commits origin has that local trunk lacks, as found; null when either side is missing." },
         "fastForwarded": { "type": "boolean" },
         "skippedReason": {
           "oneOf": [{ "type": "null" }, { "enum": ["optedOut", "ahead", "diverged", "dirty", "operation", "session", "notFastForward", "failed"] }],
-          "description": "Why local trunk was left; null when fast-forwarded or with nothing to do."
+          "description": "Why local trunk was left; null when fast-forwarded or with nothing to do (the two are equal, or either side is missing)."
         }
       }
     },
@@ -58,23 +58,23 @@
       "type": "object",
       "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "ownRemoteSync", "layers"],
       "properties": {
-        "work": { "type": "string" },
-        "branch": { "type": "string" },
-        "path": { "type": "string" },
+        "work": { "type": "string", "description": "The work name, as wt list prints it."  },
+        "branch": { "type": "string", "description": "The worktree's branch."  },
+        "path": { "type": "string", "description": "The worktree's absolute path."  },
         "result": {
           "enum": ["rebased", "fastForwarded", "rebasedStepFailed", "skipped", "refused", "notRun", "restored", "needsRecovery", "handedOver", "interrupted"],
           "description": "rebased, fastForwarded, rebasedStepFailed, needsRecovery, handedOver and interrupted changed the branch or worktree; skipped, refused, notRun and restored left them as they were. fastForwarded (since 1.4.0): the branch was behind its own remote and has nothing to rebase at the remote's commit, so the run moved it there and that is all; after is that commit, pushCommand is null."
         },
-        "reason": { "type": ["string", "null"] },
-        "before": { "$ref": "#/$defs/shaOrNull" },
-        "after": { "$ref": "#/$defs/shaOrNull" },
-        "failedSteps": { "type": "array", "items": { "type": "string" } },
-        "recovery": { "type": ["string", "null"] },
+        "reason": { "type": ["string", "null"], "description": "Why, for every result but rebased."  },
+        "before": { "$ref": "#/$defs/shaOrNull", "description": "The branch's commit when the run began."  },
+        "after": { "$ref": "#/$defs/shaOrNull", "description": "The branch's commit when the run ended."  },
+        "failedSteps": { "type": "array", "items": { "type": "string" }, "description": "For rebasedStepFailed: each step that did not finish."  },
+        "recovery": { "type": ["string", "null"], "description": "For needsRecovery, handedOver and interrupted: how to put it back or finish it."  },
         "pushCommand": {
           "oneOf": [{ "type": "null" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }],
-          "description": "For rebased: the push, as an argv. Since 1.5.0 null also for rebased, when wt has no push to make or offer for the branch, which noPushReason explains."
+          "description": "For rebased: the push, as an argv. Since 1.5.0 null also for rebased, when wt has no push to make or offer for the branch, which noPushReason explains. The argv has the form [\"git\", \"-C\", path, \"push\", …]."
         },
-        "pushed": { "type": "boolean" },
+        "pushed": { "type": "boolean", "description": "Whether the run pushed it: with --push, or with --yes without --no-push."  },
         "noPushReason": { "type": ["string", "null"], "description": "Since 1.5.0: for rebased with a null pushCommand, why wt made and offered no push for the branch, in words, whatever the reason: among them that it tracks a remote branch of another name with nothing recorded for it, and that the branch of another name it is recorded as pushing to holds commits that cannot be shown to be old versions of its own. Null otherwise." },
         "fixCommand": { "oneOf": [{ "type": "null" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }], "description": "Since 1.5.0: the command that settles noPushReason, as an argv, when one does: wt sync push-to <branch> <remote>/<branch>, which records the branch it tracks as where it pushes. The same command with the branch's own name on the remote records that instead. It names no directory: run it in the repository. Null otherwise." },
         "layers": { "type": "array", "items": { "$ref": "#/$defs/layerBranch" }, "description": "Since up 1.7.0: the branches in no worktree on this participant's line, bottom first, that the run moved with its rebase or left, and why. Empty when there are none, and for a participant the run did not rebase." },
@@ -105,7 +105,7 @@
         "remote": { "$ref": "#/$defs/shaOrNull", "description": "The remote commit compared with; null for none, gone and unknown." },
         "localAhead": { "type": ["integer", "null"], "minimum": 0, "description": "Commits only the branch had; null for none, gone and unknown." },
         "remoteAhead": { "type": ["integer", "null"], "minimum": 0, "description": "Commits only the remote had; null for none, gone and unknown." },
-        "fastForwarded": { "type": "boolean", "description": "The run moved the branch from local to remote before rebasing it. It stays true as a record when the rebase after it was put back, which takes the branch back to local." },
+        "fastForwarded": { "type": "boolean", "description": "The run moved the branch from local to remote before rebasing it. It stays true as a record of what was done when the rebase after it was put back, which takes the branch back to local." },
         "allowed": { "type": "boolean", "description": "state is diverged and the run went on over it under --allow-diverged; false when the participant was refused for something else." },
         "skippedReason": {
           "oneOf": [{ "type": "null" }, { "enum": ["diverged", "operation", "dirty", "session", "failed", "fetchFailed"] }],

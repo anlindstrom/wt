@@ -338,7 +338,7 @@ func TestDirtyStrictDoesNotTrustAFilesystemMonitor(t *testing.T) {
 	run(t, main, "status", "--porcelain")
 	gittest.WriteFile(t, filepath.Join(main, "a.txt"), "edited, and the monitor never says so")
 	if out := gittest.Git(t, main, "status", "--porcelain"); out != "" {
-		t.Skipf("this git does not trust the fake monitor, nothing to prove: %q", out)
+		t.Skipf("this git does not trust the fake monitor, nothing to prove: %q", out) //skip-ok: with core.fsmonitor set to the fake monitor, git status still reports the edit: this git does not trust the "nothing changed" answer, so the case cannot be set up
 	}
 	if !strict(t, main).Dirty {
 		t.Error("an edit a filesystem monitor did not report is still an edit")

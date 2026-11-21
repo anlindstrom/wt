@@ -31,7 +31,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "The main checkout; null outside a repository."
     },
     "token": {
       "type": [
@@ -54,7 +55,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Why the run stopped before deleting anything."
     },
     "recovery": {
       "type": [
@@ -77,10 +79,12 @@
         "properties": {
           "runId": {
             "type": "string",
-            "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$"
+            "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$",
+            "description": "The run's id."
           },
           "sweptAt": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Unix seconds: the meta's, else from the id."
           },
           "refs": {
             "type": "array",
@@ -95,7 +99,8 @@
               ],
               "properties": {
                 "pin": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The pin ref under refs/wt-swept/."
                 },
                 "id": {
                   "type": "string",
@@ -103,7 +108,8 @@
                 },
                 "object": {
                   "type": "string",
-                  "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+                  "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+                  "description": "The pin's object."
                 },
                 "result": {
                   "enum": [
@@ -119,10 +125,12 @@
                   "type": [
                     "string",
                     "null"
-                  ]
+                  ],
+                  "description": "Why, for kept: it moved, or git refused."
                 }
               }
-            }
+            },
+            "description": "The run's pins, each with its pin, id, object, result and reason."
           },
           "meta": {
             "type": [
@@ -136,7 +144,8 @@
             "description": "The meta is gone, read back. It is deleted only once every pin of the run is."
           }
         }
-      }
+      },
+      "description": "Each run, with its runId, sweptAt, refs, meta and metaDeleted (read back); each ref has pin, id, object, result and reason."
     }
   }
 }

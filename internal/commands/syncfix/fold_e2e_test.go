@@ -247,7 +247,7 @@ func TestFoldOfAStackEndToEnd(t *testing.T) {
 // knows the rule, and says so where it does not.
 func TestFoldOfAStackEndToEndShiftBump(t *testing.T) {
 	if _, err := wtsync.Parse([]byte(gittest.FoldYAML("shift-bump"))); err != nil {
-		t.Skipf("this wt does not know shift-bump: %v", err)
+		t.Skipf("this wt does not know shift-bump: %v", err) //skip-ok: any error from Parse of the shift-bump declaration skips the test, not only an unknown rule, so a real Parse regression is hidden here
 	}
 	foldEndToEnd(t, "shift-bump", map[string]string{"f1": "1.2.0", "f3": "1.2.1", "f5": "1.2.2"}, true)
 }

@@ -36,19 +36,23 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "The main checkout; null outside a repository."
     },
     "trunk": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Trunk's branch name."
     },
     "fetched": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Whether origin was fetched first."
     },
     "remote": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Whether --remote was given."
     },
     "token": {
       "type": [
@@ -64,7 +68,7 @@
         "null"
       ],
       "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$",
-      "description": "The run's id, which names its pins; null when nothing was to be moved or the run was refused."
+      "description": "The run's id, which names its pins; null when the run never began: it was refused, or nothing was selected. A run that ends having moved nothing drops its meta, so nothing of it is left under refs/wt-swept/."
     },
     "outcome": {
       "enum": [
@@ -79,7 +83,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Why the run stopped before moving anything."
     },
     "problems": {
       "type": "array",
@@ -100,11 +105,12 @@
             "description": "remoteAmbiguous: --remote, and origin's effective fetch and push URLs are not one and the same URL. remoteCredentialsInUrl: --remote, and that URL carries a password (in any form, scp-like too), or any userinfo on http, https, ftp or ftps; a <transport>::<address> URL is judged on its address too. planChanged: the plan is not the one --expect named, or not the one the question was asked about. runIdTaken: --run-id names a run that has refs under refs/wt-swept/ already."
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "description": "The problem in words."
           }
         }
       },
-      "description": "Codes for why the run refused; empty otherwise."
+      "description": "{code, text}: the plan's, and planChanged (--expect named another plan, or the plan changed while the question was open) or runIdTaken."
     },
     "recovery": {
       "type": [
@@ -143,10 +149,12 @@
               "tag",
               "remoteBranch",
               "remoteTag"
-            ]
+            ],
+            "description": "branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The short name the pattern matched."
           },
           "category": {
             "enum": [
@@ -158,18 +166,21 @@
             "description": "backupContained: another ref contains it (selected). backupOld: it holds commits no other ref has and is older than age (selected). backupYoung: the same, younger (not selected unless --only names it). kept: something holds it, or it is a deliberate backup (ref_keep_patterns); a kept row is never selected."
           },
           "selected": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether a sweep with this plan moves it: backupContained and backupOld by default, or exactly what --only names."
           },
           "tip": {
             "type": [
               "string",
               "null"
             ],
-            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+            "description": "The commit; null when it is not here (objectMissing)."
           },
           "object": {
             "type": "string",
-            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+            "description": "The ref's own value: the tag object of an annotated tag, else the tip."
           },
           "result": {
             "enum": [
@@ -186,7 +197,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Why, for kept and failed. For a row the plan kept, the codes that hold it; for a row kept when the run reached it, what changed after the plan was made (it moved, it was deleted, it was checked out)."
           },
           "pin": {
             "type": [
@@ -211,10 +223,11 @@
             "items": {
               "type": "string"
             },
-            "description": "For a row pinned and deleted: the argv that puts it back."
+            "description": "For a row pinned and deleted: the argv that puts it back, [\"wt\", \"refs\", \"restore\", <runId>, \"--only\", <id>, \"--yes\"], whatever the row's kind (a branch, a tag, or a remote ref). Run it in repo."
           }
         }
-      }
+      },
+      "description": "Every row of the plan, in its order."
     }
   }
 }

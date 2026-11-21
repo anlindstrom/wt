@@ -30,11 +30,12 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "The main checkout; null outside a repository."
     },
     "runId": {
       "type": "string",
-      "description": "The run id as given; one not in wt's format is an error."
+      "description": "The run id as given, also when it is not a run id (then error says so)."
     },
     "token": {
       "type": [
@@ -42,13 +43,14 @@
         "null"
       ],
       "pattern": "^rr1-[0-9a-f]{32}$",
-      "description": "Names the plan: pass it to --yes --expect. Null when nothing could be restored, or on error."
+      "description": "rr1-…: names the plan; pass it to --yes --expect. It covers the repository, the run, each pin with its object and action, and, when a remote ref can go back and origin resolves to one URL now, that URL's digest. Null when nothing can go back, or on error."
     },
     "error": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Why no plan could be made: a run id that is not one, a run with nothing under refs/wt-swept/<runId>/, or --only refused."
     },
     "items": {
       "type": "array",
@@ -74,17 +76,21 @@
               "tag",
               "remoteBranch",
               "remoteTag"
-            ]
+            ],
+            "description": "branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The short name of the ref."
           },
           "pin": {
-            "type": "string"
+            "type": "string",
+            "description": "The pin under refs/wt-swept/ that holds the object."
           },
           "object": {
             "type": "string",
-            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+            "description": "The ref's own value: the tag object of an annotated tag, else the tip."
           },
           "action": {
             "enum": [
@@ -103,7 +109,8 @@
             "description": "A restore with this plan acts on it: every row whose action is create or none, or what --only names."
           }
         }
-      }
+      },
+      "description": "The refs the run pinned, each with its id, kind, name, pin, object, action and whether it is selected."
     }
   }
 }

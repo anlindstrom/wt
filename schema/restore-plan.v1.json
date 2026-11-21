@@ -11,14 +11,14 @@
     "schemaVersion": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$" },
     "command": { "const": "restore" },
     "dir": { "type": "string", "description": "The quarantine folder, absolute." },
-    "repo": { "type": ["string", "null"] },
+    "repo": { "type": ["string", "null"], "description": "The repository, from recovery.json; null without one."  },
     "checkout": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/place" }] },
     "admin": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/place" }] },
-    "head": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha" }] },
+    "head": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha" }], "description": "The commit to detach at, if it comes to that."  },
     "branch": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/branch" }] },
     "locked": { "type": "boolean", "description": "The worktree carries this quarantine's git lock, which the restore takes off last." },
     "orphan": { "type": ["string", "null"], "description": "A worktree locked for this quarantine with no recovery.json: stopped before anything moved; restoring it is unlocking it." },
-    "problems": { "type": "array", "items": { "$ref": "#/$defs/problem" }, "description": "Every reason the restore refuses; empty when it would go ahead." },
+    "problems": { "type": "array", "items": { "$ref": "#/$defs/problem" }, "description": "Every reason the restore refuses; empty when it would go ahead. Each has a code and its text." },
     "error": { "type": ["string", "null"], "description": "The problems in words, or why the plan could not be made." }
   },
   "$defs": {
@@ -54,8 +54,8 @@
       "type": "object",
       "required": ["code", "text"],
       "properties": {
-        "code": { "enum": ["noRecord", "repository", "checkoutTaken", "checkoutMissing", "adminTaken", "adminMissing", "volume", "commitMissing", "worktreesUnknown", "purging"] },
-        "text": { "type": "string" }
+        "code": { "enum": ["noRecord", "repository", "checkoutTaken", "checkoutMissing", "adminTaken", "adminMissing", "volume", "commitMissing", "worktreesUnknown", "purging"], "description": "Why the restore refuses: noRecord, repository, checkoutTaken, checkoutMissing, adminTaken, adminMissing, volume, commitMissing, worktreesUnknown, or purging (a purge began: its pins may be gone)."  },
+        "text": { "type": "string", "description": "The problem in words."  }
       }
     }
   }
