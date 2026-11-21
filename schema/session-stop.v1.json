@@ -39,7 +39,8 @@
       "description": "The session chosen; null when none was."
     },
     "dryRun": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Whether this was a dry run: nothing was stopped."
     },
     "outcome": {
       "enum": [

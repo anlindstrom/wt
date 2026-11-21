@@ -38,7 +38,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "As in the plan: the repository's main checkout, from recovery.json; null without one."
     },
     "state": {
       "oneOf": [
@@ -110,7 +111,8 @@
             "description": "As in the plan, and planChanged: the plan is not the one --expect named, not the one the question was asked about, or not the one read again under the folder's lock."
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "description": "The problem in words."
           }
         }
       }
@@ -149,10 +151,11 @@
               "absent",
               "kept"
             ],
-            "description": "deleted: it was there and is gone. absent: it was gone already. kept: it is still there, or cannot be read."
+            "description": "deleted: it was there and is gone. absent: it was gone already. kept: it is still there, or cannot be read. It is read when the object is written."
           }
         }
-      }
+      },
+      "description": "oid is as planned; result is read when the object is written."
     },
     "folderDeleted": {
       "type": "boolean",

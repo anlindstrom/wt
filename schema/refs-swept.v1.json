@@ -28,13 +28,15 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "The main checkout; null outside a repository."
     },
     "error": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Why the runs could not be listed."
     },
     "runs": {
       "type": "array",
@@ -49,11 +51,12 @@
         "properties": {
           "runId": {
             "type": "string",
-            "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$"
+            "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$",
+            "description": "The run's id."
           },
           "sweptAt": {
             "type": "integer",
-            "description": "Unix seconds the run began: its meta's sweptAt, else the time in its id."
+            "description": "Unix seconds the run began: its meta's sweptAt, else the time in its id. Unix seconds: the meta's, else from the id."
           },
           "endpoint": {
             "oneOf": [
@@ -79,7 +82,7 @@
                 }
               }
             ],
-            "description": "The origin the run's meta records; null for a local run or a run with no meta."
+            "description": "The origin the run's meta records; null for a local run or a run with no meta. As the meta records it, or null."
           },
           "refs": {
             "type": "array",
@@ -103,24 +106,29 @@
                     "tag",
                     "remoteBranch",
                     "remoteTag"
-                  ]
+                  ],
+                  "description": "branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin."
                 },
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The short name of the ref."
                 },
                 "pin": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The pin under refs/wt-swept/ that holds the object."
                 },
                 "object": {
                   "type": "string",
-                  "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+                  "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+                  "description": "The ref's own value: the tag object of an annotated tag, else the tip."
                 }
               }
             },
             "description": "Empty for a run that wrote its meta and moved nothing."
           }
         }
-      }
+      },
+      "description": "The runs under refs/wt-swept/, each with its runId, sweptAt, endpoint and refs."
     }
   }
 }

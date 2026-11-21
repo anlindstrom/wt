@@ -13,15 +13,15 @@
     "repo": { "type": ["string", "null"], "description": "The main checkout, as wt sweep --json names the repository; null when the verb stopped before reading it." },
     "trunk": { "type": ["string", "null"] },
     "trunkRef": { "type": ["string", "null"] },
-    "onto": { "$ref": "#/$defs/shaOrNull", "description": "The commit assessed against, or rebased onto: trunk, or --onto's target (since 1.8.0). Null when it was never determined." },
-    "target": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/target" }], "description": "What onto is: trunk, or the ref --onto names (since 1.8.0). Null when it was never determined, and for undo." },
+    "onto": { "$ref": "#/$defs/shaOrNull", "description": "The commit assessed against, or rebased onto: trunk, or --onto's target (since 1.8.0). Null when it was never determined. For resume, the one the handed-over run recorded; null for undo." },
+    "target": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/target" }], "description": "What onto is: trunk, or the ref --onto names (since 1.8.0). Null when it was never determined, and for undo. For resume, what the handed-over run rebased onto." },
     "fetched": { "type": "boolean" },
     "trunkSync": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/trunkSync" }], "description": "What the run did to local trunk after its fetch, as for wt up. Null when it did not fetch, and always for resume and undo." },
     "outcome": {
       "enum": ["done", "refused", "partial", "interrupted"],
       "description": "done: every participant rebased, fastForwarded, undone or skipped. refused: nothing changed, or error stopped the verb first. partial: something changed and not everything finished. interrupted: a signal ended it."
     },
-    "error": { "type": ["string", "null"], "description": "Why the verb stopped before touching any participant; for undo, also why it stopped after putting some back." },
+    "error": { "type": ["string", "null"], "description": "Why the verb stopped before touching any participant, as for wt up; also a question answered no (or nobody there to answer it), and for undo, why it stopped after putting some back." },
     "worktrees": { "type": "array", "description": "The participants, parents first.", "items": { "$ref": "#/$defs/participant" } },
     "leftAlone": {
       "type": "array",
@@ -31,9 +31,9 @@
         "additionalProperties": false,
         "required": ["work", "branch", "path"],
         "properties": {
-          "work": { "type": ["string", "null"], "description": "The worktree; null for a branch that is in no worktree." },
+          "work": { "type": ["string", "null"], "description": "The worktree; null for a branch that is in no worktree. Null for a branch in no worktree." },
           "branch": { "type": "string" },
-          "path": { "type": ["string", "null"] }
+          "path": { "type": ["string", "null"], "description": "Null for a branch in no worktree."  }
         }
       }
     },
@@ -75,9 +75,9 @@
       "type": "object",
       "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "layers", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "fold", "layerSteps", "emptied", "testsOnly", "adopted", "timings"],
       "properties": {
-        "work": { "type": "string" },
-        "branch": { "type": "string" },
-        "path": { "type": "string" },
+        "work": { "type": "string", "description": "The work name, as wt list prints it."  },
+        "branch": { "type": "string", "description": "The worktree's branch."  },
+        "path": { "type": "string", "description": "The worktree's absolute path."  },
         "result": {
           "enum": ["rebased", "fastForwarded", "rebasedStepFailed", "skipped", "refused", "notRun", "restored", "needsRecovery", "handedOver", "interrupted", "undone"],
           "description": "rebased, fastForwarded, rebasedStepFailed, needsRecovery, handedOver, interrupted and undone changed the branch or worktree; skipped, refused, notRun and restored left them as they were. fastForwarded (since 1.2.0): the branch was behind its own remote and has nothing to rebase at the remote's commit, so the run moved it there and that is all; after is that commit, pushCommand is null, undoCommand puts it back."
@@ -94,19 +94,19 @@
         "safetyRef": { "type": ["string", "null"], "description": "The ref pinning the branch's tip from before the run: refs/wt-sync/<branch>/<epoch>." },
         "deferred": {
           "type": "array",
-          "description": "What each deferred step of a finished rebase came to.",
+          "description": "What each deferred step of a finished rebase came to: step (its run line), result, reason (why failed, skipped or owed) and commit (for committed).",
           "items": {
             "type": "object",
             "required": ["step", "result", "reason", "commit"],
             "properties": {
               "step": { "type": "string", "description": "The step's run line from .wt-sync.yaml." },
               "result": { "enum": ["done", "committed", "failed", "skipped", "owed"], "description": "owed since 1.5.0: not run, because a need of it did not answer its probe in a run started with --allow-owed; owed like a failed step." },
-              "reason": { "type": ["string", "null"], "description": "Why it failed, was skipped or is owed." },
+              "reason": { "type": ["string", "null"], "description": "Why the step failed, was skipped or is owed." },
               "commit": { "type": ["string", "null"], "description": "For committed: the commit." }
             }
           }
         },
-        "undoCommand": { "$ref": "#/$defs/argvOrNull", "description": "What puts it back where the run found it, as an argv; null when there is nothing to undo." },
+        "undoCommand": { "$ref": "#/$defs/argvOrNull", "description": "What puts it back where the run found it, as an argv; null when there is nothing to undo. For example [\"wt\", \"sync\", \"undo\", work]." },
         "planFile": { "type": ["string", "null"], "description": "For handedOver: the plan file saying what is yours." },
         "layers": { "type": "array", "items": { "$ref": "#/$defs/layerBranch" }, "description": "Since sync-run 1.15.0: the branches in no worktree on this participant's line, bottom first, that the run moved with its rebase or left, and why. Empty when there are none, and for a participant the run did not rebase." },
         "ownRemoteSync": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/ownRemoteSync" }], "description": "Since 1.2.0. Always an object from wt sync rebase; always null from resume and undo, which do not check: the check ran when the run started." },
@@ -114,7 +114,7 @@
         "eachCommit": { "enum": ["all", "tips", "targets", "off"], "description": "Since 1.11.0 (targets since 1.19.0): where the run's each_commit checks ran, as wt sync rebase --each-commit named it. all: at every replayed commit that touches a step's paths, the default. tips: only at the tip of each layer of a --stack line, or of the branch; the commits between are not checked and not owed. targets: at each layer's tip and at each commit a fixup, squash or amend! folded into, in an in-place --stack --autosquash fold; the commits between are not checked and not owed. off: no each_commit check ran. A resume says its run's; wt sync undo, which checks nothing, says all." },
         "rechecked": { "type": "integer", "minimum": 0, "description": "Since 1.7.0: how many commits the each_commit checks that read a per-layer step's files ran at again, once the step had folded its output into them or committed it. 0 when none." },
         "checkFailed": {
-          "description": "Since 1.5.0: the each_commit check that stopped the rebase: handedOver at that commit, or restored for a stack parent. Null when none failed.",
+          "description": "Since 1.5.0: the each_commit check that stopped the rebase: handedOver at that commit, or restored for a stack parent. Null when none failed. The step, the commit (the replayed commit it failed at), its subject and its error. The participant is handedOver at that commit, HEAD the commit, nothing unmerged, and wt sync resume runs the check again there once the fix is amended in or committed; a stack parent is restored instead, and its children notRun.",
           "oneOf": [
             { "type": "null" },
             {
@@ -124,19 +124,19 @@
                 "step": { "type": "string", "description": "The check's run line from .wt-sync.yaml." },
                 "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The replayed commit it failed at." },
                 "subject": { "type": "string" },
-                "error": { "type": "string", "description": "What failed: an exit status, a timeout, or the tracked files it changed." }
+                "error": { "type": "string", "description": "What failed: an exit status, a timeout, the tracked files it changed, or, for a step with a retry, the exit of the run and of the retry that failed too." }
               }
             }
           ]
         },
-        "stack": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stack" }], "description": "Since 1.6.0: for a --stack run, the stack held on this worktree's line: its layers and what came of each. Null for any other run." },
+        "stack": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stack" }], "description": "Since 1.6.0: for a --stack run, the stack held on this worktree's line: its layers and what came of each. Null for any other run. Also for the resume of a --stack run it handed over; null from undo." },
         "fold": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/fold" }], "description": "Since 1.18.0: for a --stack run that folds the line (--autosquash, --edit, or wt sync steps), what it folded on and what its tree guard compared. Null for any other run." },
         "layerSteps": { "type": "array", "items": { "$ref": "#/$defs/layerStep" }, "description": "Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish." },
         "emptied": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit a finished rebase set out to replay that left no commit in the result: trunk already had its change, or a conflict was resolved to trunk's side. Oldest first. Fixups and squashes folded by --autosquash and the commit --edit amends are not listed. Empty when none, and when the rebase did not finish." },
         "testsOnly": { "type": "array", "items": { "$ref": "#/$defs/dropped" }, "description": "Since 1.10.0: each commit whose replay changed only paths matching the declaration's test_paths while the original changed others too. Empty when none, when no test_paths is declared, and when the rebase did not finish." },
         "adopted": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/adopted" }],
-          "description": "Since 1.12.0: for wt sync resume --adopt, the rebase finished by hand that it took over. Null for every other run, and for a resume --adopt that refused."
+          "description": "Since 1.12.0: for wt sync resume --adopt, the rebase finished by hand that it took over. Null for every other run, and for a resume --adopt that refused. keptRef is the ref that keeps the tip it found, made before anything moved: refs/wt-sync-kept/<branch>/<epoch>-adopted, or -adopted-2 and on when that is taken; undo leaves it. rebaseTip is where the rebase itself finished, which the layers are moved against. commits are the commits made after the rebase, oldest first, each with commit and subject; they stay on the branch. A check that failed at a tip is in failedSteps."
         },
         "timings": { "$ref": "#/$defs/timings", "description": "Since 1.20.0: how long the run's each_commit checks and per-layer steps took. A resume's covers what that resume ran. Empty lists when none ran; wt sync undo, which runs none, says 0 and empty." }
       }
@@ -202,7 +202,7 @@
       "properties": {
         "inPlace": { "type": "boolean", "description": "The line is folded on its own base, not moved onto a target." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's own base: what an in-place fold rebases onto." },
-        "guard": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/foldGuard" }], "description": "What the tree guard compared once the rebase finished. Null while the run has not finished, and for an edit." }
+        "guard": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/foldGuard" }], "description": "The tree guard once the rebase finished: oldTip, newTip, onto (the commit a moving fold's old line was merged onto to compare, null for a fold in place), excludedGlobs (the declared per-layer step paths a changed file matched, left out), conflictAllowed (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), outcome (passed or failed) and reason (why it failed, else null). Null while the run has not finished, and for an edit." }
       }
     },
     "foldGuard": {
@@ -229,11 +229,11 @@
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where the line leaves trunk: the merge base." },
         "head": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's tip before the run." },
         "autosquash": { "type": "boolean", "description": "A fold of the line's fixups (--autosquash): onto its own base, or, with --onto, as the line moves onto the target." },
-        "layers": { "type": "array", "items": { "$ref": "#/$defs/stackLayer" } },
-        "top": { "$ref": "#/$defs/stackTop", "description": "Since 1.17.0: the line's own branch, the top of the stack: the last row of the look's layer table. Not one of layers, which are the branches a run moves after its rebase; the rebase itself moves the top." },
-        "skipped": { "type": "array", "items": { "$ref": "#/$defs/stackSkipped" } },
+        "layers": { "type": "array", "items": { "$ref": "#/$defs/stackLayer" }, "description": "The layer branches, bottom first: what a run moves once its rebase has finished. The line's own branch is never one of them."  },
+        "top": { "$ref": "#/$defs/stackTop", "description": "Since 1.17.0: the line's own branch, the top of the stack: the last row of the look's layer table. Not one of layers, which are the branches a run moves after its rebase; the rebase itself moves the top. Its fields: branch, oldTip, commits (from the line's base, its tip included; 0 for a branch with nothing ahead of trunk), subject (its tip's), worktree (where it is checked out)." },
+        "skipped": { "type": "array", "items": { "$ref": "#/$defs/stackSkipped" }, "description": "Branches on the line not taken, each with branch, tip and reason."  },
         "sideBranches": { "type": "array", "items": { "$ref": "#/$defs/stackSide" }, "description": "Since 1.16.0: the local branches that hang off the line, parents first: forked from a commit of it above its base, or above its top. Empty with --no-side-branches." },
-        "refusal": { "type": ["string", "null"], "description": "The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held." },
+        "refusal": { "type": ["string", "null"], "description": "The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held. The line itself is left rebased, and wt sync undo puts it back." },
         "edit": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stackEdit" }], "description": "Since 1.9.0: what a run with --edit did to the commit it stopped at. Null in the look and for any other run." },
         "contextGaps": { "type": "array", "items": { "$ref": "#/$defs/stackContextGap" }, "description": "Since 1.14.0: for a fold (--autosquash), in the look and in the run, every hunk of a fixup that does not apply behind its target, where autosquash puts it, because only a later commit of the line carries its context; line order. Empty for any other look or run. A warning: the run goes ahead." },
         "contextUnchecked": { "type": "array", "items": { "type": "string" }, "description": "Since 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run." }
@@ -244,7 +244,7 @@
       "description": "Since 1.14.0: one hunk of a fixup!, squash! or amend! commit that a fold moves ahead of its context.",
       "required": ["fixup", "fixupSubject", "target", "targetSubject", "path", "lines", "needs", "needsSubject", "message"],
       "properties": {
-        "fixup": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The fixup commit, as the line has it." },
+        "fixup": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The fixup commit, as the line has it. It is the fixup!, squash! or amend! commit." },
         "fixupSubject": { "type": "string" },
         "target": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit autosquash folds it into." },
         "targetSubject": { "type": "string" },
@@ -264,7 +264,7 @@
         "subject": { "type": "string", "description": "Its subject." },
         "amended": { "type": "string", "pattern": "^([0-9a-f]{40,64})?$", "description": "What the run went on from at the edit stop: the amended commit, or the last commit added there; empty if the run never went on from it." },
         "paths": { "type": "array", "items": { "type": "string" }, "description": "The paths the amend changed, sorted; empty when it changed nothing." },
-        "emptied": { "type": "array", "items": { "$ref": "#/$defs/stackCommit" }, "description": "The commits above it that the amend emptied, which the rebase dropped, oldest first." }
+        "emptied": { "type": "array", "items": { "$ref": "#/$defs/stackCommit" }, "description": "The commits above it that the amend emptied, which the rebase dropped, oldest first. Each is sha (as the old line had it) and subject. A layer all of whose commits emptied is mapped emptied and ends where the layer below does." }
       }
     },
     "stackCommit": {
@@ -286,16 +286,16 @@
         "subject": { "type": "string", "description": "Its tip's subject." },
         "foundBy": { "enum": ["tipOnLine", "named"], "description": "tipOnLine: a local branch whose tip is a commit of the line. named: named with --layer, by name or by a pattern." },
         "worktree": { "type": ["string", "null"], "description": "The worktree the branch is checked out in; null when it is in none." },
-        "state": { "enum": ["none", "clean", "dirty", "rebasing", "bisecting", "busy", "idle", "process", "unknown"], "description": "What holds the layer's worktree: none (in no worktree), clean (nothing), dirty (tracked changes), rebasing (a rebase in progress, there or in another worktree that will move it), bisecting (a bisect in another worktree started from it), busy or idle (an agent session), process (a process whose working directory is inside the worktree), unknown (it could not be read, which holds the layer). In a run, as read when the layer was moved." },
-        "stateDetail": { "type": ["string", "null"], "description": "Who or what holds it: the session, the process, or why it could not be read." },
-        "newTip": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The run's: the layer's new tip, read from the rebase and checked. Null in the look, and when the run moved no layer." },
-        "commitsAfter": { "type": ["integer", "null"], "minimum": 0, "description": "The run's: commits of the new tip from the new base, as the check compared them with the plan." },
+        "state": { "enum": ["none", "clean", "dirty", "rebasing", "bisecting", "busy", "idle", "process", "unknown"], "description": "What holds the layer's worktree: none (in no worktree), clean (nothing), dirty (tracked changes), rebasing (a rebase in progress, there or in another worktree that will move it), bisecting (a bisect in another worktree started from it), busy or idle (an agent session), process (a process whose working directory is inside the worktree), unknown (it could not be read, which holds the layer). In a run, as read when the layer was moved. A process is any process, a dev server in a terminal tab included." },
+        "stateDetail": { "type": ["string", "null"], "description": "Who or what holds it: the session, the process, or why it could not be read. The process is named as pid 123 npm run dev." },
+        "newTip": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The run's: the layer's new tip, read from the rebase and checked. Null in the look, and when the run moved no layer. Git wrote it as the rebase passed it, and it is checked before any layer moved." },
+        "commitsAfter": { "type": ["integer", "null"], "minimum": 0, "description": "The run's: the new tip's commits from the new base: the layer's commits up to it, less those trunk already carries and the fixups folded into an earlier commit." },
         "mapped": { "oneOf": [{ "type": "null" }, { "enum": ["tip", "tipDropped", "emptied"] }], "description": "The run's: tip (the new tip is its own tip rebased), tipDropped (its tip was left out because trunk already carries it, dropped as empty, or folded into an earlier commit by --autosquash; the new tip is its last commit left), emptied (every commit of it was left out because trunk carries it, dropped as empty, or folded into an earlier commit by --autosquash; it ends where the layer below does)." },
         "patch": { "oneOf": [{ "type": "null" }, { "enum": ["same", "changed", "unknown"] }], "description": "The run's: whether what the layer brings to the line is the same patch as before, by git's stable patch-id. Never a refusal." },
         "patchWhy": { "type": ["string", "null"], "description": "The run's: why the patch changed." },
-        "result": { "oneOf": [{ "type": "null" }, { "enum": ["moved", "held", "unchanged", "planned", "moving", "needsRecovery"] }], "description": "The run's: moved (the branch is at newTip, its worktree reset with it), held (left where it was; held says why and moveCommand moves it by hand), unchanged (its new tip is its old one), planned (recorded and not moved: the moves stopped before it), moving (its move was under way when the moves stopped: undo puts its ref back), needsRecovery (a move that went part way and could not be put back: held says what to look at, the layer keeps its pins, and wt sync undo puts it back)." },
-        "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }], "description": "The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (in its worktree, under that worktree's lock: the same guarded update-ref, then its files follow with read-tree -m -u)." },
-        "held": { "type": ["string", "null"], "description": "The run's: why the layer was held, or for needsRecovery what to look at." },
+        "result": { "oneOf": [{ "type": "null" }, { "enum": ["moved", "held", "unchanged", "planned", "moving", "needsRecovery"] }], "description": "The run's: moved (the branch is at newTip, its worktree reset with it), held (left where it was; held says why and moveCommand moves it by hand), unchanged (its new tip is its old one), planned (recorded and not moved: the moves stopped before it), moving (its move was under way when the moves stopped: undo puts its ref back), needsRecovery (a move that went part way and could not be put back: held says what to look at, the layer keeps its pins, the run fails, and wt sync undo <line> puts it back)." },
+        "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }], "description": "The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (in its worktree, under that worktree's lock: the same guarded update-ref, then its files follow with read-tree -m -u). For a layer in a worktree: update-ref, then read-tree -m -u <old> <new>." },
+        "held": { "type": ["string", "null"], "description": "The run's: why the layer was held, or for needsRecovery what to look at. It is also held for a tip that moved during the run, or another run's lock on its worktree, which holds while that run's process runs, however long, and otherwise until the lock is 30 minutes old." },
         "moveCommand": { "type": ["string", "null"], "description": "The run's: what moves a held layer by hand." },
         "pushCommand": { "oneOf": [{ "type": "null" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }], "description": "The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run does not push layers. Null otherwise." },
         "noPushReason": { "type": ["string", "null"], "description": "The run's: for a moved layer with no safe push command, why: no remote branch of its own yet, or the remote has commits the branch never had." },
@@ -332,7 +332,7 @@
         "owner": { "$ref": "#/$defs/shaOrNull", "description": "For folded, the commit its output was folded into, as rewritten: the last commit of the layer that changed one of its paths." },
         "ownerSubject": { "type": ["string", "null"], "description": "The owner's subject." },
         "commit": { "$ref": "#/$defs/shaOrNull", "description": "For committed, the step's commit." },
-        "proof": { "type": ["string", "null"], "description": "For a fold: held when the rewritten tip's tree is the step's output and every rewritten commit is unchanged outside the step's paths; otherwise what did not hold. Null when nothing was folded." },
+        "proof": { "type": ["string", "null"], "description": "For a fold: held when the rewritten tip's tree is the step's output and every rewritten commit is unchanged outside the step's paths; otherwise what did not hold. Null when nothing was folded. If it did not hold, nothing was folded." },
         "elapsedMs": { "type": "integer", "minimum": 0, "description": "Since 1.20.0: how long the step took at this layer, in milliseconds. 0 when it did not run." }
       }
     },
@@ -392,14 +392,14 @@
         "worktree": { "type": ["string", "null"], "description": "The worktree it is checked out in; null when it is in none." },
         "state": { "enum": ["none", "clean", "dirty", "rebasing", "bisecting", "busy", "idle", "process", "unknown"], "description": "What holds its worktree, as for a layer." },
         "stateDetail": { "type": ["string", "null"] },
-        "carry": { "type": "boolean", "description": "The look's: the run would carry it. False for a backup, a branch with a merge commit or on more than one branch, one whose worktree something holds, one stacked on a branch that is not carried, and every one under --alone." },
-        "left": { "type": ["string", "null"], "description": "Why it would not be carried; null when it would." },
+        "carry": { "type": "boolean", "description": "The look's: the run would carry it. In a run, it was moved or is unchanged. False for a backup, a branch with a merge commit or on more than one branch, one whose worktree something holds, one stacked on a branch that is not carried, and every branch with --alone." },
+        "left": { "type": ["string", "null"], "description": "Why it is not carried: a backup, a merge commit of its own (a replay drops it), on more than one branch, what holds its worktree (said short: a process in its worktree: bash (pid 31227), +10 more), a branch at its tip that is held, stacked on a branch that is not carried, --alone; null when it is carried." },
         "newBase": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The run's: where it goes: for a branch forked mid-line, where the rebase put the commit it forks from, read from the run's own marker and checked as a layer's is; above the top, the line's new tip; on another side branch, that branch's new tip. Null when it is not known." },
         "newTip": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The run's: its own commits replayed onto newBase. Null when it was not replayed." },
         "result": { "oneOf": [{ "type": "null" }, { "enum": ["moved", "held", "unchanged", "planned", "moving", "needsRecovery"] }], "description": "The run's, as for a layer. A backup is always held, with no moveCommand." },
-        "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }] },
-        "held": { "type": ["string", "null"], "description": "The run's: why it was held." },
-        "moveCommand": { "type": ["string", "null"], "description": "The run's: for a held branch, the command that moves it later, with real commits and branch names shell-quoted: wt sync rebase '<branch>' --onto <newBase> --upstream <base> for a branch in a worktree, git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in the main checkout, git rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in none; for a branch on a held side branch, --onto names that branch, to run once it has moved. Null for a backup, for a branch with a merge commit of its own (move it by hand), and when where it goes is not known." },
+        "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }], "description": "Same as for a layer."  },
+        "held": { "type": ["string", "null"], "description": "The run's: why it was held. It is held for what holds its worktree, a conflict of its own commits where it goes (the commit and paths), the branch it is on being held, the fork's marker failing its check, or --alone." },
+        "moveCommand": { "type": ["string", "null"], "description": "The run's: what moves a held branch later, with real commits and every branch name shell-quoted: wt sync rebase '<branch>' --onto <newBase> --upstream <base> for a branch in a worktree, which is a run of its own with stops, resume and undo; git -C '<main checkout>' rebase --no-update-refs --onto <newBase> <base> '<branch>' for one checked out in the main checkout, which wt sync rebase does not take; git rebase --no-update-refs --onto <newBase> <base> '<branch>' for one in no worktree; --onto '<branch>' for one on a held side branch, to run once that has moved. For a branch that moves with the sibling standing for its tip: one shell line whose guards refuse, changing nothing, unless the branch is still at the tip the run recorded and the sibling is at the commit it lands on: test \"$(git [-C '<worktree>'] rev-parse --verify --quiet 'refs/heads/<branch>')\" = <old tip> && test \"$(… 'refs/heads/<sibling>')\" = <its new tip> && git [-C '<worktree>'] rebase --no-update-refs --no-autostash --onto <its new tip> <old tip> '<branch>'. With the sibling held too, no commit exists to check it against: it gets no command, and held says to move the sibling first, then this branch by hand onto the sibling's new tip, once that is checked to carry all of its commits. Nothing is replayed, so the branch lands on that very commit; the refs are refs/heads/, so no tag of the same name is taken; --no-autostash keeps the refusal over tracked changes with rebase.autoStash set. Null for a backup, for a branch with a merge commit of its own (a rebase would drop the merge: move it by hand), and when newBase is not known." },
         "sameTip": { "type": "array", "items": { "type": "string" }, "description": "Since 1.17.0: the other side branches at its very tip, by name: siblings, carried or held together onto one new commit. Empty for most." }
       }
     },
@@ -422,7 +422,7 @@
       "properties": {
         "branch": { "type": "string" },
         "tip": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
-        "reason": { "type": "string" }
+        "reason": { "type": "string", "description": "A backup name, unless --layer names it (a pattern never does); without --layer, a branch with no commits of its own that has uncommitted tracked changes in another worktree, which --layer by name or by pattern takes; or a branch a --layer pattern matched whose tip is not on the line."  }
       }
     }
   }

@@ -227,7 +227,8 @@
           "description": "missing: no such folder. notAFolder: a symlink or a file. noRecord: no recovery.json (nor recovery.purging.json), or one wt cannot trust. wrongFolder: the record was written for another folder, or what is at its checkout or admin is not the directory the removal moved there. repository: its repository cannot be opened, or is another one now. pinsForeign: a pin it names is not this quarantine's, or holds something the removal did not pin. pinsUnreadable: git cannot read a pin (a broken ref), which is not taken for one that is gone. unsettled: a removal or a restore stopped mid-way; wt restore <dir> settles it. worktreesUnknown: the worktrees cannot be listed. registered: git has a worktree registered inside the folder. locked: a worktree is locked for this quarantine. location: the folder is inside a checkout or the git dir, or holds the git dir. foreignEntry: something at its top level no quarantine in its state leaves there (quarantined: checkout, admin; always: the journal, its temp file, .DS_Store). nestedQuarantine: another quarantine's record below its top level. empty: an empty folder."
         },
         "text": {
-          "type": "string"
+          "type": "string",
+          "description": "The problem in words."
         }
       }
     }

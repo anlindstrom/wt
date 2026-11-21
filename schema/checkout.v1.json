@@ -53,39 +53,42 @@
         "string",
         "null"
       ],
-      "description": "Why the run was refused or stopped before creating anything."
+      "description": "Why it was refused, or stopped before planning (not in a git repository)."
     },
     "problems": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/problem"
       },
-      "description": "Why it was refused, or what is wrong with the worktree made that no step names."
+      "description": "Why it was refused, or what is wrong with the worktree made that no step names. As in the plan, plus planChanged and headMoved."
     },
     "type": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "From the plan."
     },
     "work": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "From the plan."
     },
     "branch": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "From the plan."
     },
     "path": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Absolute."
+      "description": "From the plan."
     },
     "base": {
       "type": [
@@ -129,14 +132,14 @@
         "string",
         "null"
       ],
-      "description": "Since 1.1.0. The branch's upstream ref, read back after the run (refs/remotes/<remote>/<branch>); null when it has none or there is no branch."
+      "description": "The branch's upstream ref, read back after the run; null when it has none or there is no branch."
     },
     "steps": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/step"
       },
-      "description": "Every side effect, in the order they happen: worktree, branch, config, cache (since 1.2.0), provision, submodules, build, superset."
+      "description": "Every side effect, always all eight, in this order: worktree, branch, config, cache (since 1.1.0 for wt new, 1.2.0 for wt checkout; before, seven steps), provision, submodules, build, superset. A step that was skipped or not reached still has its row."
     }
   },
   "$defs": {

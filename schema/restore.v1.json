@@ -38,7 +38,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "As in the plan: the repository's main checkout, from recovery.json; when the record cannot be loaded, the current repository's."
     },
     "outcome": {
       "enum": [
@@ -53,7 +54,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "The problems in words; null when there were none."
     },
     "checkout": {
       "oneOf": [
@@ -63,7 +65,8 @@
         {
           "$ref": "#/$defs/place"
         }
-      ]
+      ],
+      "description": "As in the plan, read when the object is written."
     },
     "admin": {
       "oneOf": [
@@ -73,7 +76,8 @@
         {
           "$ref": "#/$defs/place"
         }
-      ]
+      ],
+      "description": "As in the plan, read when the object is written."
     },
     "branch": {
       "oneOf": [
@@ -83,7 +87,8 @@
         {
           "$ref": "#/$defs/branch"
         }
-      ]
+      ],
+      "description": "As in the plan, read when the object is written."
     },
     "unlocked": {
       "type": "boolean",

@@ -30,7 +30,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "The main checkout; null outside a repository."
     },
     "olderThan": {
       "type": [
@@ -45,13 +46,14 @@
         "null"
       ],
       "pattern": "^rp1-[0-9a-f]{32}$",
-      "description": "Names the plan: pass it to --yes --expect. Null when there is nothing to purge, or on error."
+      "description": "rp1-…: names the plan; pass it to --yes --expect. It covers the runs, their pins, each pin's object and what deleting it would lose (unreachable). Null when there is nothing to purge, or on error."
     },
     "error": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Why no plan could be made."
     },
     "runs": {
       "type": "array",
@@ -68,18 +70,19 @@
         "properties": {
           "runId": {
             "type": "string",
-            "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$"
+            "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4,32}$",
+            "description": "The run's id."
           },
           "sweptAt": {
             "type": "integer",
-            "description": "Unix seconds the run began: its meta's sweptAt, else the time in its id."
+            "description": "Unix seconds the run began: its meta's sweptAt, else the time in its id. Unix seconds: the meta's, else from the id."
           },
           "meta": {
             "type": [
               "string",
               "null"
             ],
-            "description": "refs/wt-swept/<runId>/meta, deleted last; null when the run has none."
+            "description": "refs/wt-swept/<runId>/meta, deleted last; null when the run has none. The run's meta ref, or null."
           },
           "endpoint": {
             "oneOf": [
@@ -105,7 +108,7 @@
                 }
               }
             ],
-            "description": "The origin the run's meta records; null for a local run or a run with no meta."
+            "description": "The origin the run's meta records; null for a local run or a run with no meta. As the meta records it, or null."
           },
           "refs": {
             "type": "array",
@@ -118,7 +121,8 @@
               ],
               "properties": {
                 "pin": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "The pin ref under refs/wt-swept/."
                 },
                 "id": {
                   "type": "string",
@@ -126,10 +130,12 @@
                 },
                 "object": {
                   "type": "string",
-                  "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+                  "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+                  "description": "The pin's object."
                 }
               }
-            }
+            },
+            "description": "The run's pins, each with its pin, id and object."
           },
           "unreachable": {
             "type": "array",
@@ -146,14 +152,16 @@
                 },
                 "count": {
                   "type": "integer",
-                  "minimum": 1
+                  "minimum": 1,
+                  "description": "How many commits nothing else holds."
                 }
               }
             },
-            "description": "Each pin whose commits no ref outside this purge reaches, and how many: what git gc may take once the pins go. A commit two purged pins share counts for both."
+            "description": "The pins whose commits no ref outside this purge and no worktree's HEAD reaches: what git gc may take once the pin goes. A commit two purged pins share counts for both; reflogs are not counted."
           }
         }
-      }
+      },
+      "description": "The runs to purge, each with its runId, sweptAt, meta, endpoint, refs and unreachable."
     }
   }
 }

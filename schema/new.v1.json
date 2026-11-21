@@ -50,39 +50,42 @@
         "string",
         "null"
       ],
-      "description": "Why the run was refused or stopped before creating anything."
+      "description": "Why it was refused, or stopped before planning (not in a git repository)."
     },
     "problems": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/problem"
       },
-      "description": "Why it was refused, or what is wrong with the worktree made that no step names."
+      "description": "Why it was refused, or what is wrong with the worktree made that no step names. As in the plan, plus planChanged and headMoved."
     },
     "type": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "From the plan."
     },
     "work": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "From the plan."
     },
     "branch": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "From the plan."
     },
     "path": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Absolute."
+      "description": "From the plan."
     },
     "base": {
       "type": [
@@ -104,7 +107,7 @@
       "items": {
         "$ref": "#/$defs/step"
       },
-      "description": "Every side effect, in the order they happen: worktree, branch, config, cache (since 1.1.0), provision, submodules, build, superset."
+      "description": "Every side effect, always all eight, in this order: worktree, branch, config, cache (since 1.1.0 for wt new, 1.2.0 for wt checkout; before, seven steps), provision, submodules, build, superset. A step that was skipped or not reached still has its row."
     },
     "addresses": {
       "type": "array",
@@ -126,7 +129,7 @@
           }
         }
       },
-      "description": "Since 1.2.0: one entry per app that `devports config --json` gives a domain, in the order it lists them. Empty when no app has one, or devports is not installed, fails, is slow or is too old to report domains."
+      "description": "Since 1.2.0: where the new worktree's dev servers are reached, one {app, url} per app that devports config --json gives a domain, in the order it lists them, the url being https://<name>.<domain> with the name devports gives the worktree. Always present: empty when no app has a domain, or devports is not installed, fails, does not answer within two seconds, or is too old to report domains (wt does not read .dev-ports.yaml itself). Nothing is routed by wt: the address works once the dev server runs."
     }
   },
   "$defs": {

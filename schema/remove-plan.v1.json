@@ -61,7 +61,7 @@
         "string",
         "null"
       ],
-      "description": "The checkout, absolute; null when no worktree was found."
+      "description": "The checkout."
     },
     "adminDir": {
       "type": [
@@ -79,7 +79,8 @@
           "type": "string",
           "pattern": "^[0-9a-f]{40,64}$"
         }
-      ]
+      ],
+      "description": "The commit checked out; null before the first commit."
     },
     "detached": {
       "type": "boolean",
@@ -93,7 +94,8 @@
         {
           "$ref": "#/$defs/branch"
         }
-      ]
+      ],
+      "description": "The branch checked out; null when detached."
     },
     "bases": {
       "type": "array",
@@ -174,7 +176,7 @@
       "items": {
         "$ref": "#/$defs/session"
       },
-      "description": "The agent sessions working in the checkout, other than the one running wt."
+      "description": "{id, name, kind, pid, state} for each agent session in the checkout, other than the one running wt: kind claude or codex (since 1.4.0), state idle or busy."
     },
     "sessionsError": {
       "type": [
@@ -191,14 +193,15 @@
         {
           "$ref": "#/$defs/lock"
         }
-      ]
+      ],
+      "description": "Git's lock on the worktree: reason, holder (who wt worked out is behind it), pid, and held (still running; a stale one is released)."
     },
     "unreachable": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/lost"
       },
-      "description": "Each tip whose commits nothing surviving the removal would hold."
+      "description": "Each tip nothing surviving the removal holds, with kind, oid, count, path and restoreCommand. A branch is the branch the removal deletes: listed, not refused, with the git branch argv that brings its commits back. head and submodule (with path) refuse."
     },
     "reachError": {
       "type": [
@@ -220,7 +223,7 @@
     },
     "processes": {
       "type": "array",
-      "description": "Since 1.5.0. The processes working in the checkout, or in a directory inside it, that wt does not spare: a dev server, a watcher, a language server. Spared and never listed: another user's processes, any with a controlling terminal, wt itself with its children and ancestors, and agent processes, Claude's and Codex's, the caller's own included. Empty when there are none, or when they could not be found (processesError says why). Removal ends them only with --reap; the token covers them then.",
+      "description": "Since 1.5.0. The processes working in the checkout, or in a directory inside it, that wt does not spare: a dev server, a watcher, a language server. Spared and never listed: another user's processes, any with a controlling terminal, wt itself with its children and ancestors, and agent processes, Claude's and Codex's, the caller's own included. Empty when there are none, or when they could not be found (processesError says why). Removal ends them only with --reap; the token covers them then. reap is true with --reap, which ends it before the checkout goes, and false without, when it is left running.",
       "items": {
         "$ref": "#/$defs/process"
       }
@@ -230,7 +233,7 @@
         "string",
         "null"
       ],
-      "description": "Since 1.5.0. Why the processes could not be found: the process table could not be read, or the agent sessions could not be listed, so none is known to be safe to end. With --reap this refuses the removal (problem processesUnknown), whatever --force says; without it the removal goes ahead and leaves them."
+      "description": "Since 1.5.0. Why the processes could not be found: the process table could not be read, or the agent sessions could not be listed, so none is known to be safe to end. With --reap this refuses the removal (problem processesUnknown), whatever --force says; without it the removal goes ahead and leaves them. With --reap that refuses (processesUnknown)."
     },
     "force": {
       "type": "boolean",
@@ -285,7 +288,8 @@
           "description": "dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there."
         },
         "message": {
-          "type": "string"
+          "type": "string",
+          "description": "The problem as a sentence."
         },
         "force": {
           "type": "boolean",
@@ -300,7 +304,7 @@
               "$ref": "#/$defs/forceCategory"
             }
           ],
-          "description": "Since 1.2.0. The --force category that goes past it; null when force is false. A session problem is either idle-sessions or busy-sessions: idle and busy sessions are two problems."
+          "description": "Since 1.2.0. The --force category that goes past it; null when force is false. A session problem is either idle-sessions or busy-sessions: idle and busy sessions are two problems. Null when force is false (since 1.2.0)."
         }
       }
     },
@@ -509,7 +513,7 @@
           "items": {
             "type": "string"
           },
-          "description": "For branch: the argv that brings the commits back once the branch is gone."
+          "description": "For branch: the git branch argv that brings the commits back once the branch is gone, to run in the repository (git -C <repo> branch <name> <oid>)."
         }
       }
     },

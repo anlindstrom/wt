@@ -81,28 +81,28 @@
         "string",
         "null"
       ],
-      "description": "The type the worktree would have; null when the name did not parse."
+      "description": "As parsed from the argument; null when it does not parse, or when the name or type is not valid."
     },
     "work": {
       "type": [
         "string",
         "null"
       ],
-      "description": "The work name; null when it did not parse or could not be derived."
+      "description": "As parsed from the argument; null when it does not parse, or when the name or type is not valid."
     },
     "branch": {
       "type": [
         "string",
         "null"
       ],
-      "description": "The local branch the worktree would be on: for source remote, the one it would create."
+      "description": "The branch the worktree would be on; null when the name or type is not valid."
     },
     "path": {
       "type": [
         "string",
         "null"
       ],
-      "description": "The absolute path the worktree would be created at."
+      "description": "The absolute path the worktree would be created at; null when the name or type is not valid."
     },
     "branchCommit": {
       "$ref": "#/$defs/shaOrNull",
@@ -190,7 +190,7 @@
         },
         "message": {
           "type": "string",
-          "description": "The problem as a sentence."
+          "description": "The same problem as a sentence, as wt would print it."
         }
       }
     }

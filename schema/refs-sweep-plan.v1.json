@@ -40,13 +40,15 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "The main checkout; null outside a repository."
     },
     "trunk": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Trunk's branch name."
     },
     "trunkSource": {
       "oneOf": [
@@ -60,13 +62,16 @@
             "conventional"
           ]
         }
-      ]
+      ],
+      "description": "How trunk was found: see trunkSource in wt status --json."
     },
     "fetched": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Whether origin was fetched first."
     },
     "remote": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Whether --remote was given."
     },
     "patterns": {
       "type": "array",
@@ -117,7 +122,7 @@
           }
         }
       ],
-      "description": "With --remote: the one URL all contact with origin goes through, and its digest, which the token covers. Null without --remote."
+      "description": "With --remote: the one URL all contact with origin goes through, and its digest, which the token covers. Null without --remote. It is {url, digest}: the one URL with its userinfo removed, and sha256: followed by the lowercase hex SHA-256 of the full effective URL."
     },
     "runId": {
       "type": "null",
@@ -129,13 +134,14 @@
         "null"
       ],
       "pattern": "^rs1-[0-9a-f]{32}$",
-      "description": "Names the plan: pass it to --yes --expect. Null when no row could be swept, or on error. --only does not change it."
+      "description": "rs1-…: names the plan; pass it to --yes --expect. It covers the rows, --remote, the patterns, the age, the repository and trunk, not the selection, so --only picks from the plan a token names. Null when no row could be swept, or on error."
     },
     "error": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Why no plan could be made."
     },
     "problems": {
       "type": "array",
@@ -156,11 +162,12 @@
             "description": "remoteAmbiguous: --remote, and origin's effective fetch and push URLs are not one and the same URL. remoteCredentialsInUrl: --remote, and that URL carries a password (in any form, scp-like too), or any userinfo on http, https, ftp or ftps; a <transport>::<address> URL is judged on its address too. planChanged: the plan is not the one --expect named, or not the one the question was asked about. runIdTaken: --run-id names a run that has refs under refs/wt-swept/ already."
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "description": "The refusal in words."
           }
         }
       },
-      "description": "Codes for why no plan could be made; empty otherwise."
+      "description": "{code, text} for the refusals that have a code: remoteAmbiguous, remoteCredentialsInUrl; empty otherwise."
     },
     "items": {
       "type": "array",
@@ -194,7 +201,8 @@
               "tag",
               "remoteBranch",
               "remoteTag"
-            ]
+            ],
+            "description": "branch, tag, remoteBranch or remoteTag: a branch or tag here, or on origin."
           },
           "name": {
             "type": "string",
@@ -242,7 +250,7 @@
               "string",
               "null"
             ],
-            "description": "The first ref that contains the tip: trunk, then origin's branches, then the rest. A remote row names origin's ref as origin:<ref>."
+            "description": "The first ref that contains the tip: trunk (refs/heads/<trunk>, then refs/remotes/origin/<trunk>), then origin's branches, then the rest, each group by name. A remote row names origin's ref as origin:<ref>."
           },
           "uniqueCommits": {
             "type": [
@@ -257,7 +265,7 @@
               "integer",
               "null"
             ],
-            "description": "Unix seconds: when the branch was created, the tag was made, or the tip was committed; see dateSource."
+            "description": "Unix seconds: when the branch was created, the tag was made, or the tip was committed; see dateSource. See dateSource."
           },
           "dateSource": {
             "oneOf": [
@@ -271,7 +279,8 @@
                   "commit"
                 ]
               }
-            ]
+            ],
+            "description": "Which point in time date is: reflog, a branch here, the first entry of its reflog, which is when it was made; tagger, an annotated tag, its tagger date; commit, anything else, its tip's committer date."
           },
           "kept": {
             "type": "array",
@@ -299,7 +308,8 @@
             "description": "The tip's commit subject."
           }
         }
-      }
+      },
+      "description": "Every backup, here first, then origin's."
     }
   }
 }

@@ -63,7 +63,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Why it refused or stopped."
     },
     "problems": {
       "type": "array",
@@ -76,14 +77,15 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "From the plan: the checkout."
     },
     "branch": {
       "type": [
         "string",
         "null"
       ],
-      "description": "The branch the plan read; null when detached."
+      "description": "From the plan."
     },
     "tip": {
       "oneOf": [
@@ -94,20 +96,22 @@
           "type": "string",
           "pattern": "^[0-9a-f]{40,64}$"
         }
-      ]
+      ],
+      "description": "From the plan."
     },
     "keepAs": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "From the plan."
     },
     "steps": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/step"
       },
-      "description": "worktree, branch and superset, in that order."
+      "description": "worktree, branch and superset, always all three, in that order: step, result, commit, reason and pin."
     },
     "forced": {
       "type": "array",
@@ -125,7 +129,7 @@
           "$ref": "#/$defs/quarantine"
         }
       ],
-      "description": "With --move-to, once its recovery.json is written."
+      "description": "With --move-to, once its recovery.json is written: dir, checkoutMoved, adminMoved (each directory, by identity, in the folder), recoveryFile, and steps as recovery.json records them."
     },
     "restoreCommand": {
       "type": [
@@ -135,7 +139,7 @@
       "items": {
         "type": "string"
       },
-      "description": "The argv that puts back what went: wt restore <dir> once a quarantine wrote its recovery.json; since 1.4.0 wt refs restore <runId> --only refs/heads/<name> --yes for a branch moved into a pin; else git branch <name> <tip> for a branch gone from its name (renamed to keepAs); null when nothing needs it."
+      "description": "The argv that puts back what went, to run in repo: wt restore <dir> once a quarantine wrote its recovery.json; since 1.4.0 wt refs restore <runId> --only refs/heads/<name> --yes for a branch moved into a pin; else git -C <repo> branch <name> <tip> for a branch gone from its name (renamed to keepAs); null when nothing needs it."
     },
     "recovery": {
       "type": [
@@ -221,7 +225,8 @@
           "description": "dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there."
         },
         "message": {
-          "type": "string"
+          "type": "string",
+          "description": "The problem as a sentence."
         },
         "force": {
           "type": "boolean",
@@ -296,7 +301,7 @@
               "pattern": "^[0-9a-f]{40,64}$"
             }
           ],
-          "description": "For branch: the tip the plan read."
+          "description": "branch's tip."
         },
         "reason": {
           "type": [
@@ -314,7 +319,7 @@
               "pattern": "^refs/wt-swept/"
             }
           ],
-          "description": "Since 1.4.0. For branch: the ref the deleted branch was moved into, refs/wt-swept/<runId>/heads/<name>, read back holding commit; null otherwise."
+          "description": "Since 1.4.0: for branch, the ref the deleted branch was moved into, read back; null otherwise."
         }
       }
     },
@@ -329,13 +334,16 @@
       ],
       "properties": {
         "dir": {
-          "type": "string"
+          "type": "string",
+          "description": "The worktree's own folder in the --move-to folder, the destination of the moves. It is there once recovery.json is written, whether or not either directory has moved: checkoutMoved and adminMoved say which have."
         },
         "checkoutMoved": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Whether the checkout is in the folder, by identity."
         },
         "adminMoved": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Whether the admin directory is in the folder, by identity."
         },
         "recoveryFile": {
           "type": "string",
@@ -359,7 +367,8 @@
                   "moveAdmin",
                   "relink",
                   "branch"
-                ]
+                ],
+                "description": "The step, as recovery.json records it."
               },
               "state": {
                 "enum": [

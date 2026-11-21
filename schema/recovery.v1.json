@@ -167,7 +167,7 @@
         "inode": {
           "type": "integer",
           "minimum": 0,
-          "description": "A rename keeps device and inode: a directory at path with these is this one."
+          "description": "A rename keeps device and inode: a directory at either place, path or quarantined, with these is this one, and nothing else is."
         }
       }
     },
