@@ -15,15 +15,6 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 )
 
-func tmRepo(t *testing.T) (*kit.Context, *testkit.Tmutil) {
-	t.Helper()
-	ctx, err := kit.Open(testkit.CommittedRepo(t, testkit.MinimalConf), io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ctx, testkit.FakeTmutil(t, ctx, false)
-}
-
 // wt adopt excludes what it adopts: <repo>_wt/ for a worktree inside it, the
 // worktree's own folder for one elsewhere, and after --relocate the folder
 // it now lives in, not the one it left.
@@ -49,7 +40,7 @@ func TestAdoptExcludesTheWorktreeFromTimeMachine(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			ctx, tm := tmRepo(t)
+			ctx, tm, _ := testkit.TMRepo(t, false)
 			at := c.at(ctx.Repo.Parent)
 			testkit.GitIn(t, ctx.Repo.MainRoot, "worktree", "add", "-q", "-b", "feat_wt/x", at)
 			if _, err := Adopt(ctx, at, c.relocate, provision.SetupOptions{}, io.Discard); err != nil {
@@ -64,7 +55,7 @@ func TestAdoptExcludesTheWorktreeFromTimeMachine(t *testing.T) {
 
 // wt migrate excludes the folder the worktree moved into.
 func TestMigrateExcludesWhereTheWorktreeLands(t *testing.T) {
-	ctx, tm := tmRepo(t)
+	ctx, tm, _ := testkit.TMRepo(t, false)
 	at := filepath.Join(ctx.Repo.Parent, "demo-legacy")
 	testkit.GitIn(t, ctx.Repo.MainRoot, "worktree", "add", "-q", "-b", "feat_wt/legacy", at)
 	to, err := Migrate(ctx, at, "", MigrateOptions{Agents: []agents.Agent{}}, io.Discard)
@@ -79,7 +70,7 @@ func TestMigrateExcludesWhereTheWorktreeLands(t *testing.T) {
 
 // wt migrate --dry-run moves nothing, so it excludes nothing.
 func TestMigrateDryRunRunsNoTmutil(t *testing.T) {
-	ctx, tm := tmRepo(t)
+	ctx, tm, _ := testkit.TMRepo(t, false)
 	at := filepath.Join(ctx.Repo.Parent, "demo-legacy")
 	testkit.GitIn(t, ctx.Repo.MainRoot, "worktree", "add", "-q", "-b", "feat_wt/legacy", at)
 	if _, err := Migrate(ctx, at, "", MigrateOptions{DryRun: true, Agents: []agents.Agent{}}, io.Discard); err != nil {
@@ -92,7 +83,7 @@ func TestMigrateDryRunRunsNoTmutil(t *testing.T) {
 
 // wt pr checkout puts its worktree under <repo>_wt/.
 func TestPRCheckoutExcludesTheWorktreeFolderFromTimeMachine(t *testing.T) {
-	ctx, tm := tmRepo(t)
+	ctx, tm, _ := testkit.TMRepo(t, false)
 	testkit.FakeGitHub(t, ctx, testkit.OpenPR(12, "residential_fixes", "Residents no longer rewrite a door"))
 	if _, err := PRCheckout(ctx, 12, PROptions{}, io.Discard); err != nil {
 		t.Fatalf("PRCheckout: %v", err)
@@ -128,14 +119,14 @@ func doctorTimeMachine(t *testing.T, ctx *kit.Context) (section string, problems
 // wt doctor names which of the four states the machine is in.
 func TestDoctorNamesTheTimeMachineState(t *testing.T) {
 	t.Run("not macOS", func(t *testing.T) {
-		ctx, _ := tmRepo(t)
+		ctx, _, _ := testkit.TMRepo(t, false)
 		ctx.Machine.GOOS = "linux"
 		if got, _ := doctorTimeMachine(t, ctx); !strings.Contains(got, "not macOS") {
 			t.Errorf("section %q", got)
 		}
 	})
 	t.Run("off", func(t *testing.T) {
-		ctx, tm := tmRepo(t)
+		ctx, tm, _ := testkit.TMRepo(t, false)
 		testkit.TimeMachineSetting(t, ctx, "false")
 		if got, _ := doctorTimeMachine(t, ctx); !strings.Contains(got, "off in your wt config") {
 			t.Errorf("section %q", got)
@@ -168,7 +159,7 @@ func TestDoctorNamesTheTimeMachineState(t *testing.T) {
 		}
 	})
 	t.Run("on", func(t *testing.T) {
-		ctx, _ := tmRepo(t)
+		ctx, _, _ := testkit.TMRepo(t, false)
 		if got, _ := doctorTimeMachine(t, ctx); !strings.Contains(got, "worktree folders wt makes are excluded") {
 			t.Errorf("section %q", got)
 		}
@@ -178,7 +169,7 @@ func TestDoctorNamesTheTimeMachineState(t *testing.T) {
 // wt doctor says whether this repository's <repo>_wt folder is excluded,
 // and changes nothing either way.
 func TestDoctorSaysWhetherTheWorktreeFolderIsExcluded(t *testing.T) {
-	ctx, tm := tmRepo(t)
+	ctx, tm, _ := testkit.TMRepo(t, false)
 	container := filepath.Join(ctx.Repo.Parent, "demo_wt")
 	if err := os.MkdirAll(container, 0o755); err != nil {
 		t.Fatal(err)

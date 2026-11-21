@@ -10,24 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/provision"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 	"github.com/anlindstrom/wt/internal/gittest"
 )
-
-// tmRepo is a committed repository on a Mac with a fake tmutil, its
-// warnings in the returned buffer.
-func tmRepo(t *testing.T, failing bool) (*kit.Context, *testkit.Tmutil, *bytes.Buffer) {
-	t.Helper()
-	ctx, err := kit.Open(testkit.CommittedRepo(t, testkit.MinimalConf), io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var warned bytes.Buffer
-	ctx.WarnTo(&warned)
-	return ctx, testkit.FakeTmutil(t, ctx, failing), &warned
-}
 
 // wt new excludes <repo>_wt/ from Time Machine, with or without
 // provisioning: the folder is rebuildable whatever was set up in it.
@@ -37,7 +23,7 @@ func TestNewExcludesTheWorktreeFolderFromTimeMachine(t *testing.T) {
 		"--no-setup":  {NoSetup: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			ctx, tm, _ := tmRepo(t, false)
+			ctx, tm, _ := testkit.TMRepo(t, false)
 			var errs bytes.Buffer
 			path, err := provision.New(ctx, "fix/login-crash", opts, &errs)
 			if err != nil {
@@ -60,7 +46,7 @@ func TestNewExcludesTheWorktreeFolderFromTimeMachine(t *testing.T) {
 // A tmutil that fails costs one warning line: the worktree is made and the
 // command succeeds.
 func TestNewSurvivesAFailingTmutil(t *testing.T) {
-	ctx, _, warned := tmRepo(t, true)
+	ctx, _, warned := testkit.TMRepo(t, true)
 	path, err := provision.New(ctx, "fix/login-crash", provision.NewOptions{}, io.Discard)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -76,7 +62,7 @@ func TestNewSurvivesAFailingTmutil(t *testing.T) {
 
 // wt checkout puts its worktree under <repo>_wt/ too.
 func TestCheckoutExcludesTheWorktreeFolderFromTimeMachine(t *testing.T) {
-	ctx, tm, _ := tmRepo(t, false)
+	ctx, tm, _ := testkit.TMRepo(t, false)
 	testkit.GitIn(t, ctx.Repo.MainRoot, "branch", "feature/pr-123")
 	if _, err := provision.Checkout(ctx, "feature/pr-123", "", provision.NewOptions{NoSetup: true}, io.Discard); err != nil {
 		t.Fatalf("Checkout: %v", err)
@@ -89,7 +75,7 @@ func TestCheckoutExcludesTheWorktreeFolderFromTimeMachine(t *testing.T) {
 // wt setup in a worktree another tool made — Superset's, inside <repo>_wt/,
 // or one anywhere else — excludes it the way wt new would have.
 func TestSetupExcludesAWorktreeAnotherToolMade(t *testing.T) {
-	ctx, tm, _ := tmRepo(t, false)
+	ctx, tm, _ := testkit.TMRepo(t, false)
 	superset := filepath.Join(ctx.Repo.Parent, "demo_wt", "demo", "feat_wt", "theirs")
 	elsewhere := filepath.Join(ctx.Repo.Parent, "t3", "demo", "t3-1a2b")
 	testkit.GitIn(t, ctx.Repo.MainRoot, "worktree", "add", "-q", "-b", "feat_wt/theirs", superset)
@@ -109,7 +95,7 @@ func TestNewExcludesAWorktreeLeftByAFailingHook(t *testing.T) {
 	// Not parallel: fake tmutil changes PATH and FindTmutil.
 	for _, json := range []bool{false, true} {
 		t.Run(fmt.Sprint(json), func(t *testing.T) {
-			ctx, tm, _ := tmRepo(t, false)
+			ctx, tm, _ := testkit.TMRepo(t, false)
 			gittest.WriteExecutable(t, filepath.Join(ctx.Repo.MainRoot, ".git", "hooks", "post-checkout"), "#!/bin/sh\necho 'hook says no' >&2\nexit 1\n")
 			var err error
 			if json {

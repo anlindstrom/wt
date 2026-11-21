@@ -1,6 +1,8 @@
 package testkit
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +23,19 @@ func NoTmutil() (timemachine.Tmutil, bool) { return timemachine.Tmutil{}, false 
 // touches an extended attribute.
 type Tmutil struct {
 	log, state string
+}
+
+// TMRepo is a committed repository on a Mac with a fake tmutil (failing as
+// FakeTmutil says), its warnings in the returned buffer.
+func TMRepo(t *testing.T, failing bool) (*kit.Context, *Tmutil, *bytes.Buffer) {
+	t.Helper()
+	ctx, err := kit.Open(CommittedRepo(t, MinimalConf), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var warned bytes.Buffer
+	ctx.WarnTo(&warned)
+	return ctx, FakeTmutil(t, ctx, failing), &warned
 }
 
 // FakeTmutil puts a fake tmutil first on the PATH and the real lookup in
