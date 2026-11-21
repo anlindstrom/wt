@@ -244,12 +244,12 @@ func TestFoldOfAStackEndToEnd(t *testing.T) {
 	foldEndToEnd(t, "max-plus-patch", map[string]string{"f1": "1.1.1", "f3": "1.1.2", "f5": "1.1.3"}, false)
 }
 
-// The case under shift-bump, which keeps each bump's kind: it runs where wt
-// knows the rule, and says so where it does not.
+// The case under shift-bump, which keeps each bump's kind. wt always knows the
+// rule, so a declaration that does not parse is a failure.
 func TestFoldOfAStackEndToEndShiftBump(t *testing.T) {
 	t.Parallel()
 	if _, err := wtsync.Parse([]byte(gittest.FoldYAML("shift-bump"))); err != nil {
-		t.Skipf("this wt does not know shift-bump: %v", err) //skip-ok: any error from Parse of the shift-bump declaration skips the test, not only an unknown rule, so a real Parse regression is hidden here
+		t.Fatalf("the shift-bump declaration does not parse: %v", err)
 	}
 	foldEndToEnd(t, "shift-bump", map[string]string{"f1": "1.2.0", "f3": "1.2.1", "f5": "1.2.2"}, true)
 }
