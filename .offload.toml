@@ -1,0 +1,63 @@
+# How offload (~/programmering/private/offload) runs wt's checks on another machine,
+# so the suite's minutes of CPU and thousands of temporary repositories stay off the
+# Mac being worked at. `offload commands` lists these; docs/testing.md says which to run.
+name = "wt"
+# Two warm worktrees: a light lint beside a heavy suite. The heavy group's one slot
+# on the host keeps two suites from running side by side.
+workspaces = 2
+fingerprint = [["go", "version"], ["git", "--version"], ["golangci-lint", "version"], ["bats", "--version"]]
+clean = ["bin/wt"]
+# A job has no locale; the tests compare UTF-8 output.
+env = { LANG = "en_US.UTF-8" }
+
+# What `make check` runs, less test-mod (it needs claude, which a host does not have).
+[[commands]]
+name = "check"
+argv = ["make", "lint", "test", "bats"]
+needs = { avail_mem_gb = 6.0 }
+summary = "lint, the whole Go suite and bats: what make check runs, without the mod suite"
+
+# go test, every package by default; words replace the packages and flags:
+# `offload run test -- ./internal/wtsync -run 'TestFold'`.
+[[commands]]
+name = "test"
+shell = "bash"
+run = '''
+[ $# -gt 0 ] || set -- ./...
+exec go test -timeout 30m "$@"
+'''
+needs = { avail_mem_gb = 6.0 }
+summary = "go test: ./... by default, or the packages and flags after --"
+
+[[commands]]
+name = "test-fast"
+argv = ["make", "test-fast"]
+needs = { avail_mem_gb = 6.0 }
+summary = "the suite without the tests that guard on testing.Short()"
+
+[[commands]]
+name = "lint"
+argv = ["make", "lint"]
+light = true
+summary = "golangci-lint"
+
+[[commands]]
+name = "bats"
+argv = ["make", "bats"]
+summary = "the shell suite in test/, against a fresh build"
+
+# Apple's git (2.54) fails three tests; Homebrew's comes first on the host's path_prepend.
+[[prerequisites]]
+name = "git 2.56 or later"
+check = ["sh", "-c", 'v=$(git --version | awk "{print \$3}"); printf "%s\n" "$v"; printf "%s\n2.56.0\n" "$v" | sort -V -C -r']
+fix = "brew install git, with /opt/homebrew/bin first on the host's path_prepend"
+
+[[prerequisites]]
+name = "golangci-lint"
+check = ["sh", "-c", "command -v golangci-lint"]
+fix = "mise use -g golangci-lint@2.15.0, the version .github/workflows/ci.yml names"
+
+[[prerequisites]]
+name = "bats"
+check = ["sh", "-c", "command -v bats"]
+fix = "brew install bats-core"

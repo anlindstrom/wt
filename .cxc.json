@@ -1,0 +1,8 @@
+{
+  "verify": {
+    "check": {
+      "run": ["sh", "-c", "out=$(offload run check) || exit; job=${out%% *}; echo \"offload job $job\"; exec offload wait \"$job\""],
+      "timeout": "45m"
+    }
+  }
+}

@@ -14,3 +14,6 @@ dist/
 
 # go build ./cmd/wt at the root
 /wt
+
+# offload fetch results (.offload.toml)
+.offload/

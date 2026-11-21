@@ -31,6 +31,25 @@ gittest, superset, textwrap, jsonout, refpins, schema, and
 internal/commands/testkit. internal/git, internal/github and
 internal/reposel are not in it: their tests build real git repositories.
 
+## On the Mac mini
+
+Anything that runs for minutes, the whole check above all, goes to the Mac
+mini through offload, so its load and its temporary repositories stay off
+the Mac being worked at. `.offload.toml` names the commands:
+
+| command | runs |
+|---|---|
+| `offload run check` | `make lint test bats`: `make check` without test-mod, which needs claude |
+| `offload run test -- <packages and flags>` | `go test`, `./...` with no words: `offload run test -- ./internal/wtsync -run 'Fold'` |
+| `offload run test-fast` | `make test-fast` |
+| `offload run lint`, `offload run bats` | the one target |
+
+`offload run` sends the worktree as it is, uncommitted changes included, and
+prints the job id first. Wait with `offload wait <job>` as a background
+command; its exit code is the job's. The heavy commands take the host's one
+heavy slot, so suites from several worktrees queue rather than run at once.
+A package run with `-run` takes seconds here and needs no offload.
+
 ## What to run when
 
 | you changed | run |
@@ -48,7 +67,7 @@ internal/reposel are not in it: their tests build real git repositories.
 | cmd/wt flags, help text, completion | `go test ./cmd/wt` (about 16 s) |
 | mods/wt | `make test-mod`; a change to its fixtures also `go test ./internal/commands/testkit -run Mod` |
 | shell/, install.sh, stdout, stderr or exit codes | `make build && scripts/bats.sh test/<file>.bats`, the one file |
-| before handing the work back | `make check` once, in the background; after a fix, run the touched family only |
+| before handing the work back | `offload run check` once, waited on in the background (see "On the Mac mini"); after a fix, run the touched family only |
 
 The command packages, and what each holds:
 
