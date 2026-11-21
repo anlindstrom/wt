@@ -7,6 +7,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
 	"github.com/anlindstrom/wt/internal/git"
 	"github.com/anlindstrom/wt/internal/jsonout"
+	"github.com/anlindstrom/wt/internal/repo"
 	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
@@ -139,7 +140,7 @@ func (r *RunPlan) lineMoved(b, path string) string {
 	main := r.ctx.Repo.MainRoot
 	// The rebase moves whatever the worktree has checked out: it must still
 	// be the line's branch, at the line's tip.
-	if ref, err := git.Run(path, "symbolic-ref", "--quiet", "HEAD"); err != nil || ref != "refs/heads/"+b {
+	if ref, on := repo.OnBranch(path, b); !on {
 		return fmt.Sprintf("the worktree is no longer on %s (HEAD is %q); nothing is rebased: run it again", b, ref)
 	}
 	if head, err := git.Run(path, "rev-parse", "--verify", "HEAD"); err != nil || head != r.line.Head {
@@ -161,9 +162,7 @@ func (r *RunPlan) lineMoved(b, path string) string {
 // leave a resume nothing to check the layers against.
 func (r *RunPlan) putBackStack(b string, p *participant, res wtsync.Result, why string) {
 	main := r.ctx.Repo.MainRoot
-	_, aerr := git.Run(p.wt.Path, "rebase", "--abort")
-	busy, _ := wtsync.RebaseInProgress(p.wt.Path)
-	head, _ := git.Run(p.wt.Path, "rev-parse", "HEAD")
+	head, busy, aerr := wtsync.AbortRebase(p.wt.Path)
 	_ = wtsync.DropStackMap(main, res.Layers)
 	ferr := wtsync.ForgetStack(main, r.epoch)
 	if aerr != nil || busy || head != res.OldTip {

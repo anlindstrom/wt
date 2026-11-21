@@ -858,7 +858,7 @@ func runCheck(wtPath, run string, timeout time.Duration) (why, output string) {
 // trackedChanges lists the tracked files that differ from HEAD in the
 // worktree.
 func trackedChanges(wtPath string) ([]string, error) {
-	status, err := gitEnv(wtPath, nil, nil, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	status, err := trackedStatus(wtPath)
 	if err != nil || status == "" {
 		return nil, err
 	}

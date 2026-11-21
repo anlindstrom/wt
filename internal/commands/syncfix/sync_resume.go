@@ -642,11 +642,11 @@ func (r *resume) complete(res wtsync.Result) error {
 // the rebase's result. tips is the layers' new tips, bottom first.
 func (r *resume) proveAdopt() (wtsync.Adoption, []wtsync.LayerTip, error) {
 	st, main := r.st, r.ctx.Repo.MainRoot
-	dirty, err := git.Run(r.target.Path, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	dirty, err := repo.Dirty(r.target.Path, true)
 	if err != nil {
 		return wtsync.Adoption{}, nil, err
 	}
-	if strings.TrimSpace(dirty) != "" {
+	if dirty {
 		return wtsync.Adoption{}, nil, fmt.Errorf("the worktree has changes that are not committed, and the adopted tip is what is committed: commit them or put them aside, then wt sync resume --adopt %s", r.name)
 	}
 	a, err := wtsync.ProveAdoption(r.target.Path, st.Branch, st.Onto, st.OldTip, st.Total)

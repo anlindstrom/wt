@@ -115,7 +115,7 @@ func runDeferred(wtPath string, steps []Deferred, oldTip, newTip string, log io.
 			results = append(results, r)
 			continue
 		}
-		status, serr := gitEnv(wtPath, nil, nil, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+		status, serr := trackedStatus(wtPath)
 		switch {
 		case serr != nil:
 			r.Err = fmt.Errorf("status could not be read: %w", serr)

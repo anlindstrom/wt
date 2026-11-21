@@ -224,7 +224,7 @@ func AssessTo(mainRoot string, t Target, cfg *Config, wt repo.Worktree, listed [
 	}
 	// --no-optional-locks: a plain status may refresh and rewrite the index,
 	// and this command must not touch a worktree.
-	out, err := gitEnv(wt.Path, nil, nil, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	out, err := trackedStatus(wt.Path)
 	if err != nil {
 		a.Err = fmt.Errorf("status: %w", err)
 		return a

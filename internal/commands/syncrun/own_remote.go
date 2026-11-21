@@ -414,7 +414,7 @@ func OwnHeld(o wtsync.OwnRemote) string {
 // --ff-only, which touches nothing when it cannot. HEAD is checked first,
 // since merge moves whatever HEAD is on.
 func FastForwardOwn(path, branch, commit string) error {
-	if head, _ := git.Run(path, "symbolic-ref", "--quiet", "HEAD"); head != "refs/heads/"+branch {
+	if _, on := repo.OnBranch(path, branch); !on {
 		return fmt.Errorf("%s is no longer on %s", path, branch)
 	}
 	if _, err := git.Run(path, "merge", "--ff-only", "--no-overwrite-ignore", "--quiet", commit); err != nil {

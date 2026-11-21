@@ -50,7 +50,7 @@ func RecheckGit(wtPath, gitDir string) Standing {
 	}
 	// --no-optional-locks: a plain status may refresh and rewrite the index,
 	// and a check must not touch the worktree it is checking.
-	out, err := gitEnv(wtPath, nil, nil, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	out, err := trackedStatus(wtPath)
 	if err != nil {
 		s.Err = err
 		return s

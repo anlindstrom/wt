@@ -16,6 +16,7 @@ import (
 
 	"github.com/anlindstrom/wt/internal/agents"
 	"github.com/anlindstrom/wt/internal/git"
+	"github.com/anlindstrom/wt/internal/repo"
 )
 
 // Verdict is Preflight's answer.
@@ -394,10 +395,15 @@ type driver struct {
 }
 
 func (d *driver) git(args ...string) (string, error) {
+	d.trace(args...)
+	return gitEnv(d.req.Path, rebaseEnv, nil, args...)
+}
+
+// trace prints a git call under WT_SYNC_TRACE.
+func (d *driver) trace(args ...string) {
 	if d.log != nil && os.Getenv("WT_SYNC_TRACE") != "" {
 		fmt.Fprintf(d.log, "  $ git %s\n", strings.Join(args, " "))
 	}
-	return gitEnv(d.req.Path, rebaseEnv, nil, args...)
 }
 
 // resetToSafety puts the worktree back at the tip the run pinned before it
@@ -442,7 +448,8 @@ func (d *driver) restore() error {
 	if busy, _ := RebaseInProgress(d.req.Path); busy {
 		return fmt.Errorf("not restored: a rebase is still in progress; the old tip is %s", d.res.Safety.Ref)
 	}
-	if ref, _ := d.git("symbolic-ref", "--quiet", "HEAD"); ref != "refs/heads/"+d.req.Branch {
+	d.trace("symbolic-ref", "--quiet", "HEAD")
+	if ref, on := repo.OnBranch(d.req.Path, d.req.Branch); !on {
 		return fmt.Errorf("not restored: HEAD is %q, not %s; the old tip is %s", ref, d.req.Branch, d.res.Safety.Ref)
 	}
 	if head, _ := d.git("rev-parse", "HEAD"); head != found {
@@ -1035,8 +1042,7 @@ func VerifyFinished(wtPath, branch, work, onto, old string, total int) error {
 	restart := WayOut(Way{Work: work, Plan: true, Rebasing: true, Restart: true})
 	aborted := WayOut(Way{Work: work, Plan: true, Aborted: true})
 	moved := WayOut(Way{Work: work, Plan: true, Moved: true})
-	ref, err := gitEnv(wtPath, rebaseEnv, nil, "symbolic-ref", "--quiet", "HEAD")
-	if err != nil || ref != "refs/heads/"+branch {
+	if ref, on := repo.OnBranch(wtPath, branch); !on {
 		return fmt.Errorf("HEAD is %q, not %s: this is not the rebase that was left here; %s", ref, branch, restart)
 	}
 	head, err := gitEnv(wtPath, rebaseEnv, nil, "rev-parse", "HEAD")
