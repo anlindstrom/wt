@@ -16,14 +16,14 @@ func TestOntoUsageMistakes(t *testing.T) {
 		want string
 	}{
 		{[]string{"sync", "--onto", "integ"}, "--onto takes the worktree to rebase onto it"},
-		{[]string{"sync", "--rebase", "--onto", "integ"}, "--onto takes the worktree to rebase onto it"},
 		{[]string{"sync", "rebase", "--onto", "integ"}, "--onto takes the worktree to rebase onto it"},
 		{[]string{"sync", "--all", "--onto", "integ"}, "--onto is chosen per piece of work"},
 		{[]string{"sync", "rebase", "--roots", "work", "--onto", "integ"}, "--onto is chosen per piece of work"},
-		{[]string{"sync", "--profile", "api", "--rebase", "--onto", "integ"}, "--onto is chosen per piece of work"},
+		{[]string{"sync", "rebase", "--profile", "api", "--onto", "integ"}, "--onto is chosen per piece of work"},
 		{[]string{"sync", "a", "--upstream", "x"}, "--upstream needs --onto"},
 		{[]string{"sync", "rebase", "a", "--upstream", "x"}, "--upstream needs --onto"},
-		{[]string{"sync", "a", "--resume", "--onto", "integ"}, "--onto needs --rebase, or no verb"},
+		{[]string{"sync", "resume", "a", "--onto", "integ"}, "unknown flag: --onto"},
+		{[]string{"sync", "undo", "a", "--onto", "integ"}, "unknown flag: --onto"},
 		{[]string{"up", "--upstream", "x"}, "--upstream needs --onto"},
 		{[]string{"up", "--onto", "integ", "--expect", "1:00"}, "wt sync <work> --onto <ref> --json"},
 		{[]string{"sync", "keep", "once", "--onto", "integ"}, "unknown flag: --onto"},
@@ -48,7 +48,6 @@ func TestOntoWithAWorktreeNamedReachesTheVerb(t *testing.T) {
 		{"sync", "a", "--onto", "integ"},
 		{"sync", "a", "--onto", "integ", "--upstream", "x", "--json"},
 		{"sync", "rebase", "a", "--onto", "integ", "--upstream", "x"},
-		{"sync", "a", "--rebase", "--onto", "integ"},
 		{"up", "--onto", "integ"},
 	} {
 		_, err := runCmd(t, args...)
