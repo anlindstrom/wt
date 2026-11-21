@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/anlindstrom/wt/internal/git"
+	"github.com/anlindstrom/wt/internal/repo"
 )
 
 // AdoptKeptRef is where wt sync resume --adopt keeps the tip it took over,
@@ -78,8 +79,7 @@ func madeOnTop(msg string) bool {
 // rebase between; and no more than total commits from onto to F (zero total
 // is not checked). Anything else is an error naming what does not fit.
 func ProveAdoption(wtPath, branch, onto, old string, total int) (Adoption, error) {
-	ref, err := gitEnv(wtPath, rebaseEnv, nil, "symbolic-ref", "--quiet", "HEAD")
-	if err != nil || ref != "refs/heads/"+branch {
+	if ref, on := repo.OnBranch(wtPath, branch); !on {
 		return Adoption{}, fmt.Errorf("HEAD is %q, not %s", ref, branch)
 	}
 	head, err := gitEnv(wtPath, rebaseEnv, nil, "rev-parse", "HEAD")

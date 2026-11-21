@@ -430,7 +430,7 @@ func moveLayer(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions, sav
 	}
 	defer func() { _ = lock.Release() }()
 	// Read again under the lock: what the look saw may not hold any more.
-	if ref, err := gitEnv(m.Path, nil, nil, "symbolic-ref", "--quiet", "HEAD"); err != nil || ref != "refs/heads/"+m.Branch {
+	if _, on := repo.OnBranch(m.Path, m.Branch); !on {
 		hold(m, "the worktree is no longer on "+m.Branch)
 		return nil
 	}

@@ -139,7 +139,7 @@ func SyncLocalTrunk(ctx *kit.Context, remote string, o TrunkSyncOptions) *TrunkS
 	} else {
 		// merge moves whatever HEAD is on: a checkout switched away from
 		// trunk since the listing must not have that branch moved instead.
-		if head, _ := git.Run(on.Path, "symbolic-ref", "--quiet", "HEAD"); head != "refs/heads/"+trunk {
+		if _, onTrunk := repo.OnBranch(on.Path, trunk); !onTrunk {
 			return ts.skip(TrunkSkipNotFastForward, on.Path+" is no longer on "+trunk)
 		}
 		_, err = git.Run(on.Path, "merge", "--ff-only", "--no-overwrite-ignore", "--quiet", remote)

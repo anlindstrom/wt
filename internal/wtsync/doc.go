@@ -70,6 +70,8 @@
 //     the needs that can make one unavailable.
 //   - adopt.go: wt sync resume --adopt, taking over a tip.
 //   - recheck.go: Standing, what a verb re-reads once it holds the lock.
+//   - tracked_status.go: trackedStatus, the one status read of the dirty
+//     preconditions (the HEAD-on-branch check is repo.OnBranch).
 //   - timings.go, tempdir.go: timing rows of checks and steps, and the
 //     temporary directories a simulation or run opens.
 //
@@ -94,8 +96,12 @@
 //   - descendants.go: side branches off the line, ReadSides and CarrySides.
 //   - loose_layers.go: branches in no worktree that a run moves with the
 //     line (ReadLoose, LooseLine).
+//   - tree_guard.go: TreeGuard, the check that a fold changed nothing of the
+//     line's content (its result is fold.guard in --json), with LostMergedLines
+//     and GlobMatching.
 //
-// Used from outside: Parents, Members, Order, Descendants, ReadLine,
+// Used from outside: TreeGuard, GuardInput, GuardResult, LostMergedLines,
+// GlobMatching, Parents, Members, Order, Descendants, ReadLine,
 // LineLayer, CheckLayerPatterns, CheckLayers, StackRequest, LayerPlan,
 // ReadHolder, LayerHolder, MoveLayers, LayerMove, StackRecord,
 // WriteStackRecord, ReadStackRecord, ForgetStack, ReadSides, CarrySides,
@@ -114,6 +120,9 @@
 //     verbs' outcomes.
 //   - owed.go: the deferred steps a run left owed.
 //   - undo.go: Undo and UndoBranches, putting a line back.
+//   - put_back.go: PutBackLine, an edit run's line put back at the tip the run
+//     found when its layers were refused, and AbortRebase, a stack rebase
+//     aborted when its plan could not be recorded.
 //   - doctor.go: Doctor, the check of all of the above.
 //   - way.go: Way and WayOut, the one sentence for where a verb left a
 //     worktree.

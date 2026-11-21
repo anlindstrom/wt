@@ -189,7 +189,8 @@ its own marks, runs `git rebase --interactive --empty=drop --no-update-refs
 what they own; a stop nobody owns becomes a handover (`driver.handover`);
 `driver.finish` ends it. The tail after a finished rebase (deferred steps
 through `wtsync.RunAfterSteps`, the result ref, owed steps) is
-`syncrun.CompleteRun`, shared with resume. `wt up` is `synccmd.Up`: the same run
+`syncrun.Finish` (its `CompleteRun` plus the stack's layers, what is owed and
+the journal's record), shared with resume. `wt up` is `synccmd.Up`: the same run
 with the one worktree named and `--if-ready`, and it also works in a repository
 with no `.wt-sync.yaml`.
 
@@ -236,8 +237,10 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    (`each: layer`, `fold: owner`) run at each layer's tip inside the rebase.
    `--autosquash` folds fixups; `--each-commit=targets` checks at each layer
    tip and each fold target.
-4. **Finish.** `syncrun.FinishStack` (`internal/commands/syncrun/stack.go`)
-   checks every new tip, runs the tree guard on a fold, and moves each layer
+4. **Finish.** `syncrun.FinishStack` (`internal/commands/syncrun/stack.go`;
+   its phases are `guardEdit`, `guardFold`, `verifyTips`, `moveLayers`,
+   `reportLayers`, `moveSides`) checks every new tip, runs the tree guard
+   (`wtsync.TreeGuard`) on a fold, and moves each layer
    branch; a layer checked out in a worktree is moved there too, its files
    with it. A layer a holder holds is left, and named.
 
@@ -256,7 +259,7 @@ rebased stay rebased while a child is handed over.
 `wt sync resume` is `syncfix.SyncResume`: it checks the worktree is what the
 run left, takes the lock over (`wtsync.TakeOver`, which only displaces the
 lock the state file names), and drives `wtsync.Resume` to the end, then the
-same `CompleteRun` and `FinishStack` as a run.
+same `syncrun.Finish` as a run.
 
 `wt sync undo` is `syncfix.SyncUndo` → `wtsync.Undo`
 (`internal/wtsync/undo.go`): every ref the newest run moved (all safety refs of
@@ -315,12 +318,17 @@ wt's job is to move branches without losing anything. Every change keeps these:
   cannot be read. A held layer is left and named; `--force` lifts only an idle
   session or a process (`Forcible`).
 - **The tree guard.** A fold must not change what the line holds:
-  `syncrun.FinishStack` compares the new tip with the old one (a fold in
-  place) or with git's merge of the old line onto the target (a fold that
+  `wtsync.TreeGuard`, called by `syncrun.FinishStack`, compares the new tip
+  with the old one (a fold in place) or with git's merge of the old line onto the target (a fold that
   moves), leaving out the declared per-layer step paths and, for a moving
   fold, the conflicting regions a stop resolved. A failed guard moves no layer
   and says so; `wt sync undo` puts the folded line back. The result is
   `fold.guard` in `--json`.
+- **The command layer writes no ref or checkout.** Moves go through wtsync,
+  behind its guards; `internal/commands/git_writes_test.go` fails on a git
+  write in a non-test file there unless the site is on its allowlist, which
+  names each one and its guard (trunk's fast-forward, an own remote's, a
+  checkout in a worktree wt just made).
 - **Undo restores refs and the files checked out on them.** It resets each
   branch to its safety ref (`git reset --hard` where the branch is checked
   out, `update-ref` where it is not), takes back a fast-forward, and aborts a

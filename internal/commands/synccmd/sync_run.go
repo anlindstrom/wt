@@ -1417,48 +1417,34 @@ func (r *RunPlan) finishRebase(b string, p *participant, res wtsync.Result, onto
 	if res.SignaturesDropped > 0 {
 		line += fmt.Sprintf(", %s dropped", kit.Count(res.SignaturesDropped, "signature"))
 	}
-	fmt.Fprintln(w, line)
-	if note := wtsync.EachCommitNote(res.EachCommit, r.opts.Stack != nil); note != "" {
-		fmt.Fprintf(w, "    %s\n", note)
-	}
-	head, ran, derr := syncrun.CompleteRun(ctx, w, r.cfg, r.tracker, p.work, p.wt.Path, func() syncrun.CompleteInput {
-		// What the deferred steps compare and the undo line names is the tip
-		// the run found, the commits a fast-forward brought included.
-		done := res
-		done.OldTip = p.foundTip(res)
-		return syncrun.CompleteInput{
-			Branch: b, Epoch: r.epoch, Res: done,
-			Tell: append(slices.Clone(p.a.Sessions), p.forced...), TrunkName: cmp.Or(r.ontoRef(), r.trunk), Landed: p.a.Behind, Check: syncrun.PathsOnce(wtsync.StopPaths(res.Stops)),
-			Unavailable: p.unavailable, Steps: r.stepSet, ForceSteps: r.opts.Steps != nil,
-		}
+	var after string
+	out := syncrun.Finish(ctx, w, r.cfg, r.tracker, j, syncrun.FinishInput{
+		Work: p.work, Path: p.wt.Path, Branch: b, Epoch: r.epoch, Res: res,
+		Headline: line, Layered: r.opts.Stack != nil,
+		Complete: func() syncrun.CompleteInput {
+			// What the deferred steps compare and the undo line names is the tip
+			// the run found, the commits a fast-forward brought included.
+			done := res
+			done.OldTip = p.foundTip(res)
+			return syncrun.CompleteInput{
+				Branch: b, Epoch: r.epoch, Res: done,
+				Tell: append(slices.Clone(p.a.Sessions), p.forced...), TrunkName: cmp.Or(r.ontoRef(), r.trunk), Landed: p.a.Behind, Check: syncrun.PathsOnce(wtsync.StopPaths(res.Stops)),
+				Unavailable: p.unavailable, Steps: r.stepSet, ForceSteps: r.opts.Steps != nil,
+			}
+		},
+		Layers: func() (bool, string) { return r.finishStack(b, p, res), "" },
+		Settle: func(head string, _ error, _ bool) []string {
+			p.head = head
+			r.moveLoose(b, p, res)
+			// The journal's record: a tip git cannot read is recorded as none.
+			after, _, _ = ctx.Repo.ResolveRef("refs/heads/" + b)
+			return nil
+		},
 	})
-	p.head = head
-	if err := syncrun.RecordOwed(ctx.Repo.MainRoot, b, r.epoch, res, ran); err != nil {
-		fmt.Fprintf(w, "  note: what is owed could not be recorded for wt sync steps: %v\n", err)
-	}
-	restored := r.finishStack(b, p, res)
-	r.moveLoose(b, p, res)
-	// What the rebase did to its commits is told once the layers are
-	// settled, and not at all when the line was put back: the result it
-	// describes is gone.
-	if !restored {
-		syncrun.PrintReplayReport(w, res)
-	}
-	syncrun.PrintUnchecked(w, res.Unchecked)
-	owed := append(syncrun.OwedChecks(res.Unchecked), syncrun.OwedLayerSteps(res.LayerSteps)...)
-	owed = append(owed, syncrun.OwedSteps(ran)...)
-	r.failures = append(r.failures, syncrun.OwedBy(p.work, owed)...)
+	derr, owed := out.Err, out.Owed
 	// The rebase itself stands; only this branch and what sits on it
 	// lose their footing, so the rest of the run carries on.
-	// The journal's record: a tip git cannot read is recorded as none.
-	after, _, _ := ctx.Repo.ResolveRef("refs/heads/" + b)
-	j.SetSync(b, func(jp *syncrun.SyncParticipant) {
-		jp.SafetyRef, jp.UndoCommand, jp.Deferred = jsonout.Strp(res.Safety.Ref), syncrun.UndoCommand(p.work), syncrun.DeferredSteps(ran)
-		jp.LayerSteps = syncrun.LayerStepsOf(res.LayerSteps)
-		if !restored {
-			syncrun.SetReplayReport(jp, res)
-		}
-	})
+	r.failures = append(r.failures, out.OwedFailures...)
 	if derr != nil {
 		fmt.Fprintf(w, "  ✗ failed: %v\n", derr)
 		j.Set(b, func(jp *syncrun.UpParticipant) {

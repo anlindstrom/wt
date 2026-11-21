@@ -679,7 +679,7 @@ func (u *undo) checkMoving(m LayerMove, wt repo.Worktree) (settle bool, err erro
 	case !samePath(use.Path, m.Path) || !samePath(wt.Path, m.Path):
 		return refuse("it is checked out in " + use.Path + ", not in " + m.Path + " where the record says: look at " + use.Path)
 	}
-	if ref, err := gitEnv(m.Path, nil, nil, "symbolic-ref", "--quiet", "HEAD"); err != nil || ref != "refs/heads/"+m.Branch {
+	if _, on := repo.OnBranch(m.Path, m.Branch); !on {
 		return refuse(m.Path + " is not on it")
 	}
 	tip, err := gitEnv(u.mainRoot, nil, nil, "rev-parse", "--verify", "refs/heads/"+m.Branch)
