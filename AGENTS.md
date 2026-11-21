@@ -8,7 +8,7 @@ Every user-visible change adds one entry to the top of `internal/about/whats-new
 
 ## JSON output
 
-`--json` output is a contract with other programs. A change to it updates, in the same commit, the schema in `schema/`, `docs/json.md`, and the schema's `x-version`: minor for an added field or enum value; a wording change needs no bump; anything that breaks a reader — a rename, a removal, a changed type or meaning — is a new major, `*.v2.json`, never an edit to v1.
+`--json` output is a contract with other programs. A change to it updates, in the same commit, the schema in `schema/`, the hand-written prose of `docs/json.md` (its field tables come from the schemas: `make json-docs`), and the schema's `x-version`: minor for an added field or enum value; a wording change needs no bump; anything that breaks a reader — a rename, a removal, a changed type or meaning — is a new major, `*.v2.json`, never an edit to v1.
 
 ## Tests
 

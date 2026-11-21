@@ -3,7 +3,7 @@ BIN := bin/wt
 # not say dev.
 LDFLAGS := $(shell scripts/ldflags.sh)
 
-.PHONY: build test test-fast test-unit test-race test-mod lint bats check clean
+.PHONY: build test test-fast test-unit test-race test-mod lint json-docs bats check clean
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/wt
@@ -36,8 +36,17 @@ test-mod:
 bats: build
 	scripts/bats.sh test/
 
+# The field tables of docs/json.md are generated from schema/*.json between
+# its json-docs markers; the prose around them is hand-written.
+json-docs:
+	go run ./internal/tools/jsondocs
+
+# The last two steps: no skip without a short guard or a //skip-ok: reason,
+# and docs/json.md in step with schema/ (fix it with make json-docs).
 lint:
 	golangci-lint run
+	go run ./internal/tools/checkskips
+	go run ./internal/tools/jsondocs -check
 
 check: lint test bats test-mod
 
