@@ -102,7 +102,7 @@ func TestABranchBehindItsRemoteIsJudgedAtTheRemotesCommit(t *testing.T) {
 	}
 	// The handover says which tip the safety ref pins, so a resume neither
 	// refuses it nor forgets where undo goes.
-	testkit.WriteIn(t, x, "c.txt", "both\n")
+	testkit.WriteFile(t, x, "c.txt", "both\n")
 	testkit.GitIn(t, x, "add", "c.txt")
 	resumed, err := syncResumeJSON(t, f.Ctx, "x", ResumeOptions{PushOptions: syncrun.PushOptions{Push: syncrun.PushNever}, VerbOptions: opts.VerbOptions})
 	if err != nil || resumed.Worktrees[0].Result != syncrun.ResultRebased || resumed.Worktrees[0].OwnRemoteSync != nil {

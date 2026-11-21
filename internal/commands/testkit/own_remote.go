@@ -5,7 +5,7 @@ import "testing"
 // Mine commits file in the checkout at dir.
 func Mine(t *testing.T, dir, file, content string) string {
 	t.Helper()
-	WriteIn(t, dir, file, content)
+	WriteFile(t, dir, file, content)
 	GitIn(t, dir, "add", "-A")
 	GitIn(t, dir, "commit", "-q", "-m", "mine "+file)
 	return GitOut(t, dir, "rev-parse", "HEAD")

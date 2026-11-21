@@ -85,7 +85,7 @@ func TestAHandoverAfterAFastForwardKeepsOrDropsTheFormerTip(t *testing.T) {
 	}
 	t.Run("resumed", func(t *testing.T) {
 		f, x, opts, _ := handedOver(t)
-		testkit.WriteIn(t, x, "c.txt", "both\n")
+		testkit.WriteFile(t, x, "c.txt", "both\n")
 		testkit.GitIn(t, x, "add", "c.txt")
 		if r, err := syncResumeJSON(t, f.Ctx, "x", ResumeOptions{PushOptions: syncrun.PushOptions{Push: syncrun.PushNever}, VerbOptions: opts.VerbOptions}); err != nil || r.Worktrees[0].Result != syncrun.ResultRebased {
 			t.Fatalf("resume: %v %+v", err, r.Worktrees)
@@ -129,7 +129,7 @@ func TestSyncUndoForcedPinsACommitInsideAHandoverThatFollowedAFastForward(t *tes
 	if run, err := synccmdtest.SyncRunJSON(t, f.Ctx, []string{"x"}, opts); err == nil || run.Worktrees[0].Result != syncrun.ResultHandedOver || !run.Worktrees[0].OwnRemoteSync.FastForwarded {
 		t.Fatalf("%v %+v", err, run.Worktrees[0])
 	}
-	testkit.WriteIn(t, x, "c.txt", "merged by hand\n")
+	testkit.WriteFile(t, x, "c.txt", "merged by hand\n")
 	testkit.GitIn(t, x, "add", "--", "c.txt")
 	testkit.GitIn(t, x, "commit", "-q", "-m", "resolved by hand")
 	inside := testkit.GitOut(t, x, "rev-parse", "HEAD")

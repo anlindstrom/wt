@@ -142,7 +142,7 @@ func TestStatusJSONSaysWhatARunWouldDoToLocalTrunk(t *testing.T) {
 	if got := f.Local(t); got != before {
 		t.Fatalf("local main moved to %s", got)
 	}
-	testkit.WriteIn(t, f.Main, "scratch.txt", "mine\n")
+	testkit.WriteFile(t, f.Main, "scratch.txt", "mine\n")
 	if p = synccmdtest.PlanOfWork(t, f.Ctx, "x"); p.TrunkSync.SkippedReason == nil || *p.TrunkSync.SkippedReason != syncrun.TrunkSkipDirty {
 		t.Fatalf("trunkSync = %+v, want dirty", p.TrunkSync)
 	}

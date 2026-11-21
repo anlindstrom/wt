@@ -204,7 +204,7 @@ func TestSyncOverviewProbesNothingWhenNoStepWouldRun(t *testing.T) {
 func declareOnOrigin(t *testing.T, f *synccmdtest.TrunkFixture, yaml string) {
 	t.Helper()
 	testkit.GitIn(t, f.Other, "pull", "-q", "--ff-only")
-	testkit.WriteIn(t, f.Other, ".wt-sync.yaml", yaml)
+	testkit.WriteFile(t, f.Other, ".wt-sync.yaml", yaml)
 	testkit.GitIn(t, f.Other, "add", "-A")
 	testkit.GitIn(t, f.Other, "commit", "-q", "-m", "declare")
 	testkit.GitIn(t, f.Other, "push", "-q", "origin", "main")
