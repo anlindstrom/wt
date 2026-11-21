@@ -305,3 +305,26 @@ setup() {
 
     [ "$(git -C "$REPO" for-each-ref)" = "$refs" ]
 }
+
+# The verbs are subcommands only: --rebase, --resume and --undo on wt sync are
+# unknown flags, with cobra's own error and exit code, and move nothing.
+@test "sync --rebase, --resume and --undo are unknown flags, and move nothing" {
+    state() {
+        git -C "$REPO" for-each-ref
+        git -C "$REPO" worktree list --porcelain
+        git -C "$BUMP" status --porcelain=v1 --untracked-files=all
+        git -C "$BUMP" rev-parse HEAD
+        git -C "$REPO" stash list
+    }
+    echo scratch > "$BUMP/untracked.txt"
+    before=$(state)
+
+    for line in "sync --rebase" "sync bump --rebase" "sync bump --resume" "sync --undo bump" "sync bump --undo"; do
+        flag=$(printf '%s\n' $line | grep -- '^--')
+        run --separate-stderr wt $line --no-fetch --yes
+        [ "$status" -eq 2 ]
+        [[ "$output" == "" ]]
+        [[ "$stderr" == *"unknown flag: $flag"* ]]
+        [ "$(state)" = "$before" ]
+    done
+}
