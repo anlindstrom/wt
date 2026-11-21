@@ -21,6 +21,26 @@ func TestWriteSafetyPinsTheTipUnderTheBranchAndEpoch(t *testing.T) {
 	}
 }
 
+func TestWriteSafetyRefusesASecondWriteOfTheSameBranchAndEpoch(t *testing.T) {
+	t.Parallel()
+	dir := linearRepo(t, nil, []map[string]string{{"a.txt": "a2\n"}})
+	first := gitIn(t, dir, "rev-parse", "feature")
+	other := gitIn(t, dir, "rev-parse", "feature~1")
+	if first == other {
+		t.Fatal("fixture: the two tips must differ")
+	}
+	s, err := WriteSafety(dir, "feature", first, 1700000000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteSafety(dir, "feature", other, 1700000000); err == nil {
+		t.Fatal("a second write with the same branch and epoch must be refused")
+	}
+	if got := gitIn(t, dir, "rev-parse", s.Ref); got != first {
+		t.Fatalf("ref points at %s after the refused write, want the first tip %s", got, first)
+	}
+}
+
 func TestListSafetyIsNewestFirstAndLatestPicksPerBranch(t *testing.T) {
 	t.Parallel()
 	dir := linearRepo(t, nil, []map[string]string{{"a.txt": "a2\n"}})
