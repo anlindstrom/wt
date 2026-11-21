@@ -1,8 +1,9 @@
 package github
 
 import (
-	"os/exec"
 	"testing"
+
+	"github.com/anlindstrom/wt/internal/gittest"
 )
 
 func TestParseURL(t *testing.T) {
@@ -58,10 +59,10 @@ func TestIsGitHub(t *testing.T) {
 func TestRemoteOfResolvesTheBaseRepositoryTheWayGhDoes(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	runGit(t, dir, "init", "-q", ".")
-	runGit(t, dir, "remote", "add", "upstream", "git@github.com:sharkdp/fd.git")
-	runGit(t, dir, "remote", "add", "origin", "git@github.com:anders/fd.git")
-	runGit(t, dir, "remote", "add", "mirror", "/srv/git/fd.git")
+	gittest.Git(t, dir, "init", "-q", ".")
+	gittest.Git(t, dir, "remote", "add", "upstream", "git@github.com:sharkdp/fd.git")
+	gittest.Git(t, dir, "remote", "add", "origin", "git@github.com:anders/fd.git")
+	gittest.Git(t, dir, "remote", "add", "mirror", "/srv/git/fd.git")
 
 	r, ok := RemoteOf(dir)
 	if !ok {
@@ -77,17 +78,17 @@ func TestRemoteOfResolvesTheBaseRepositoryTheWayGhDoes(t *testing.T) {
 func TestRemoteOfHonoursGhRepoSetDefault(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	runGit(t, dir, "init", "-q", ".")
-	runGit(t, dir, "remote", "add", "upstream", "git@github.com:sharkdp/fd.git")
-	runGit(t, dir, "remote", "add", "origin", "git@github.com:anders/fd.git")
-	runGit(t, dir, "config", "remote.origin.gh-resolved", "base")
+	gittest.Git(t, dir, "init", "-q", ".")
+	gittest.Git(t, dir, "remote", "add", "upstream", "git@github.com:sharkdp/fd.git")
+	gittest.Git(t, dir, "remote", "add", "origin", "git@github.com:anders/fd.git")
+	gittest.Git(t, dir, "config", "remote.origin.gh-resolved", "base")
 	if r, _ := RemoteOf(dir); r.Name != "origin" || r.Slug != "anders/fd" {
 		t.Errorf("RemoteOf() = %+v, want origin", r)
 	}
 
 	// The other spelling: a repository that need not be a remote here.
-	runGit(t, dir, "config", "--unset", "remote.origin.gh-resolved")
-	runGit(t, dir, "config", "remote.origin.gh-resolved", "Telcred/server")
+	gittest.Git(t, dir, "config", "--unset", "remote.origin.gh-resolved")
+	gittest.Git(t, dir, "config", "remote.origin.gh-resolved", "Telcred/server")
 	if r, _ := RemoteOf(dir); r.Slug != "Telcred/server" || r.Host != "github.com" {
 		t.Errorf("RemoteOf() = %+v, want Telcred/server", r)
 	}
@@ -96,28 +97,19 @@ func TestRemoteOfHonoursGhRepoSetDefault(t *testing.T) {
 func TestRemoteOfFallsBackAndGivesUp(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	runGit(t, dir, "init", "-q", ".")
-	runGit(t, dir, "remote", "add", "fork", "https://github.com/anders/fd")
+	gittest.Git(t, dir, "init", "-q", ".")
+	gittest.Git(t, dir, "remote", "add", "fork", "https://github.com/anders/fd")
 	if r, ok := RemoteOf(dir); !ok || r.Name != "fork" {
 		t.Errorf("RemoteOf() = %+v, %v; want the only GitHub remote", r, ok)
 	}
 
 	bare := t.TempDir()
-	runGit(t, bare, "init", "-q", ".")
-	runGit(t, bare, "remote", "add", "origin", "https://gitlab.com/t/x.git")
+	gittest.Git(t, bare, "init", "-q", ".")
+	gittest.Git(t, bare, "remote", "add", "origin", "https://gitlab.com/t/x.git")
 	if r, ok := RemoteOf(bare); ok {
 		t.Errorf("RemoteOf() = %+v on a repository that is not on GitHub", r)
 	}
 	if _, ok := RemoteOf(t.TempDir()); ok {
 		t.Error("RemoteOf found a remote outside a repository")
-	}
-}
-
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
