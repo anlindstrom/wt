@@ -207,3 +207,26 @@ func TestConfigSaysTheFileCouldNotBeRead(t *testing.T) {
 		t.Errorf("wt config said\n%s\nwant each value marked as coming from nowhere", out.String())
 	}
 }
+
+// A setting written with wt config set is named as the user file's, and the
+// mode that follows from it is the repository's default.
+func TestConfigNamesTheUserFileAfterASet(t *testing.T) {
+	// Not parallel: sets environment variables for the whole test binary.
+	testkit.UserConfigIn(t)
+	if err := UserSet(config.UserKeySuperset, "true", io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := kit.Open(testkit.FixtureRepo(t, testkit.MinimalConf), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := Config(ctx, false, &buf); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"  superset:      true (user file)", "superset mode: auto (repo default)"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("config said\n%s\nwant a line %q", buf.String(), want)
+		}
+	}
+}

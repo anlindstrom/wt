@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -290,8 +291,12 @@ func TestStatusCountsEachBranchAgainstTrunkAsLastFetched(t *testing.T) {
 	if head := lineContaining(t, out, "BRANCH"); !strings.Contains(head, "STATE  TRUNK") || !strings.HasSuffix(head, "PATH") {
 		t.Errorf("want TRUNK between STATE and PATH: %q", head)
 	}
-	if line := lineContaining(t, out, "feat_wt/bump"); !strings.Contains(line, "  1 behind · 1 ahead  ") {
-		t.Errorf("want bump counted: %q", line)
+	bump, err := kit.Locate(ctx, "bump")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := lineContaining(t, out, "feat_wt/bump"); !regexp.MustCompile(`^feat_wt/bump +clean  1 behind · 1 ahead  `).MatchString(line) || !strings.HasSuffix(line, bump.Path) {
+		t.Errorf("want bump's branch, clean state, counts and path together: %q", line)
 	}
 	if line := lineContaining(t, out, "feat_wt/other"); !strings.Contains(line, "  on trunk  ") {
 		t.Errorf("want other on trunk: %q", line)

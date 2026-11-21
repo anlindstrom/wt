@@ -34,13 +34,6 @@ teardown() {
     [ -z "${CODEX_PID:-}" ] || kill "$CODEX_PID" 2>/dev/null || true
 }
 
-@test "status counts every branch against origin/trunk as last fetched" {
-    run wt status
-    [ "$status" -eq 0 ]
-    [[ "${lines[0]}" == "against origin/main, as last fetched"* ]]
-    [[ "$output" == *"feat_wt/bump  clean  1 behind · 1 ahead  $BUMP"* ]]
-}
-
 @test "status . is the worktree you stand in, with wt sync's verdict" {
     cd "$BUMP"
     run wt status .
