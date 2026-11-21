@@ -87,15 +87,13 @@ func FoldLine(t *testing.T, yaml string) (*kit.Context, *gittest.FoldLine) {
 	return ctx, s
 }
 
-// FakeDocker puts a docker on PATH that answers docker info, for a step
-// that needs docker. The test cannot run in parallel.
-func FakeDocker(t *testing.T) {
+// WriteFakeDocker puts a docker that answers docker info in dir, for a child
+// process whose step needs docker: the child's PATH starts with dir. A test
+// that runs wt in its own process gives the run a docker through opts.Probes
+// instead (DockerUp), and changes nothing the test binary shares.
+func WriteFakeDocker(t *testing.T, dir string) {
 	t.Helper()
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(filepath.ListSeparator)+os.Getenv("PATH"))
+	gittest.WriteExecutable(t, filepath.Join(dir, "docker"), "#!/bin/sh\nexit 0\n")
 }
 
 // CheckedLine is StackLine with an each_commit step on trunk running

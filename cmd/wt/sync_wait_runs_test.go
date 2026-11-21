@@ -57,7 +57,7 @@ func split(t *testing.T, dir, gate string, args ...string) (stdout, stderr strin
 	t.Helper()
 	cmd := exec.Command(builtWt(t), args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "WTGATE="+gate)
+	cmd.Env = childEnv(gate)
 	var o, e bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &o, &e
 	err := cmd.Run()
@@ -75,6 +75,7 @@ func split(t *testing.T, dir, gate string, args ...string) (stdout, stderr strin
 // through a log and a pointer of its own. The final error line is in the
 // log, and on stderr once.
 func TestSyncWaitAfterAHandoverAndItsResume(t *testing.T) {
+	t.Parallel()
 	dir, paths := twoBranches(t, failCheck)
 	gate := t.TempDir()
 	open(t, gate, "fail")
@@ -126,6 +127,7 @@ func TestSyncWaitAfterAHandoverAndItsResume(t *testing.T) {
 // A run of two worktrees is one log; each worktree's pointer names it, and a
 // wait on either ends with the command's code.
 func TestSyncWaitOnEachWorktreeOfOneRun(t *testing.T) {
+	t.Parallel()
 	dir, paths := twoBranches(t, failCheck)
 	gate := t.TempDir()
 	if out, code := wtOut(t, dir, gate, "sync", "rebase", "feat/a", "feat/b", "--yes", "--no-push", "--no-fetch"); code != 0 {
@@ -154,6 +156,7 @@ func TestSyncWaitOnEachWorktreeOfOneRun(t *testing.T) {
 // what it moves and prints what it prints, plus one warning; a wait then
 // finds no run.
 func TestARunWhoseLogCannotBeWrittenFinishesAsBefore(t *testing.T) {
+	t.Parallel()
 	dir, paths := twoBranches(t, failCheck)
 	gate := t.TempDir()
 	gittest.WriteFile(t, filepath.Join(dir, ".git", "wt-sync-logs"), "in the way\n")
@@ -179,6 +182,7 @@ func TestARunWhoseLogCannotBeWrittenFinishesAsBefore(t *testing.T) {
 // With --json the result object stays on stdout, alone, and the log holds
 // exactly what went to stderr.
 func TestTheRunLogOfAJSONRunHoldsStderrOnly(t *testing.T) {
+	t.Parallel()
 	dir, _ := twoBranches(t, failCheck)
 	gate := t.TempDir()
 	stdout, stderr, code := split(t, dir, gate, "sync", "rebase", "feat/a", "--json", "--yes", "--no-push", "--no-fetch")
@@ -201,6 +205,7 @@ func TestTheRunLogOfAJSONRunHoldsStderrOnly(t *testing.T) {
 // A run killed outright, as a crash would leave it, writes no end file: a
 // wait says it ended without saying how.
 func TestSyncWaitOnARunThatWasKilled(t *testing.T) {
+	t.Parallel()
 	dir, tmp, gate := pacedFold(t)
 	run := startWt(t, dir, gate, append(append([]string{}, runArgs...), tmp)...)
 	run.sees(t, "▸ check")
@@ -226,11 +231,12 @@ func TestSyncWaitOnARunThatWasKilled(t *testing.T) {
 // A rebase across repositories is not logged: no log, no pointer, and a wait
 // on a worktree it moved finds no run.
 func TestARebaseAcrossRepositoriesWritesNoLog(t *testing.T) {
+	t.Parallel()
 	dir, paths := twoBranches(t, failCheck)
 	gate := t.TempDir()
 	cmd := exec.Command(builtWt(t), "sync", "rebase", "--all", "--yes", "--no-push", "--no-fetch")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "WTGATE="+gate, "WT_ROOTS="+filepath.Dir(dir))
+	cmd.Env = childEnv(gate, "WT_ROOTS="+filepath.Dir(dir))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	} else if !strings.Contains(string(out), "feat/a") {

@@ -82,12 +82,20 @@ type proc struct {
 	code int
 }
 
+// childEnv is the environment of a wt run in a child process: the test's own
+// gate directory, and the docker its steps need first on the PATH. A child's
+// environment is its own, so the tests run side by side.
+func childEnv(gate string, extra ...string) []string {
+	env := append(os.Environ(), "WTGATE="+gate, "PATH="+filepath.Join(gate, "bin")+string(filepath.ListSeparator)+os.Getenv("PATH"))
+	return append(env, extra...)
+}
+
 func startWt(t *testing.T, dir string, gate string, args ...string) *proc {
 	t.Helper()
 	p := &proc{out: &lockedBuffer{}, done: make(chan struct{})}
 	p.cmd = exec.Command(builtWt(t), args...)
 	p.cmd.Dir = dir
-	p.cmd.Env = append(os.Environ(), "WTGATE="+gate)
+	p.cmd.Env = childEnv(gate)
 	p.cmd.Stdout, p.cmd.Stderr = p.out, p.out
 	if err := p.cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -151,8 +159,8 @@ func open(t *testing.T, gate, name string) {
 	}
 }
 
-const waitCheck = `while [ ! -e "$WTGATE/check" ]; do sleep 0.05; done`
-const waitStep = `while [ ! -e "$WTGATE/step" ]; do sleep 0.05; done; ./gen.sh`
+const waitCheck = `while [ -d "$WTGATE" ] && [ ! -e "$WTGATE/check" ]; do sleep 0.05; done`
+const waitStep = `while [ -d "$WTGATE" ] && [ ! -e "$WTGATE/step" ]; do sleep 0.05; done; ./gen.sh`
 
 // pacedFold is a FoldLine whose each_commit check and per-layer step wait for
 // a file the test creates.
@@ -163,7 +171,8 @@ func pacedFold(t *testing.T) (dir, tmp, gate string) {
 
 func pacedFoldLine(t *testing.T) (dir, tmp, gate string, s *gittest.FoldLine) {
 	t.Helper()
-	synccmdtest.FakeDocker(t)
+	gate = t.TempDir()
+	synccmdtest.WriteFakeDocker(t, filepath.Join(gate, "bin"))
 	yaml := gittest.FoldYAML("max-plus-patch")
 	yaml = strings.Replace(yaml, "test ! -e broken.marker", waitCheck, 1)
 	yaml = strings.Replace(yaml, "./gen.sh", waitStep, 1)
@@ -171,7 +180,7 @@ func pacedFoldLine(t *testing.T) (dir, tmp, gate string, s *gittest.FoldLine) {
 	// f3 holds uncommitted work, which holds the layer back: not what these
 	// tests are about.
 	gittest.Git(t, s.Paths["f3"], "checkout", "--", ".")
-	return s.Dir, gittest.FoldTmp, t.TempDir(), s
+	return s.Dir, gittest.FoldTmp, gate, s
 }
 
 func logsOf(t *testing.T, dir string) []string {
@@ -202,6 +211,7 @@ var runArgs = []string{"sync", "rebase", "--stack", "--yes", "--no-push", "--no-
 // The issue's case: a fold run in the background, paced by the test, and
 // wt sync wait showing what the run prints as it goes, then its exit code.
 func TestSyncWaitFollowsALongRunAndExitsWithItsCode(t *testing.T) {
+	t.Parallel()
 	dir, tmp, gate := pacedFold(t)
 	run := startWt(t, dir, gate, append(append([]string{}, runArgs...), tmp)...)
 	run.sees(t, "▸ check")
@@ -237,6 +247,7 @@ func TestSyncWaitFollowsALongRunAndExitsWithItsCode(t *testing.T) {
 
 // A look and a refusal before any lock leave no log and no pointer.
 func TestSyncLookAndRefusalWriteNoLog(t *testing.T) {
+	t.Parallel()
 	dir, tmp, gate := pacedFold(t)
 	if _, code := wtOut(t, dir, gate, "sync", tmp); code != 0 {
 		t.Fatalf("look exited %d", code)
@@ -254,6 +265,7 @@ func TestSyncLookAndRefusalWriteNoLog(t *testing.T) {
 
 // wt sync wait of a worktree no run was seen in says so, and exits 1.
 func TestSyncWaitWithNoRunSeen(t *testing.T) {
+	t.Parallel()
 	dir, tmp, gate := pacedFold(t)
 	out, code := wtOut(t, dir, gate, "sync", "wait", tmp)
 	if code != 1 || !strings.Contains(out, "no run has been seen") {
@@ -264,6 +276,7 @@ func TestSyncWaitWithNoRunSeen(t *testing.T) {
 // --timeout bounds the wait: 124, the run untouched, and waiting again
 // reaches the end.
 func TestSyncWaitTimeoutLeavesTheRunAlone(t *testing.T) {
+	t.Parallel()
 	dir, tmp, gate := pacedFold(t)
 	run := startWt(t, dir, gate, append(append([]string{}, runArgs...), tmp)...)
 	run.sees(t, "▸ check")
@@ -306,6 +319,7 @@ func deadPid(t *testing.T) int {
 // A pointer whose log never grows: --timeout ends the wait with 124.
 // A pointer whose writer is gone with no end file: ended without saying how.
 func TestSyncWaitOnAWriterThatIsGone(t *testing.T) {
+	t.Parallel()
 	dir, tmp, gate, s := pacedFoldLine(t)
 	gd := gitDirOfWork(t, s.Paths[tmp])
 	log := filepath.Join(gate, "x.log")
@@ -353,6 +367,7 @@ func TestSyncWaitOnAWriterThatIsGone(t *testing.T) {
 // A run interrupted with SIGINT: the end file says 130, the recovery lines
 // are in the log, and wait exits 130.
 func TestSyncWaitAfterAnInterruptedRun(t *testing.T) {
+	t.Parallel()
 	dir, tmp, gate := pacedFold(t)
 	run := startWt(t, dir, gate, append(append([]string{}, runArgs...), tmp)...)
 	run.sees(t, "▸ check")
