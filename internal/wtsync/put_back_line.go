@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/anlindstrom/wt/internal/git"
+	"github.com/anlindstrom/wt/internal/repo"
 )
 
 // PutBackLine puts the line of an edit run back at the tip the run found,
@@ -17,7 +18,7 @@ import (
 func PutBackLine(main string, rec *StackRecord, why string) (string, bool) {
 	old, path, branch := rec.Line.Head, rec.Path, rec.Branch
 	undo := fmt.Sprintf("wt sync undo %s puts it back", rec.Work)
-	if ref, err := git.Run(path, "symbolic-ref", "--quiet", "HEAD"); err != nil || ref != "refs/heads/"+branch {
+	if _, on := repo.OnBranch(path, branch); !on {
 		return fmt.Sprintf("%s; the line is not put back: its worktree is not on %s; %s", why, branch, undo), false
 	}
 	head, err := git.Run(path, "rev-parse", "HEAD")
@@ -33,8 +34,8 @@ func PutBackLine(main string, rec *StackRecord, why string) (string, bool) {
 	}
 	keptLine := fmt.Sprintf("what it came to, %s kept under %s, holds the amend and every resolution", git.ShortID(head, 7), kept)
 	// A status that cannot be read is not a clean one.
-	status, err := git.Run(path, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
-	if err != nil || strings.TrimSpace(status) != "" {
+	dirty, err := repo.Dirty(path, true)
+	if err != nil || dirty {
 		what := "it has tracked changes, which a reset would not keep"
 		if err != nil {
 			what = "its status could not be read (" + err.Error() + ")"
@@ -49,4 +50,15 @@ func PutBackLine(main string, rec *StackRecord, why string) (string, bool) {
 	}
 	why = strings.TrimSuffix(why, "; no layer moved, the line itself is rebased")
 	return fmt.Sprintf("%s; the line is put back, %s at %s as before; %s", why, branch, git.ShortID(old, 7), keptLine), true
+}
+
+// AbortRebase aborts the rebase stopped in the worktree at path and says
+// where that left it: the abort's own error, whether a rebase is still in
+// progress, and HEAD ("" when it cannot be read). The caller compares HEAD
+// with the tip the run found before it calls the worktree put back.
+func AbortRebase(path string) (head string, busy bool, abortErr error) {
+	_, abortErr = git.Run(path, "rebase", "--abort")
+	busy, _ = RebaseInProgress(path)
+	head, _ = git.Run(path, "rev-parse", "HEAD")
+	return head, busy, abortErr
 }
