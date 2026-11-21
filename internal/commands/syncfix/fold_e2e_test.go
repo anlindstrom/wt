@@ -240,6 +240,7 @@ func layersOfStack(s *syncrun.Stack) map[string]syncrun.StackLayer { return stac
 // The case with the version rule wt has today.
 func TestFoldOfAStackEndToEnd(t *testing.T) {
 	t.Parallel()
+	gittest.Need(t, "2.56") // git 2.54 checks 9 commits where 8 were replayed
 	foldEndToEnd(t, "max-plus-patch", map[string]string{"f1": "1.1.1", "f3": "1.1.2", "f5": "1.1.3"}, false)
 }
 
