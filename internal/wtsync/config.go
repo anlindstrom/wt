@@ -1,6 +1,3 @@
-// Package wtsync keeps worktrees rebased on trunk: it reads a repository's
-// declaration of its conflict shapes, resolves those shapes deterministically,
-// and simulates every rebase before anything is touched.
 package wtsync
 
 import (
