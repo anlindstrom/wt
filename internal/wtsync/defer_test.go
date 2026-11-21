@@ -123,7 +123,7 @@ func TestRunDeferredTimesOutEvenWhenAnOrphanedChildMakesTheStepLookClean(t *test
 		t.Skip("waits out a real deadline")
 	}
 	if _, err := exec.LookPath("perl"); err != nil {
-		t.Skip("perl not on PATH")
+		t.Skip("perl not on PATH") //skip-ok: the step is a perl one-liner (setsid is not on macOS) and perl is not on PATH
 	}
 	wt, old, cur := deferRepo(t)
 	timeout := 300 * time.Millisecond

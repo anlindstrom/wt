@@ -125,7 +125,7 @@ func TestUserPathFollowsXDG(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	home, err := os.UserHomeDir()
 	if err != nil {
-		t.Skip("no home directory here")
+		t.Skip("no home directory here") //skip-ok: os.UserHomeDir failed (no HOME), so the home-based default path cannot be computed to compare against
 	}
 	got, err = UserPath()
 	if err != nil {

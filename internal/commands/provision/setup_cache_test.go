@@ -49,7 +49,7 @@ func TestSetupClonesCacheDirsCopyOnWrite(t *testing.T) {
 		if entries, err := os.ReadDir(target); err != nil || len(entries) != 0 {
 			t.Errorf("a clone that could not be made left %v (%v)", entries, err)
 		}
-		t.Skipf("this filesystem cannot clone: %s", buf.String())
+		t.Skipf("this filesystem cannot clone: %s", buf.String()) //skip-ok: the test needs a filesystem that can clone; cloneCacheDirs printed "not cloned" here (the skipped-clone report has its own test below)
 	}
 	if result != jsonout.StepDone || reason != "" {
 		t.Fatalf("result %s %q\n%s", result, reason, buf.String())
@@ -313,7 +313,7 @@ func TestSetupCacheSourceLookupErrorFails(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(web, 0o755) })
 	if _, err := os.Lstat(filepath.Join(web, ".gradle")); err == nil {
-		t.Skip("directory permissions are not enforced here")
+		t.Skip("directory permissions are not enforced here") //skip-ok: the lookup error needs a directory the process cannot read; Lstat inside the mode-0 directory succeeded (running as root, or a filesystem that ignores modes)
 	}
 	WithCloner(t, func(_, to string) error { return os.Mkdir(to, 0o755) })
 	var buf bytes.Buffer

@@ -263,7 +263,7 @@ func TestInteractiveCodexWithNoReadableLogIsBusy(t *testing.T) {
 	})
 	t.Run("unreadable", func(t *testing.T) {
 		if os.Getuid() == 0 {
-			t.Skip("root reads everything")
+			t.Skip("root reads everything") //skip-ok: running as root: root reads a file whatever its mode, so a log cannot be made unreadable
 		}
 		w := newCodexWorld(t)
 		w.proc(100, 1, 10*minute, wt, "codex")
@@ -595,7 +595,7 @@ func TestListOtherAgentsAddsCodexAndFailsWithoutAProcessTable(t *testing.T) {
 func TestUnreadableLogUnderAnAppServerFailsTheListing(t *testing.T) {
 	// Not parallel: sets CODEX_HOME or PATH and swaps the package-level process listers.
 	if os.Getuid() == 0 {
-		t.Skip("root reads everything")
+		t.Skip("root reads everything") //skip-ok: running as root: root reads a file whatever its mode, so a log cannot be made unreadable
 	}
 	for _, torn := range []bool{false, true} {
 		w := newCodexWorld(t)
@@ -754,7 +754,7 @@ func TestProcessArgvReadsThisProcessExactly(t *testing.T) {
 	t.Parallel()
 	argv, ok := processArgv(os.Getpid())
 	if !ok {
-		t.Skip("no exact arguments on this platform")
+		t.Skip("no exact arguments on this platform") //skip-ok: processArgv cannot read this process's arguments exactly on this platform (ok is false)
 	}
 	if strings.Join(argv, "\x00") != strings.Join(os.Args, "\x00") {
 		t.Errorf("argv %q, want %q", argv, os.Args)

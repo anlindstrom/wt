@@ -582,7 +582,7 @@ func TestDoctorReportsAPRCacheItCannotWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(dir, 0o555); err != nil {
-		t.Skipf("cannot make %s read-only here: %v", dir, err)
+		t.Skipf("cannot make %s read-only here: %v", dir, err) //skip-ok: chmod 0555 on the git directory failed, so the read-only git directory the test needs cannot be made
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, info.Mode()) })
 

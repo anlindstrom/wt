@@ -577,7 +577,7 @@ func TestOwnRemoteReadsAPartialClone(t *testing.T) {
 	gittest.Git(t, f.dir, "config", "remote.origin.promisor", "true")
 	gittest.Git(t, f.dir, "config", "remote.origin.partialclonefilter", "blob:none")
 	if out := gittest.Git(t, f.dir, "remote", "-v"); !strings.Contains(out, "[blob:none]") {
-		t.Skipf("this git prints no filter in remote -v:\n%s", out)
+		t.Skipf("this git prints no filter in remote -v:\n%s", out) //skip-ok: git remote -v printed no [blob:none] after the partialclonefilter was set; the test needs that output to exercise the filter
 	}
 	if o := f.state(t, "feat"); o.State != OwnInSync || o.Ref != "origin/feat" {
 		t.Fatalf("%+v", o)

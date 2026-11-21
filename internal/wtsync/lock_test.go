@@ -70,7 +70,7 @@ func TestAcquireRefusesALiveLockAndReplacesAnExpiredOne(t *testing.T) {
 func TestAcquireDoesNotTakeOverAnUnreadableLock(t *testing.T) {
 	t.Parallel()
 	if os.Geteuid() == 0 {
-		t.Skip("root ignores file modes")
+		t.Skip("root ignores file modes") //skip-ok: running as root: file modes do not stop a read, so no lock can be made unreadable
 	}
 	dir := t.TempDir()
 	now := time.Unix(1_700_000_000, 0)

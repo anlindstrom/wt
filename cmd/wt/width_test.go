@@ -19,7 +19,7 @@ func TestFlagListWrapsToTheTerminal(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	master, slave, err := pty.Open()
 	if err != nil {
-		t.Skipf("no pseudo-terminal here: %v", err)
+		t.Skipf("no pseudo-terminal here: %v", err) //skip-ok: pty.Open failed: no pseudo-terminal can be opened here
 	}
 	defer master.Close()
 	var got bytes.Buffer
