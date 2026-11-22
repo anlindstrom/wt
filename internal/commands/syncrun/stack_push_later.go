@@ -89,6 +89,9 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 	case errors.Is(err, wtsync.ErrPushRecordReplaced):
 	case err != nil:
 		fmt.Fprintf(w, "  note: the record of what is left for a later push could not be updated (%v)\n", err)
+	case next != nil && len(left) == 1 && left[0].Top && left[0].Creates():
+		// The line's own branch, left out on purpose and named by the push.
+		fmt.Fprintf(w, "  ↪ %s kept for wt sync push %s --stack --push-line\n", left[0].Branch, s.work)
 	case next != nil:
 		fmt.Fprintf(w, "  ↪ %s left unpushed, with its leases: wt sync push %s --stack pushes it later\n", kit.Count(len(left), "branch"), s.work)
 	}

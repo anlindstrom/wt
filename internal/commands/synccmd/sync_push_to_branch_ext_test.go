@@ -110,3 +110,37 @@ func TestPushToBranchRefusesTrunkAndRecordsNone(t *testing.T) {
 		t.Errorf("recorded %q", got)
 	}
 }
+
+// The issue's whole path: record with the pattern form, run --no-push, push
+// later; feat_wt/a..c move and nothing else on origin does.
+func TestPushToBranchThenStackPushMovesOnlyTheMappedBranches(t *testing.T) {
+	t.Parallel()
+	m := newMappedLine(t)
+	main := m.ctx.Repo.MainRoot
+	for _, l := range mappedLayers {
+		testkit.GitIn(t, main, "config", "--unset", "branch.tmp/layer/"+l+".wtPushTo")
+	}
+	if out, err := pushToBranch(m, "tmp/layer/*", "origin/feat_wt/*", false, false); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	m.noPushRun(t)
+	before := m.refs(t)
+	if human, err := m.pushLater(t, false, false); err != nil {
+		t.Fatalf("push: %v\n%s", err, human)
+	}
+	names := func(refs string) []string {
+		var n []string
+		for _, l := range strings.Split(refs, "\n") {
+			n = append(n, strings.Fields(l)[0])
+		}
+		return n
+	}
+	if got, want := strings.Join(names(m.refs(t)), " "), strings.Join(names(before), " "); got != want {
+		t.Errorf("the remote's branches changed: %s, was %s", got, want)
+	}
+	for _, l := range mappedLayers {
+		if got, want := refIn(t, m.bare, "feat_wt/"+l), m.local(t, "tmp/layer/"+l); got != want || got == m.tips[l] {
+			t.Errorf("feat_wt/%s is at %s, want %s", l, got, want)
+		}
+	}
+}

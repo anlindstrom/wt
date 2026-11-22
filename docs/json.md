@@ -507,7 +507,7 @@ the same reading as `ownRemote`; a run reports what it found and did as
 The check and the push go by the same rule, in this order:
 
 1. What is recorded for the branch: `branch.<name>.wtPushTo`, `<remote>
-   <branch>`, written by `wt sync push-to`, by the question a run asks, and by
+   <branch>`, written by `wt sync push-to` (`--branch` for a branch with no worktree), by the question a run asks, and by
    wt when it renames a branch that pushed to its own name.
 2. Nothing, when the branch tracks a remote branch of another name that is
    not someone else's (trunk, or the remote branch of another local branch,

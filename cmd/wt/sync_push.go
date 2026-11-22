@@ -72,7 +72,8 @@ func newSyncPushCmd() *cobra.Command {
 }
 
 func newSyncPushToCmd() *cobra.Command {
-	var unset bool
+	var unset, dryRun bool
+	var branch string
 	pushTo := &cobra.Command{
 		Use:   syncrun.PushToName + " [<work>] [<remote>/<branch>]",
 		Short: "Say or record where a worktree's branch pushes",
@@ -105,13 +106,37 @@ func newSyncPushToCmd() *cobra.Command {
 			"branch name. The record is branch.<name>.wtPushTo in the repository's\n" +
 			"git config, checked again each time it is read; --unset removes it.\n" +
 			"<work> is the worktree you are in when left out, and . says the same\n" +
-			"where a destination follows.",
+			"where a destination follows.\n\n" +
+			"--branch names a local branch instead of a worktree, for a branch with\n" +
+			"none (a stack's layers). A pattern with * or ? (quote it; * crosses a\n" +
+			"slash, as for --layer) records one destination per branch it matches, its\n" +
+			"* standing in the destination's: --branch 'tmp/layer/*' 'origin/feat/*'.\n" +
+			"Each mapping is printed. A pattern matching no branch is refused, and a\n" +
+			"refusal of any match records none. --unset works with it; --dry-run says\n" +
+			"what would be recorded.",
 		Example: "  wt sync push-to login-crash                       # where it pushes, and why\n" +
 			"  wt sync push-to login-crash origin/login-crash-2  # record another branch\n" +
-			"  wt sync push-to login-crash --unset               # forget what is recorded",
+			"  wt sync push-to login-crash --unset               # forget what is recorded\n" +
+			"  wt sync push-to --branch 'tmp/layer/*' 'origin/feat_wt/*'  # layers with no worktree",
 		Args:              cobra.MaximumNArgs(2),
 		ValidArgsFunction: completeWork,
 		RunE: withContext(func(cmd *cobra.Command, args []string, ctx *kit.Context) error {
+			if branch != "" {
+				if len(args) > 1 {
+					return usagef("--branch takes the destination alone: wt sync push-to --branch <branch> [<remote>/<branch>]")
+				}
+				dest := ""
+				if len(args) == 1 {
+					dest = args[0]
+				}
+				if unset && dest != "" {
+					return usagef("--unset takes no <remote>/<branch>: it forgets the one recorded")
+				}
+				return synccmd.SyncPushToBranch(ctx, branch, dest, unset, dryRun, cmd.OutOrStdout())
+			}
+			if dryRun {
+				return usagef("--dry-run is for --branch")
+			}
 			work, dest := ".", ""
 			if len(args) > 0 {
 				work = args[0]
@@ -126,6 +151,8 @@ func newSyncPushToCmd() *cobra.Command {
 		}),
 	}
 	pushTo.Flags().BoolVar(&unset, "unset", false, "forget the destination recorded for the branch")
+	pushTo.Flags().StringVar(&branch, "branch", "", "a local branch, with a worktree or not, or a pattern with * or ? (quote it) in place of <work>")
+	pushTo.Flags().BoolVar(&dryRun, "dry-run", false, "with --branch: say what would be recorded and record nothing")
 	return pushTo
 }
 
