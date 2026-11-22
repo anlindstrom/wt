@@ -2237,6 +2237,8 @@ stays where the rebase put it and `wt sync undo <line>` puts the line back, as
 for any push that fails. A remote that does not accept `--atomic` is refused the
 same way, all `notSent`; wt never falls back to one push per branch. Any other refusal (a hook, a policy) is `notSent` with git's reason. After a transport failure no outcome is assumed: wt reads the pushed refs back from the remote, and reports each branch `pushed`, `notSent`, or `unknown` when the refs say neither or cannot be read.
 
+The push goes to the push URL the run recorded with the leases, not to the remote's name, so a remote reconfigured while the question waits redirects nothing; a push to a URL moves no remote-tracking ref, so wt moves each pushed branch's, and sets the line's upstream when it had none. The read-back after a transport failure asks that same URL.
+
 A stack is pushed as a whole or not at all: if the line was not left pushable (a step or check failed or is owed), the record has no leases (an older wt wrote it), the line's own branch has nowhere safe to push, or a remote no longer pushes to the one URL the run recorded, nothing is pushed, `push` is null, and the per-branch commands print as they do without `--push`. A layer whose remote branch is at a commit it never held, even a patch-equivalent one such as a teammate's reworded commit, is left out like one with nowhere to push. `push` is
 null in the look, and for a run that pushed nothing.
 
