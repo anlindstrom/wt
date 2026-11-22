@@ -43,11 +43,19 @@ func New(ctx *kit.Context, spec string, opts NewOptions, w io.Writer) (string, e
 		return "", fmt.Errorf("branch %s already exists", branch)
 	}
 	path := ctx.Scheme().Dir(typ, work)
-	base := opts.Base
+	base, from := opts.Base, opts.Base
 	if base == "" {
-		base = ctx.Config.MainBranch
+		if line := fetchTrunk(ctx, opts); line != "" {
+			fmt.Fprintln(w, line)
+		}
+		c := chooseTrunkBase(ctx)
+		base, from = c.Ref, c.cutFrom()
+		if c.Note != "" {
+			fmt.Fprintln(w, c.Note)
+		}
+		bringTrunkUp(ctx, c, w)
 	}
-	path, err = AddAndProvision(ctx, path, newAdd(ctx, path, branch, base, w), opts, w, nil)
+	path, err = AddAndProvision(ctx, path, newAdd(ctx, path, branch, base, from, w), opts, w, nil)
 	if path != "" {
 		for _, a := range devports.Addresses(path) {
 			fmt.Fprintln(w, a.URL)
@@ -70,11 +78,13 @@ func dotOrRoot(spec string) error {
 	return nil
 }
 
-// newAdd is wt new's add: the branch cut from base, and its worktree.
-func newAdd(ctx *kit.Context, path, branch, base string, w io.Writer) func() error {
+// newAdd is wt new's add: the branch cut from from, and its worktree. base
+// is what the line says it is cut from: for trunk, from is the commit chosen,
+// so a ref of the same name as the shorthand cannot be cut from instead.
+func newAdd(ctx *kit.Context, path, branch, base, from string, w io.Writer) func() error {
 	return func() error {
 		fmt.Fprintf(w, "Creating %s at %s (from %s)\n", branch, path, base)
-		return ctx.Repo.AddWorktree(path, branch, base)
+		return ctx.Repo.AddWorktree(path, branch, from)
 	}
 }
 

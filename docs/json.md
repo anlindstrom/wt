@@ -134,8 +134,8 @@ generating types from it:
 | `wt checkout --json` | [`schema/checkout.v1.json`](../schema/checkout.v1.json) | 1.2.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/checkout.v1.json` |
 | `wt checkout --dry-run --json` | [`schema/checkout-plan.v1.json`](../schema/checkout-plan.v1.json) | 1.3.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/checkout-plan.v1.json` |
 | `wt config --json` | [`schema/config.v1.json`](../schema/config.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/config.v1.json` |
-| `wt new --json` | [`schema/new.v1.json`](../schema/new.v1.json) | 1.2.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new.v1.json` |
-| `wt new --dry-run --json` | [`schema/new-plan.v1.json`](../schema/new-plan.v1.json) | 1.2.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new-plan.v1.json` |
+| `wt new --json` | [`schema/new.v1.json`](../schema/new.v1.json) | 1.3.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new.v1.json` |
+| `wt new --dry-run --json` | [`schema/new-plan.v1.json`](../schema/new-plan.v1.json) | 1.3.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new-plan.v1.json` |
 | `wt purge <dir> --yes --json` | [`schema/quarantine-purge.v1.json`](../schema/quarantine-purge.v1.json) | 1.0.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/quarantine-purge.v1.json` |
 | `wt purge <dir> --dry-run --json` | [`schema/quarantine-purge-plan.v1.json`](../schema/quarantine-purge-plan.v1.json) | 1.0.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/quarantine-purge-plan.v1.json` |
 | `<dir>/recovery.json` | [`schema/recovery.v1.json`](../schema/recovery.v1.json) | 1.2.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/recovery.v1.json` |
@@ -2354,8 +2354,9 @@ The provisioning flags (`--no-setup`, `--no-build`, `--no-superset`) change
 | `work` | string \| null | yes | As parsed from the argument; null when it does not parse, or when the name or type is not valid. |
 | `branch` | string \| null | yes | The branch the worktree would be on; null when the name or type is not valid. |
 | `path` | string \| null | yes | The absolute path the worktree would be created at; null when the name or type is not valid. |
-| `base` | string \| null | yes | What the branch would be cut from, as given with --base, else trunk. |
+| `base` | string \| null | yes | What the branch would be cut from: as given with --base, else trunk, or origin/<trunk> when local trunk is behind it (since 1.3.0). |
 | `baseCommit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit base resolves to now; null when it does not resolve. |
+| `baseSource` | `"local"` \| `"remote"` \| `"base"` | yes | Where base comes from (since 1.3.0): local — the local trunk branch, which is equal to origin/<trunk>, ahead of it, diverged from it, or has no origin/<trunk> to compare with; remote — origin/<trunk>, because local trunk is behind it; base — what --base named. wt new fetches trunk first unless --no-fetch or --base is given, and --dry-run does too, so this is as of that fetch (a failed fetch leaves origin/<trunk> as last fetched). |
 | `provision` | boolean | yes | The repository's bin/worktree/provision.sh would run. |
 | `buildCommand` | string \| null | yes | The build command that would run; null when build initialisation is off, --no-build or --no-setup. |
 | `superset` | boolean | yes | wt would try to register the worktree as a Superset workspace: you opted in and SUPERSET_REGISTER is auto or on. Whether Superset is running and knows this repository is not checked. |
@@ -2370,8 +2371,15 @@ The provisioning flags (`--no-setup`, `--no-build`, `--no-superset`) change
 `configurationInvalid`, `branchMissing` and `branchCheckedOut` (checkout only:
 git gives a branch one worktree), `baseMissing`.
 
+Without `--base`, `wt new` fetches trunk from `origin` first (`--no-fetch` does not),
+and `--dry-run` fetches too, so the plan is of what the run will see. It cuts from
+local trunk, or from `origin/<trunk>` when local trunk is behind it: `base` then
+reads `origin/<trunk>` and `baseSource` is `remote`. A fetch that fails leaves
+`origin/<trunk>` as last fetched, and `wt new` goes on.
+
 The **token** covers the command, the branch and path, `baseCommit`, and the bytes
-of the wt configuration file. `--base <oid>` with a full commit id, as a git
+of the wt configuration file, so a fetch that moves trunk between the plan and the
+run makes `--expect` refuse. `--base <oid>` with a full commit id, as a git
 client names a commit, cuts the branch from exactly that commit and gives it no
 upstream; `--base origin/main` would track `origin/main` under git's
 `branch.autoSetupMerge`.
@@ -2461,7 +2469,7 @@ missing argument, an unknown flag, `--expect` without `--json`) is reported as
 without `--json`, with no object.
 
 <!-- json-docs:begin new,checkout -->
-`wt new --json`, [`new.v1.json`](../schema/new.v1.json), schema 1.2.0:
+`wt new --json`, [`new.v1.json`](../schema/new.v1.json), schema 1.3.0:
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -2477,7 +2485,7 @@ without `--json`, with no object.
 | `work` | string \| null | yes | From the plan. |
 | `branch` | string \| null | yes | From the plan. |
 | `path` | string \| null | yes | From the plan. |
-| `base` | string \| null | yes | For wt new: what the branch was cut from. Null for wt checkout. |
+| `base` | string \| null | yes | For wt new: what the branch was cut from: as given with --base, else trunk, or origin/<trunk> when local trunk was behind it (since 1.3.0). Null for wt checkout. |
 | `expectedCommit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit the plan pinned: the base's for wt new, the branch's for wt checkout. |
 | `commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The new worktree's HEAD, read after it was created; null when none was. |
 | `steps` | array of object | yes | Every side effect, always all eight, in this order: worktree, branch, config, cache (since 1.1.0 for wt new, 1.2.0 for wt checkout; before, seven steps), provision, submodules, build, superset. A step that was skipped or not reached still has its row. |
@@ -2485,6 +2493,7 @@ without `--json`, with no object.
 | `steps[].result` | `"created"` \| `"untouched"` \| `"done"` \| `"registered"` \| `"skipped"` \| `"failed"` \| `"notRun"` \| `"interrupted"` | yes | worktree: created (with a reason when git failed after making it), failed. branch: created (wt new), untouched (wt checkout). config, cache, provision, submodules, build: done, skipped, failed; cache is done with a reason naming any cache the filesystem could not clone. superset: registered, skipped, failed. Any step: notRun, interrupted. |
 | `steps[].commit` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | worktree: its HEAD. branch: its tip. |
 | `steps[].reason` | string \| null | yes | Why, for skipped, failed and interrupted; a note otherwise. |
+| `baseSource` | `"local"` \| `"remote"` \| `"base"` \| `null` | yes | Null when the run stopped before it planned. Where base comes from (since 1.3.0): local — the local trunk branch, which is equal to origin/<trunk>, ahead of it, diverged from it, or has no origin/<trunk> to compare with; remote — origin/<trunk>, because local trunk is behind it; base — what --base named. wt new fetches trunk first unless --no-fetch or --base is given, and --dry-run does too, so this is as of that fetch (a failed fetch leaves origin/<trunk> as last fetched). |
 | `addresses` | array of object | yes | Since 1.2.0: where the new worktree's dev servers are reached, one {app, url} per app that devports config --json gives a domain, in the order it lists them, the url being https://<name>.<domain> with the name devports gives the worktree. Always present: empty when no app has a domain, or devports is not installed, fails, does not answer within two seconds, or is too old to report domains (wt does not read .dev-ports.yaml itself). Nothing is routed by wt: the address works once the dev server runs. |
 | `addresses[].app` | string | yes | The app's name, as `devports config --json` reports it. |
 | `addresses[].url` | string | yes | `https://<name>.<domain>`: where the app is reached when its dev server runs, with the name devports gives the worktree and the app's `domain:`. |

@@ -24,6 +24,16 @@ func newNewCmd() *cobra.Command {
 			"A bare <work> takes the repository's default type, and a name that\n" +
 			"starts with a type carries it: `wt new fix_login-crash` also creates\n" +
 			"fix_wt/login-crash.\n\n" +
+			"Trunk is fetched from origin first, as wt sync does (--no-fetch cuts\n" +
+			"from it as last fetched; --base cuts from what it names and fetches\n" +
+			"nothing). The branch is cut from whichever of local trunk and\n" +
+			"origin/<trunk> is newer: local trunk when it is equal, ahead or\n" +
+			"diverged (diverged warns, with both counts), origin/<trunk> when local\n" +
+			"trunk is behind it. Local trunk is then fast-forwarded to origin's when\n" +
+			"no worktree has it checked out, and left alone, with a line saying so,\n" +
+			"when one does. A fetch that fails or takes over 45 seconds is said in\n" +
+			"one line, and wt new goes on with what was last fetched. A line names\n" +
+			"the commit it cut from, and why when that is not local trunk.\n\n" +
 			"The path alone goes to stdout, so `cd \"$(wt new fix/login-crash)\"`\n" +
 			"works.\n\n" +
 			"Where devports is installed and `devports config --json` gives an app a\n" +
@@ -46,7 +56,8 @@ func newNewCmd() *cobra.Command {
 			"them up again, run `tmutil removeexclusion <folder>`.\n" +
 			"wt checkout, wt pr checkout, wt adopt, wt setup, wt migrate and\n" +
 			"wt restore do the same for the worktree they leave somewhere.\n\n" +
-			"--dry-run says what would be created, or why not, and creates nothing.\n" +
+			"--dry-run says what would be created, or why not, and creates nothing;\n" +
+			"it fetches trunk too, unless --no-fetch is given, and moves no branch.\n" +
 			"For a tool driving wt, --dry-run --json prints that plan as one JSON\n" +
 			"object with a token; --json prints one result object on stdout, every\n" +
 			"side effect with its own outcome, and the progress on stderr; and\n" +
@@ -57,6 +68,7 @@ func newNewCmd() *cobra.Command {
 		Example: "  wt new fix/login-crash                # branch, worktree, provisioning\n" +
 			"  wt new login-crash --base v2.1        # default type, cut from a tag\n" +
 			"  wt new spike/idea --no-setup --dry-run  # say what it would make\n" +
+			"  wt new fix/x --no-fetch               # trunk as last fetched, offline\n" +
 			"  wt new spike/idea --no-build --no-cache --no-superset  # skip all three\n" +
 			"  wt new fix/x --json --expect 1:0123abcd  # only if the plan still holds",
 		Args: needArgs(1, "<type>/<work>", "wt new fix/login-crash"),
@@ -76,7 +88,8 @@ func newNewCmd() *cobra.Command {
 				})
 		},
 	}
-	cmd.Flags().StringVar(&opts.Base, "base", "", "branch or commit to cut from (default: trunk)")
+	cmd.Flags().StringVar(&opts.Base, "base", "", "branch or commit to cut from (default: trunk, or origin/<trunk> when local trunk is behind it)")
+	cmd.Flags().BoolVar(&opts.NoFetch, "no-fetch", false, "cut from trunk as last fetched: fetch nothing")
 	addProvisionFlags(cmd, &opts.SkipBuild, &opts.NoCache, &opts.NoSetup, &opts.NoSuperset)
 	addCreateFlags(cmd, &asJSON, &dryRun, &expect)
 	return cmd

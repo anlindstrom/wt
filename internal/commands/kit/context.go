@@ -64,6 +64,7 @@ const (
 	WarnUserConfig = "user config"
 	WarnGitHub     = "github"
 	WarnDetected   = "detected config"
+	WarnTrunkFetch = "trunk fetch"
 )
 
 // WarnTo gives the context somewhere to put its warnings, as Open does, and

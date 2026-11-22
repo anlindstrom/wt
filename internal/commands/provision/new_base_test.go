@@ -362,8 +362,8 @@ func TestNewResultNamesWhereTheBaseWasFrom(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.BaseSource != "remote" || r.Base == nil || *r.Base != "origin/main" || r.Commit == nil || *r.Commit != remote {
-		t.Errorf("result base %v from %q at %v, want origin/main from remote at %s", jsonStr(r.Base), r.BaseSource, jsonStr(r.Commit), remote)
+	if jsonStr(r.BaseSource) != "remote" || r.Base == nil || *r.Base != "origin/main" || r.Commit == nil || *r.Commit != remote {
+		t.Errorf("result base %v from %q at %v, want origin/main from remote at %s", jsonStr(r.Base), jsonStr(r.BaseSource), jsonStr(r.Commit), remote)
 	}
 }
 

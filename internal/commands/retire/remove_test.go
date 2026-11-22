@@ -620,7 +620,8 @@ func TestRemoveKeepsABranchOnlyAnUnreadOriginHas(t *testing.T) {
 				t.Fatal(err)
 			}
 			var buf bytes.Buffer
-			path, err := provision.New(ctx, "fix/unseen", provision.NewOptions{NoSetup: true}, &buf)
+			// NoFetch: wt new fetches trunk now, and this origin must stay unread.
+			path, err := provision.New(ctx, "fix/unseen", provision.NewOptions{NoSetup: true, NoFetch: true}, &buf)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -4,6 +4,16 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-22 22:10 — wt new cuts from the newer of local trunk and origin
+
+`wt new` now fetches trunk first, as `wt sync` does (`--no-fetch` skips it, and
+a failed fetch is one line, not a stop). If local trunk is behind
+`origin/<trunk>` it cuts from origin's, and brings local trunk up to it when
+no worktree has it checked out; a checked-out trunk is left alone and the line
+says so. Diverged trunk warns and is cut from as before. A line names the
+commit it cut from and why. `--dry-run` shows the same, and `--base` is
+unchanged. `--json` adds `baseSource` (`new-plan` and `new` 1.3.0).
+
 ## 2026-11-22 20:50 — wt remove: a kept copy no longer pushes over a remote that moved on
 
 When `wt remove` keeps an unmerged branch under a new name, it now checks the
