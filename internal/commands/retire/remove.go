@@ -213,7 +213,12 @@ type Plan struct {
 	Branch  string // the branch checked out there, "" when detached
 	Outcome BranchOutcome
 	KeepAs  string // the name BranchKept will rename the branch to
-	Reason  string // why an outcome of BranchUntouched was reached
+	// Stale is every remote branch the kept copy could push to that holds
+	// commits the branch lacks, as last fetched, and what is done about each.
+	// staleDrop is the branch's own settings the rename then removes.
+	Stale     []StaleRoute
+	staleDrop []string
+	Reason    string // why an outcome of BranchUntouched was reached
 	// Dirty is anything uncommitted in the checkout, its submodules
 	// included, read so that no configuration can hide it. StatusError is
 	// why it could not be read, which refuses rather than reads as clean.
@@ -505,6 +510,7 @@ func planFor(ctx *kit.Context, wt repo.Worktree, opts RemoveOptions) Plan {
 	default:
 		p.Outcome = BranchKept
 		p.KeepAs = naming.StripPrefix(p.Branch, ctx.Scheme().Suffix)
+		p.Stale, p.staleDrop = staleRoutes(ctx, p.Branch, p.KeepAs)
 	}
 	p.readReach(ctx)
 	return p
@@ -706,6 +712,9 @@ func (p Plan) problems() []problem {
 	}
 	if p.ReachError != "" {
 		add(KeptReachUnknown, "cannot tell what the removal would leave unreachable ("+p.ReachError+")", 0)
+	}
+	if why := staleRefusal(p.Stale, p.KeepAs); why != "" {
+		add(ProblemStaleForcedPush, why, 0)
 	}
 	if p.QuarantineError != "" {
 		add(ProblemQuarantineUnusable, "it cannot be moved aside: "+p.QuarantineError, 0)
@@ -1187,6 +1196,9 @@ func (p Plan) Render(w io.Writer) {
 		fmt.Fprintf(w, "  the branch will be deleted (merged into %s)\n", p.Base)
 	case BranchKept:
 		fmt.Fprintf(w, "  the branch will be kept as %q (%s)\n", p.KeepAs, aheadOf(p.Ahead, p.Base))
+		for _, line := range staleLines(p.Stale, p.KeepAs) {
+			fmt.Fprintf(w, "  %s\n", line)
+		}
 	default:
 		fmt.Fprintf(w, "  no branch will be touched: %s\n", p.Reason)
 	}
@@ -1472,6 +1484,19 @@ func (p Plan) branchStep(ctx *kit.Context) (result, msg string, err error) {
 				p.Branch, aheadOf(p.Ahead, p.Base), p.KeepAs, gitSaid(err))
 		}
 		msg = fmt.Sprintf("branch kept as %s (%s)", p.KeepAs, aheadOf(p.Ahead, p.Base))
+		if len(p.staleDrop) > 0 {
+			// The rename moved the push settings along; a copy the remote has
+			// moved on from gives up the ones that send it there, and the
+			// commits stay on the branch.
+			if err := dropPush(ctx, p.KeepAs, p.staleDrop); err != nil {
+				return quarantine.BranchFailed, "", fmt.Errorf("branch %s is kept as %s, but it may still push to a remote branch that moved on "+
+					"and removing its settings failed: %s; git config --unset-all branch.%s.<%s> undoes it",
+					p.Branch, p.KeepAs, gitSaid(err), p.KeepAs, strings.Join(p.staleDrop, "|"))
+			}
+		}
+		if lines := staleLines(p.Stale, p.KeepAs); len(lines) > 0 {
+			return quarantine.BranchRenamed, msg + "; " + strings.Join(lines, "; "), nil
+		}
 		if kept != nil {
 			msg += fmt.Sprintf("; wt still pushes it to %s", kept)
 		}

@@ -3,6 +3,8 @@ package retire_test
 import (
 	"bytes"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,7 +12,9 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/provision/provisiontest"
 	"github.com/anlindstrom/wt/internal/commands/quarantinecmd/quarantinecmdtest"
 	"github.com/anlindstrom/wt/internal/commands/retire"
+	"github.com/anlindstrom/wt/internal/commands/retire/retiretest"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
+	"github.com/anlindstrom/wt/internal/jsonout"
 )
 
 // remoteMoved says how the remote branch stands against the worktree's
@@ -140,5 +144,148 @@ func TestRemoveKeepsWhereAKeptBranchPushesOnlyWhenTheRemoteHasNotMovedOn(t *test
 				t.Errorf("restore gives the branch back at %s, want %s", got, tip)
 			}
 		})
+	}
+}
+
+// The plan shows the decision, in its text and in --json, and its token
+// follows the remote: a plan read while the remote had not moved on no
+// longer matches once it has.
+func TestRemovePlanShowsThatAKeptBranchWillNotPushToAMovedRemote(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: real repositories with an origin to push to")
+	}
+	ctx, path := stalePushWorktree(t, remoteEqual)
+	main := ctx.Repo.MainRoot
+	level, err := retire.RemovePlanOf(t, ctx, path, retire.RemoveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if level.Branch == nil || len(level.Branch.StaleRoutes) != 0 {
+		t.Fatalf("a remote level with the branch has not moved on: %+v", level.Branch)
+	}
+
+	clone := filepath.Join(t.TempDir(), "clone")
+	bare := strings.TrimSpace(testkit.GitOut(t, main, "config", "--get", "remote.origin.url"))
+	testkit.GitOut(t, filepath.Dir(clone), "clone", "-q", "-b", "fix_wt/stale-push", bare, clone)
+	testkit.GitIn(t, clone, "-c", "user.name=O", "-c", "user.email=o@example.com", "commit", "-q", "--allow-empty", "-m", "moved on")
+	testkit.GitIn(t, clone, "push", "-q", "origin", "fix_wt/stale-push")
+	testkit.GitIn(t, main, "fetch", "-q", "origin")
+
+	moved, err := retire.RemovePlanOf(t, ctx, path, retire.RemoveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved.Branch == nil || len(moved.Branch.StaleRoutes) != 1 || moved.Branch.StaleRoutes[0].Ref != "origin/fix_wt/stale-push" {
+		t.Fatalf("the plan should name the remote branch that moved on: %+v", moved.Branch)
+	}
+	if jsonout.Deref(moved.Token) == jsonout.Deref(level.Token) {
+		t.Error("a token taken before the remote moved on must not match after it")
+	}
+	// A remote that moves on further is a different plan: the token follows
+	// the commit compared, not only the name.
+	movedRemote(t, main, "fix_wt/stale-push")
+	staler, err := retire.RemovePlanOf(t, ctx, path, retire.RemoveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jsonout.Deref(staler.Token) == jsonout.Deref(moved.Token) {
+		t.Error("a token taken before the stale remote moved further must not match after it")
+	}
+	moved = staler
+	if _, err := retiretest.RemoveJSON(t, ctx, path, retire.RemoveOptions{Expect: jsonout.Deref(level.Token)}); err == nil {
+		t.Error("--expect with the old token must refuse")
+	}
+	if !ctx.Repo.BranchExists("fix_wt/stale-push") {
+		t.Fatal("a refused removal changes nothing")
+	}
+
+	var text bytes.Buffer
+	if err := retire.RemoveAt(ctx, path, retire.RemoveOptions{DryRun: true}, &text); err != nil {
+		t.Fatalf("dry run: %v\n%s", err, text.String())
+	}
+	if want := `origin/fix_wt/stale-push has moved on; the kept copy, stale-push, won't push there`; !strings.Contains(text.String(), want) {
+		t.Errorf("the dry run should say %q:\n%s", want, text.String())
+	}
+
+	r, err := retiretest.RemoveJSON(t, ctx, path, retire.RemoveOptions{Expect: jsonout.Deref(moved.Token)})
+	if err != nil {
+		t.Fatalf("%v %+v", err, r)
+	}
+	if len(r.StaleRoutes) != 1 || r.StaleRoutes[0].Ref != "origin/fix_wt/stale-push" || jsonout.Deref(r.KeepAs) != "stale-push" {
+		t.Errorf("the result repeats the decision: staleRoutes %+v keepAs %v", r.StaleRoutes, r.KeepAs)
+	}
+	if got := branchConfig(t, main, "stale-push", "wtPushTo"); got != "" {
+		t.Errorf("the kept copy must not push to the remote that moved on: %q", got)
+	}
+}
+
+// Each stale route is in the plan and the result with its own destination,
+// whichever way it goes. An unforced refspec is left and said; the token
+// covers it.
+func TestRemoveJSONPairsEachStaleRouteWithItsOwnDestination(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: real repositories with an origin to push to")
+	}
+	ctx, path := stalePushWorktree(t, remoteBehind)
+	main := ctx.Repo.MainRoot
+	testkit.GitIn(t, path, "push", "-q", "origin", "fix_wt/stale-push:review")
+	movedRemote(t, main, "review")
+	without, err := retire.RemovePlanOf(t, ctx, path, retire.RemoveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const spec = "HEAD:refs/heads/review"
+	testkit.GitIn(t, main, "config", "--local", "remote.origin.push", spec)
+	with, err := retire.RemovePlanOf(t, ctx, path, retire.RemoveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []retire.RemoveStaleRoute{
+		{Ref: "origin/fix_wt/stale-push", Via: retire.ViaRecorded, Dropped: true},
+		{Ref: "origin/review", Via: retire.ViaRefspec, Refspec: jsonout.Strp("remote.origin.push=" + spec)},
+	}
+	if !reflect.DeepEqual(with.Branch.StaleRoutes, want) {
+		t.Fatalf("routes %+v\nwant   %+v", with.Branch.StaleRoutes, want)
+	}
+	if len(without.Branch.StaleRoutes) != 1 || without.Branch.StaleRoutes[0].Ref != "origin/fix_wt/stale-push" {
+		t.Errorf("without the refspec: %+v", without.Branch.StaleRoutes)
+	}
+	if jsonout.Deref(with.Token) == jsonout.Deref(without.Token) {
+		t.Error("the token covers the routes")
+	}
+	r, err := retiretest.RemoveJSON(t, ctx, path, retire.RemoveOptions{Expect: jsonout.Deref(with.Token)})
+	if err != nil {
+		t.Fatalf("%v %+v", err, r)
+	}
+	if !reflect.DeepEqual(r.StaleRoutes, want) {
+		t.Errorf("the result repeats them: %+v", r.StaleRoutes)
+	}
+}
+
+// A refspec that forces over a remote branch that moved on is a problem of
+// the plan with its own code, which refuses it and its token.
+func TestRemoveJSONRefusesAForcingRefspecAsAProblem(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: real repositories with an origin to push to")
+	}
+	ctx, path := stalePushWorktree(t, remoteBehind)
+	testkit.GitIn(t, ctx.Repo.MainRoot, "config", "--local", "remote.origin.push", "+HEAD:refs/heads/fix_wt/stale-push")
+	p, err := retire.RemovePlanOf(t, ctx, path, retire.RemoveOptions{})
+	if err == nil || p.Token != nil {
+		t.Fatalf("a refused plan has an error and no token: %v %v", err, p.Token)
+	}
+	if codes := retire.ProblemCodes(p.Problems); !slices.Contains(codes, retire.ProblemStaleForcedPush) {
+		t.Errorf("problems %v", codes)
+	}
+	rs := p.Branch.StaleRoutes
+	if len(rs) != 2 || !rs[1].Forces || rs[1].Dropped || rs[1].Via != retire.ViaRefspec {
+		t.Errorf("routes %+v", rs)
+	}
+	r, _ := retiretest.RemoveJSON(t, ctx, path, retire.RemoveOptions{})
+	if r.Outcome != retire.RemoveRefused || !ctx.Repo.BranchExists("fix_wt/stale-push") {
+		t.Errorf("a refused removal changes nothing: %+v", r)
 	}
 }

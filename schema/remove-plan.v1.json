@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove-plan.v1.json",
-  "x-version": "1.5.0",
+  "x-version": "1.6.0",
   "title": "wt remove <work> --dry-run --json",
   "description": "What `wt remove <work>` would do, and the token that holds a later removal to it. Printed by `wt remove <work> --dry-run --json`, and by `wt remove <work> --json` without --yes, as the only thing on stdout; nothing is changed. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -282,10 +282,11 @@
             "submoduleUnreachable",
             "nestedWorktree",
             "quarantineUnusable",
+            "staleForcedPush",
             "processesUnknown",
             "planChanged"
           ],
-          "description": "dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there."
+          "description": "dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. staleForcedPush: a remote.<name>.push refspec with + would force a plain git push from the kept copy over a remote branch that moved on; nothing is changed (since 1.6.0). quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there."
         },
         "message": {
           "type": "string",
@@ -329,6 +330,7 @@
         "pullRequest",
         "outcome",
         "keepAs",
+        "staleRoutes",
         "reason"
       ],
       "properties": {
@@ -388,6 +390,48 @@
             "string",
             "null"
           ]
+        },
+        "staleRoutes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "ref",
+              "via",
+              "refspec",
+              "forces",
+              "dropped"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "description": "The remote branch, as origin/feat."
+              },
+              "via": {
+                "type": "string",
+                "enum": [
+                  "recorded",
+                  "upstream",
+                  "sameName",
+                  "refspec"
+                ]
+              },
+              "refspec": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "For via refspec: the setting, remote.<name>.push=<refspec>. Null otherwise."
+              },
+              "forces": {
+                "type": "boolean"
+              },
+              "dropped": {
+                "type": "boolean"
+              }
+            }
+          },
+          "description": "Since 1.6.0. For outcome keep: every remote branch the kept copy could push to that holds commits the branch lacks, as last fetched, each with how it would get there and what the removal does about it. via: recorded (where wt records or infers the branch pushes; it goes with the rename), upstream (the upstream, where push.default sends a plain push to it), sameName (the kept name on the remote a plain push goes to), refspec (a remote.<name>.push refspec, as remote.<name>.push=<refspec>, which wt does not change: it is the remote's, shared by every checkout). dropped: the removal takes that route away by removing the branch's own setting; false: it stays, and git refuses a plain push unless forced. forces: a refspec with +, which a plain push follows over a branch that moved on; that refuses the removal (problem staleForcedPush) and nothing is changed. The token covers every route and the commit compared. Empty when none, or the branch is not kept."
         },
         "reason": {
           "type": [

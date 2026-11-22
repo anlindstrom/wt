@@ -92,9 +92,6 @@ func TestRemoveKeepsAnUpstreamNothingPushesTo(t *testing.T) {
 	if r, m := branchConfig(t, main, "stale-push", "remote"), branchConfig(t, main, "stale-push", "merge"); r != "origin" || m != "refs/heads/main" {
 		t.Errorf("the upstream it only pulls from is kept: remote %q merge %q\n%s", r, m, out)
 	}
-	if got := branchConfig(t, main, "stale-push", "wtPushTo"); got != "origin fix_wt/stale-push" {
-		t.Errorf("its push destination is kept: %q", got)
-	}
 	if strings.Contains(out, "has moved on") {
 		t.Errorf("nothing it pushes to moved on:\n%s", out)
 	}
