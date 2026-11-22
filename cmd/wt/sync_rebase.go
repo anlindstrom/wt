@@ -201,9 +201,18 @@ func newSyncRebaseCmd() *cobra.Command {
 			"moves it later, and the run fails saying how many were held. --force\n" +
 			"also moves a layer only an idle session or a process holds, never a dirty\n" +
 			"one. wt sync undo <work> puts back the line and every layer it moved.\n" +
-			"The line's branch is pushed as any other; each moved layer gets its push\n" +
-			"command, with a lease on the commit last fetched for it, and is not\n" +
-			"pushed. A line with a merge commit is refused before anything moves.\n\n" +
+			"Without --push each moved layer gets its push command, with a lease on\n" +
+			"the commit last fetched for it, and is not pushed. With --push (or a yes\n" +
+			"to the question) every moved layer and the line's branch go in one\n" +
+			"git push --atomic per remote, each over that lease: the commit the\n" +
+			"remote branch held when the run began, kept in the run's record. If a\n" +
+			"lease fails, nothing on that remote moves, the run names the branch\n" +
+			"that moved under it, and every local branch stays where the rebase put\n" +
+			"it (wt sync undo still puts the line back). A held layer, and a layer\n" +
+			"with nowhere safe to push, are named and left out; a remote that does\n" +
+			"not take --atomic is refused, never pushed branch by branch. Layers\n" +
+			"that push to different remotes get one atomic push each. A line with a\n" +
+			"merge commit is refused before anything moves.\n\n" +
 			"--stack also carries the side branches: the local branches cut from a\n" +
 			"commit of the line that are not on it, those stacked on them, and those\n" +
 			"above its top. wt sync <work> --stack lists each with where it forks.\n" +

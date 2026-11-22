@@ -243,6 +243,19 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    (`wtsync.TreeGuard`) on a fold, and moves each layer
    branch; a layer checked out in a worktree is moved there too, its files
    with it. A layer a holder holds is left, and named.
+5. **Push.** With `--push` (or a yes), `syncrun.PushStack` pushes the moved
+   layers and the line's branch in one `git push --atomic` per remote, each
+   ref over a `--force-with-lease` on the commit the record holds for it
+   (`StackRecord.Pushes`, read from `Own` before anything moved, so a resume
+   leases on the run's value, not on a later fetch). What it leaves out goes to
+   `OfferPush` as before; with `--no-push` or nobody to ask it does nothing. It
+   refuses the whole push, printing the per-branch commands, when the line was
+   not left pushable, the record has no leases, the line's branch has no safe
+   push, or a remote's push URL is no longer the one recorded. After a
+   transport failure it reads the pushed refs back (`wtsync.RemoteRefs`)
+   before saying where each branch is. The push and the read-back go to the
+   endpoint URL the record holds, not the remote's name, and wt moves the
+   remote-tracking refs itself.
 
 ### Stop, resume, undo
 

@@ -226,6 +226,9 @@ type StackRecord struct {
 	Sides []SideBranch `json:"sides,omitempty"`
 	Forks []LayerPlan  `json:"forks,omitempty"`
 	Moves []LayerMove  `json:"moves"`
+	// Pushes is where each layer and the line's own branch push and the
+	// commit each push is leased on, as read before anything moved.
+	Pushes []BranchPush `json:"pushes,omitempty"`
 }
 
 func stackRecordPath(mainRoot string, epoch int64) (string, error) {

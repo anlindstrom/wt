@@ -131,6 +131,11 @@ type resume struct {
 	// restored is set once the layers are settled when an edit run's line
 	// was put back at the tip the run found.
 	restored bool
+	// held is the failure a stack that held layers ends with, when the push
+	// still goes ahead.
+	held []string
+	// stack is what the layers' finish left, for the push of a --stack run.
+	stack *syncrun.Stack
 	// pinned is the tip the safety ref pins.
 	pinned   string
 	sessions agents.Sessions
@@ -630,9 +635,23 @@ func (r *resume) complete(res wtsync.Result) error {
 		failures = append(failures, name+" ("+stackFailure+")")
 	}
 	if len(failures) > 0 {
+		if r.pushesStack() && len(out.OwedFailures) == 0 {
+			// Layers held, as in a run: the ones that moved are still pushed,
+			// and the held ones are named in the failure the resume ends with.
+			r.held = failures
+			return nil
+		}
 		return fmt.Errorf("not completed: %s", strings.Join(failures, ", "))
 	}
 	return nil
+}
+
+// pushesStack reports a --stack resume that will push the layers it moved:
+// --push, or a question to put to somebody.
+func (r *resume) pushesStack() bool {
+	s := r.stack
+	asking := r.opts.Push == syncrun.PushAsk && r.opts.ConfirmPush != nil
+	return s != nil && s.Refusal == nil && !s.Restored && (r.opts.Push == syncrun.PushAlways || asking) && s.HasPush()
 }
 
 // proveAdopt proves the one shape --adopt takes over, before anything
@@ -871,6 +890,7 @@ func (r *resume) finishStack(res wtsync.Result) string {
 		Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked}))
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s; syncrun.SetFold(p, s) })
 	r.restored = s != nil && s.Restored
+	r.stack = s
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, r.name)
 		return "layer moves stopped"
@@ -885,10 +905,14 @@ func (r *resume) push() error {
 	r.j.Set(st.Branch, func(p *syncrun.UpParticipant) {
 		p.PushCommand, p.NoPushReason, p.FixCommand = syncrun.PushJSON(t, syncrun.PushOf(ctx, t))
 	})
-	pushed, failed, err := syncrun.OfferPush(ctx, r.w, r.opts.Push, r.opts.PushOptions, []syncrun.PushTarget{t})
+	// A --stack run's layers and its line go in one atomic push; OfferPush
+	// takes what that leaves.
+	left, leftMode, stackPushed, stackFailed := syncrun.PushStack(ctx, r.w, r.opts.Push, r.opts.PushOptions, r.stack, []syncrun.PushTarget{t})
+	pushed, failed, err := syncrun.OfferPush(ctx, r.w, leftMode, r.opts.PushOptions, left)
 	if err != nil {
 		return err
 	}
+	pushed, failed = append(pushed, stackPushed...), append(append(slices.Clone(r.held), failed...), stackFailed...)
 	r.j.Set(st.Branch, func(p *syncrun.UpParticipant) {
 		// An answer to the push question may have given it a destination.
 		if p.NoPushReason != nil {

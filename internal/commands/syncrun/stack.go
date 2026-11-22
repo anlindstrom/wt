@@ -156,6 +156,18 @@ type Stack struct {
 	// Fold is what a fold's tree guard compared, for the run's own
 	// `fold` field; it is not part of the look, so it is not serialized here.
 	Fold *StackFold `json:"-"`
+	// Push is what a run that pushed the line's moved layers did: one atomic
+	// push per remote, each branch with its lease and the commit pushed. Null
+	// in the look, and for a run that pushed nothing.
+	Push *StackPush `json:"push"`
+	// items is the moved layers that have somewhere safe to push, top the
+	// line's own branch's push, and work the worktree the line is held on:
+	// what PushStack takes.
+	items []stackItem
+	top   *wtsync.BranchPush
+	work  string
+	// declined is why the stack is not pushed as one, when it is not.
+	declined string
 }
 
 // StackFold is, for a run that folds the line (--autosquash, --edit or
@@ -558,6 +570,12 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	SetSides(s, rec.Sides, nil, "")
 	s.ContextGaps = GapsJSON(in.Gaps)
 	s.ContextUnchecked = append(s.ContextUnchecked, in.Unchecked...)
+	s.work = rec.Work
+	top := pushOf(rec, rec.Line.Branch)
+	s.top = &top
+	if len(rec.Pushes) == 0 {
+		s.declined = "the run's record has no leases (an older wt wrote it), and a lease read now would be on whatever was fetched since"
+	}
 	f := &stackFinisher{w: w, main: main, rec: rec, in: in, s: s}
 	if why := f.guardEdit(); why != "" {
 		return f.refuse(why)
@@ -830,7 +848,17 @@ func (f *stackFinisher) reportLayers(tips []wtsync.LayerTip) (held, moved int) {
 			}
 			fmt.Fprintf(w, "  ✓ %s  %s → %s  %s%s; %s\n", m.Branch, git.ShortID(m.Old, 7), git.ShortID(m.New, 7), kit.Count(t.Expect, "commit"), mapped, how)
 			moved++
+			bp := pushOf(rec, m.Branch)
+			if bp.Pushes() {
+				s.items = append(s.items, stackItem{BranchPush: bp, New: m.New})
+			}
 			push, noPush := layerPush(in.Own, m.Branch, m.Path, main)
+			if noPush == "" && !bp.Pushes() && bp.Why != "" {
+				// What the lease record read before the run is the push's
+				// say: a destination that was not safe to push then is not
+				// one now, whatever the state looks like after the move.
+				push, noPush = nil, bp.Why
+			}
 			l.PushCommand = push
 			if noPush != "" {
 				l.NoPushReason = jsonout.Strp(noPush)

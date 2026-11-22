@@ -241,6 +241,9 @@ type RunPlan struct {
 	// stackBroken is why the layers of a finished --stack rebase are not
 	// moved: their plan could not be recorded.
 	stackBroken string
+	// stack is what the finished --stack rebase left of its layers, for the
+	// push at the end of the run.
+	stack *syncrun.Stack
 	// stepSet is the steps wt sync steps runs, by their run line: what the
 	// last run left owed, or nil for every one (--all).
 	stepSet map[string]bool
@@ -408,10 +411,15 @@ func (r *RunPlan) run(works []string) error {
 			fmt.Fprintln(w, line)
 		}
 	}
-	pushed, pushFailed, err := syncrun.OfferPush(r.ctx, w, opts.Push, opts.PushOptions, r.Pushable)
+	// A --stack run pushes the line's moved layers and the line's own branch
+	// in one atomic push per remote; OfferPush takes what is left.
+	left, leftMode, pushed, pushFailed := syncrun.PushStack(r.ctx, w, opts.Push, opts.PushOptions, r.stack, r.Pushable)
+	more, moreFailed, err := syncrun.OfferPush(r.ctx, w, leftMode, opts.PushOptions, left)
 	if err != nil {
 		return err
 	}
+	pushed = append(pushed, more...)
+	pushFailed = append(pushFailed, moreFailed...)
 	r.Pushed = pushed
 	for _, t := range r.Pushable {
 		opts.Journal.Set(t.Branch, func(jp *syncrun.UpParticipant) {
