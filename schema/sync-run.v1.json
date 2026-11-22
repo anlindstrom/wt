@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.20.0",
+  "x-version": "1.21.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -223,7 +223,7 @@
     "stack": {
       "type": "object",
       "description": "Since 1.6.0: a stack held on one line, for --stack: the line from where it leaves trunk (base) to its tip (head), and its layer branches, bottom first. See docs/json.md.",
-      "required": ["branch", "base", "head", "autosquash", "layers", "top", "skipped", "sideBranches", "refusal", "edit", "contextGaps", "contextUnchecked"],
+      "required": ["branch", "base", "head", "autosquash", "layers", "top", "skipped", "sideBranches", "refusal", "edit", "contextGaps", "contextUnchecked", "push"],
       "properties": {
         "branch": { "type": "string", "description": "The line's own branch: the worktree named." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "Where the line leaves trunk: the merge base." },
@@ -236,7 +236,30 @@
         "refusal": { "type": ["string", "null"], "description": "The run's: why no layer moved: a new tip failed its check, or the fold changed the line's content. Null in the look, and when each layer was moved or held. The line itself is left rebased, and wt sync undo puts it back." },
         "edit": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stackEdit" }], "description": "Since 1.9.0: what a run with --edit did to the commit it stopped at. Null in the look and for any other run." },
         "contextGaps": { "type": "array", "items": { "$ref": "#/$defs/stackContextGap" }, "description": "Since 1.14.0: for a fold (--autosquash), in the look and in the run, every hunk of a fixup that does not apply behind its target, where autosquash puts it, because only a later commit of the line carries its context; line order. Empty for any other look or run. A warning: the run goes ahead." },
-        "contextUnchecked": { "type": "array", "items": { "type": "string" }, "description": "Since 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run." }
+        "contextUnchecked": { "type": "array", "items": { "type": "string" }, "description": "Since 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run." },
+        "push": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stackPush" }], "description": "Since 1.21.0: for a --stack run that pushed (--push, or yes to the question), what came of the push: every moved layer and the line's own branch that had somewhere safe to push, in one atomic push per remote, each over a lease on the commit the run recorded for its remote branch before it moved anything. Null in the look, and for a run that pushed nothing: with --no-push, a no to the question, or nobody to ask." }
+      }
+    },
+    "stackPush": {
+      "type": "object",
+      "description": "Since 1.21.0: the push of a --stack run. One atomic push (git push --atomic) per remote: if any lease on a remote fails, nothing on that remote moves, and every local branch stays where the rebase put it. Layers that push to different remotes get one push each; atomicity holds within a remote only.",
+      "required": ["branches"],
+      "properties": {
+        "branches": { "type": "array", "items": { "$ref": "#/$defs/stackPushed" }, "description": "Each branch that was in a push, in this order whatever the remotes: moved layers bottom first, then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason)." }
+      }
+    },
+    "stackPushed": {
+      "type": "object",
+      "description": "Since 1.21.0: one branch of a stack's push.",
+      "required": ["branch", "remote", "remoteBranch", "old", "new", "outcome", "why"],
+      "properties": {
+        "branch": { "type": "string", "description": "The local branch." },
+        "remote": { "type": "string", "description": "The remote it was pushed to." },
+        "remoteBranch": { "type": "string", "description": "Its name on the remote." },
+        "old": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The lease: the commit the remote branch had to be at, as last fetched before the run moved anything. Null for a branch that must not exist on the remote yet." },
+        "new": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit pushed: the branch's new tip." },
+        "outcome": { "enum": ["pushed", "leaseFailed", "notSent", "unknown"], "description": "pushed: the remote branch is at new. leaseFailed: git rejected it as stale: the remote branch was not at old any more, somebody pushed to it since; this is the branch that moved under the push. Any other refusal (a hook, a policy) is notSent, with git's own reason in why. notSent: nothing on its remote moved: another branch of the same push failed its lease, or the remote refused the push as a whole (a remote that does not accept --atomic is refused, never pushed branch by branch). unknown: the push ended in a transport failure (a timeout, a dropped connection) and the remote's own refs, read back, show the branch at neither old nor new, or could not be read: whether it moved is not known. A transport failure whose read-back shows the branch at new is pushed, and at old notSent." },
+        "why": { "type": ["string", "null"], "description": "For an outcome other than pushed, what git said. Null for pushed." }
       }
     },
     "stackContextGap": {
@@ -297,7 +320,7 @@
         "how": { "oneOf": [{ "type": "null" }, { "enum": ["ref", "worktree"] }], "description": "The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (in its worktree, under that worktree's lock: the same guarded update-ref, then its files follow with read-tree -m -u). For a layer in a worktree: update-ref, then read-tree -m -u <old> <new>." },
         "held": { "type": ["string", "null"], "description": "The run's: why the layer was held, or for needsRecovery what to look at. It is also held for a tip that moved during the run, or another run's lock on its worktree, which holds while that run's process runs, however long, and otherwise until the lock is 30 minutes old." },
         "moveCommand": { "type": ["string", "null"], "description": "The run's: what moves a held layer by hand." },
-        "pushCommand": { "oneOf": [{ "type": "null" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }], "description": "The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run does not push layers. Null otherwise." },
+        "pushCommand": { "oneOf": [{ "type": "null" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }], "description": "The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run pushes the layers it moved only with --push or a yes to the question, in one atomic push (push, since 1.21.0); without, this is the push to run by hand. Null otherwise." },
         "noPushReason": { "type": ["string", "null"], "description": "The run's: for a moved layer with no safe push command, why: no remote branch of its own yet, or the remote has commits the branch never had." },
         "note": { "type": ["string", "null"], "description": "The run's: what else happened to a moved layer, such as a checkout of it that landed during its move, at its new tip." }
       }

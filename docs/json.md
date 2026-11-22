@@ -156,8 +156,8 @@ generating types from it:
 | `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | 1.12.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
-| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.13.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
-| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.20.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.14.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.21.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
@@ -1895,6 +1895,15 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `stack.contextGaps[].needsSubject` | string | yes |  |
 | `stack.contextGaps[].message` | string | yes | The line wt prints for it: fixup moved ahead of its context: <path>:<lines> needs <sha> "<subject>", which comes later on the line. |
 | `stack.contextUnchecked` | array of string | yes | Since 1.11.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run. |
+| `stack.push` | object \| null | yes | Since 1.14.0: for a --stack run that pushed (--push, or yes to the question), what came of the push: every moved layer and the line's own branch that had somewhere safe to push, in one atomic push per remote, each over a lease on the commit the run recorded for its remote branch before it moved anything. Null in the look, and for a run that pushed nothing: with --no-push, a no to the question, or nobody to ask. |
+| `stack.push.branches` | array of object | yes | Each branch that was in a push, in this order whatever the remotes: moved layers bottom first, then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason). |
+| `stack.push.branches[].branch` | string | yes | The local branch. |
+| `stack.push.branches[].remote` | string | yes | The remote it was pushed to. |
+| `stack.push.branches[].remoteBranch` | string | yes | Its name on the remote. |
+| `stack.push.branches[].old` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The lease: the commit the remote branch had to be at, as last fetched before the run moved anything. Null for a branch that must not exist on the remote yet. |
+| `stack.push.branches[].new` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit pushed: the branch's new tip. |
+| `stack.push.branches[].outcome` | `"pushed"` \| `"leaseFailed"` \| `"notSent"` \| `"unknown"` | yes | pushed: the remote branch is at new. leaseFailed: git rejected it as stale: the remote branch was not at old any more, somebody pushed to it since; this is the branch that moved under the push. Any other refusal (a hook, a policy) is notSent, with git's own reason in why. notSent: nothing on its remote moved: another branch of the same push failed its lease, or the remote refused the push as a whole (a remote that does not accept --atomic is refused, never pushed branch by branch). unknown: the push ended in a transport failure (a timeout, a dropped connection) and the remote's own refs, read back, show the branch at neither old nor new, or could not be read: whether it moved is not known. A transport failure whose read-back shows the branch at new is pushed, and at old notSent. |
+| `stack.push.branches[].why` | string \| null | yes | For an outcome other than pushed, what git said. Null for pushed. |
 <!-- json-docs:end -->
 
 A worktree its own remote refuses (`ownRemote.blocks` set, or its fetch failed)
@@ -2052,7 +2061,7 @@ value for results saved before that), and:
 | `worktrees[].stack.layers[].how` | `"ref"` \| `"worktree"` \| `null` | yes | The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (in its worktree, under that worktree's lock: the same guarded update-ref, then its files follow with read-tree -m -u). For a layer in a worktree: update-ref, then read-tree -m -u <old> <new>. |
 | `worktrees[].stack.layers[].held` | string \| null | yes | The run's: why the layer was held, or for needsRecovery what to look at. It is also held for a tip that moved during the run, or another run's lock on its worktree, which holds while that run's process runs, however long, and otherwise until the lock is 30 minutes old. |
 | `worktrees[].stack.layers[].moveCommand` | string \| null | yes | The run's: what moves a held layer by hand. |
-| `worktrees[].stack.layers[].pushCommand` | array of string \| null, at least 1 items | yes | The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run does not push layers. Null otherwise. |
+| `worktrees[].stack.layers[].pushCommand` | array of string \| null, at least 1 items | yes | The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run pushes the layers it moved only with --push or a yes to the question, in one atomic push (push, since 1.21.0); without, this is the push to run by hand. Null otherwise. |
 | `worktrees[].stack.layers[].noPushReason` | string \| null | yes | The run's: for a moved layer with no safe push command, why: no remote branch of its own yet, or the remote has commits the branch never had. |
 | `worktrees[].stack.layers[].note` | string \| null | yes | The run's: what else happened to a moved layer, such as a checkout of it that landed during its move, at its new tip. |
 | `worktrees[].stack.top` | object | yes | Since 1.17.0: the line's own branch, the top of the stack: the last row of the look's layer table. Not one of layers, which are the branches a run moves after its rebase; the rebase itself moves the top. Its fields: branch, oldTip, commits (from the line's base, its tip included; 0 for a branch with nothing ahead of trunk), subject (its tip's), worktree (where it is checked out). |
@@ -2107,6 +2116,15 @@ value for results saved before that), and:
 | `worktrees[].stack.contextGaps[].needsSubject` | string | yes |  |
 | `worktrees[].stack.contextGaps[].message` | string | yes | The line wt prints for it: fixup moved ahead of its context: <path>:<lines> needs <sha> "<subject>", which comes later on the line. |
 | `worktrees[].stack.contextUnchecked` | array of string | yes | Since 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run. |
+| `worktrees[].stack.push` | object \| null | yes | Since 1.21.0: for a --stack run that pushed (--push, or yes to the question), what came of the push: every moved layer and the line's own branch that had somewhere safe to push, in one atomic push per remote, each over a lease on the commit the run recorded for its remote branch before it moved anything. Null in the look, and for a run that pushed nothing: with --no-push, a no to the question, or nobody to ask. |
+| `worktrees[].stack.push.branches` | array of object | yes | Each branch that was in a push, in this order whatever the remotes: moved layers bottom first, then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason). |
+| `worktrees[].stack.push.branches[].branch` | string | yes | The local branch. |
+| `worktrees[].stack.push.branches[].remote` | string | yes | The remote it was pushed to. |
+| `worktrees[].stack.push.branches[].remoteBranch` | string | yes | Its name on the remote. |
+| `worktrees[].stack.push.branches[].old` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The lease: the commit the remote branch had to be at, as last fetched before the run moved anything. Null for a branch that must not exist on the remote yet. |
+| `worktrees[].stack.push.branches[].new` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit pushed: the branch's new tip. |
+| `worktrees[].stack.push.branches[].outcome` | `"pushed"` \| `"leaseFailed"` \| `"notSent"` \| `"unknown"` | yes | pushed: the remote branch is at new. leaseFailed: git rejected it as stale: the remote branch was not at old any more, somebody pushed to it since; this is the branch that moved under the push. Any other refusal (a hook, a policy) is notSent, with git's own reason in why. notSent: nothing on its remote moved: another branch of the same push failed its lease, or the remote refused the push as a whole (a remote that does not accept --atomic is refused, never pushed branch by branch). unknown: the push ended in a transport failure (a timeout, a dropped connection) and the remote's own refs, read back, show the branch at neither old nor new, or could not be read: whether it moved is not known. A transport failure whose read-back shows the branch at new is pushed, and at old notSent. |
+| `worktrees[].stack.push.branches[].why` | string \| null | yes | For an outcome other than pushed, what git said. Null for pushed. |
 | `worktrees[].fold` | object \| null | yes | Since 1.18.0: for a --stack run that folds the line (--autosquash, --edit, or wt sync steps), what it folded on and what its tree guard compared. Null for any other run. |
 | `worktrees[].fold.inPlace` | boolean | yes | The line is folded on its own base, not moved onto a target. |
 | `worktrees[].fold.base` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's own base: what an in-place fold rebases onto. |
@@ -2194,6 +2212,33 @@ what it sees; a run (`wt sync rebase <work> --stack --json`) fills the rest.
 A moved layer has a safety ref and a result ref under the run's epoch, so
 `wt sync undo <line>` puts it back with the line; a held one has none and is no
 part of that undo.
+
+#### `push` — a stack's push
+
+Since `sync` 1.14.0 and `sync-run` 1.21.0. A `--stack` run that pushes (`--push`,
+a yes to the question, or the push of a `wt sync resume`) pushes the layers it
+moved and the line's own branch in one `git push --atomic` per remote. Each ref
+carries `--force-with-lease=refs/heads/<remoteBranch>:<old>`, `old` being the
+commit the remote branch held when the run began (the remote-tracking value as
+last fetched, kept in the run's record, so a resume leases on it too, not on a
+later fetch), and pushes `<new>:refs/heads/<remoteBranch>`. A line's own branch
+with no remote branch yet has a null `old`: its lease says the branch must not
+exist.
+
+`branches` lists what was in a push: the moved layers bottom first, then the
+line. A held layer and a layer with nowhere safe to push are not in it: they are
+named in `layers[]` (`held`, `noPushReason`), as for a run that pushes nothing.
+Layers that push to different remotes get one push each, and atomicity holds
+within a remote only.
+
+If a lease fails, nothing on that remote moves: the branch that moved under its
+lease is `leaseFailed`, the others of that push `notSent`, every local branch
+stays where the rebase put it and `wt sync undo <line>` puts the line back, as
+for any push that fails. A remote that does not accept `--atomic` is refused the
+same way, all `notSent`; wt never falls back to one push per branch. Any other refusal (a hook, a policy) is `notSent` with git's reason. After a transport failure no outcome is assumed: wt reads the pushed refs back from the remote, and reports each branch `pushed`, `notSent`, or `unknown` when the refs say neither or cannot be read.
+
+A stack is pushed as a whole or not at all: if the line was not left pushable (a step or check failed or is owed), the record has no leases (an older wt wrote it), the line's own branch has nowhere safe to push, or a remote no longer pushes to the one URL the run recorded, nothing is pushed, `push` is null, and the per-branch commands print as they do without `--push`. A layer whose remote branch is at a commit it never held, even a patch-equivalent one such as a teammate's reworded commit, is left out like one with nowhere to push. `push` is
+null in the look, and for a run that pushed nothing.
 
 #### Side branches — what hangs off the line
 
@@ -3033,3 +3078,4 @@ change made it.
 | `sync-run` 1.19.0 | `eachCommit` gains `targets`: the run's `--each-commit=targets` mode, checks at each layer's tip and at each commit a fixup folded into |
 | `sync-run` 1.20.0 | [`timings`](#timings--where-the-time-went) on each participant: the run's wall time, how many times each check and step ran and its total, and the slowest runs; `elapsedMs` on each [`layerSteps`](#layersteps--a-step-at-every-layer-tip) entry. All in milliseconds |
 | `remove-plan` 1.6.0, `remove` 1.6.0 | `staleRoutes` (on `branch` in the plan, top level in the result): for a kept branch, each remote branch it could push to that holds commits it lacks, as last fetched, with how (`via`), whether the removal takes the route away (`dropped`) and whether it forces (`forces`). The problem code `staleForcedPush` |
+| `sync` 1.14.0, `sync-run` 1.21.0 | [`push`](#push--a-stacks-push) on `stack`: for a `--stack` run that pushed, each moved layer and the line's own branch with the lease, the commit pushed and what came of it, in one atomic push per remote; null in the look and when nothing was pushed |

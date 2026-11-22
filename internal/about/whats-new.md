@@ -14,6 +14,17 @@ sets it again. What git itself would still do is said too. A `+` push refspec
 that would force it refuses the removal before anything changes. The commits
 stay on the branch. `--json` adds `staleRoutes` (`remove-plan` and `remove` 1.6.0).
 
+## 2026-11-22 12:40 — wt sync rebase --stack --push pushes the whole stack at once
+
+With `--push` (or a yes to the question), a `--stack` run, and the push a
+`wt sync resume` ends with, now push every moved layer and the line's branch in
+one `git push --atomic` per remote, each over a lease on what the remote held
+when the run began. If one lease fails nothing on that remote moves and the run
+names the branch that moved under it; every local branch stays where the rebase
+put it, and `wt sync undo` still puts the line back. Held layers and layers with
+nowhere to push are named and left out. `--json` gives each pushed branch's
+remote, lease and new commit under `stack.push`.
+
 ## 2026-11-21 19:05 — wt sync no longer takes --rebase, --resume or --undo
 
 The verbs spelled as flags at the end of a `wt sync` line are gone, with the

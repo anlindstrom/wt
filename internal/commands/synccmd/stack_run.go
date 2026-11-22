@@ -194,7 +194,10 @@ func (r *RunPlan) stackRecord(b string, p *participant, req wtsync.Request) (*wt
 		return nil, nil
 	}
 	rec := &wtsync.StackRecord{Epoch: r.epoch, Work: p.work, Branch: b, Path: p.wt.Path, Onto: req.Onto, OntoRef: r.ontoRef(), Upstream: req.Upstream,
-		Autosquash: st.Autosquash, InPlace: r.opts.Steps != nil, Force: r.opts.Force, Line: r.line, Edit: r.edit, Sides: r.sides}
+		Autosquash: st.Autosquash, InPlace: r.opts.Steps != nil, Force: r.opts.Force, Line: r.line, Edit: r.edit, Sides: r.sides,
+		// Before anything moves: the lease of each push is what the remote
+		// held when the run began.
+		Pushes: syncrun.PushesOf(r.own, r.line)}
 	if err := wtsync.WriteStackRecord(r.ctx.Repo.MainRoot, rec); err != nil {
 		return rec, err
 	}
@@ -250,6 +253,7 @@ func (r *RunPlan) finishStack(b string, p *participant, res wtsync.Result) (rest
 		OldTip: res.OldTip, Own: r.own, Stopped: wtsync.StopPaths(res.Stops), Confirmed: res.Replay != nil && res.Replay.Confirmed,
 		Gaps: r.gaps, Unchecked: r.gapsUnchecked, AfterMove: st.AfterMove, Between: st.Between}))
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) { jp.Stack = s; syncrun.SetFold(jp, s) })
+	r.stack = s
 	restored = s != nil && s.Restored
 	if ferr != nil {
 		fmt.Fprintf(r.w, "  ✗ the layer moves stopped: %v; wt sync undo %s puts back the line and every layer moved\n", ferr, p.work)
