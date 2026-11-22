@@ -166,6 +166,10 @@ type Stack struct {
 	items []stackItem
 	top   *wtsync.BranchPush
 	work  string
+	// epoch is the run's, for the record a push left for later is kept under.
+	epoch int64
+	// kept is the record KeepStackPush wrote for this run, for SettleStackPush.
+	kept *wtsync.PushRecord
 	// declined is why the stack is not pushed as one, when it is not.
 	declined string
 }
@@ -570,7 +574,7 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 	SetSides(s, rec.Sides, nil, "")
 	s.ContextGaps = GapsJSON(in.Gaps)
 	s.ContextUnchecked = append(s.ContextUnchecked, in.Unchecked...)
-	s.work = rec.Work
+	s.work, s.epoch = rec.Work, rec.Epoch
 	top := pushOf(rec, rec.Line.Branch)
 	s.top = &top
 	if len(rec.Pushes) == 0 {

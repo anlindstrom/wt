@@ -4,6 +4,17 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-22 22:40 — wt sync push <work> --stack: push a line you rebased with --no-push
+
+After `wt sync rebase <work> --stack --no-push` (or a no to the question), the
+moved layers and the line can be pushed later, once you have checked the result:
+`wt sync push <work> --stack` sends them in one atomic push per remote, over the
+leases the run recorded, and fetches nothing. It refuses before pushing when a
+branch moved since the run, a remote moved the leases are stale for (nothing
+on that remote moves), or there is nothing recorded. `--dry-run` lists what it
+would push, `--yes` skips the question, `--json` gives `stack.push` as a run
+does (`sync-run` 1.22.0). `wt sync undo` and a new run of the line drop the record.
+
 ## 2026-11-22 22:10 — wt new cuts from the newer of local trunk and origin
 
 `wt new` now fetches trunk first, as `wt sync` does (`--no-fetch` skips it, and

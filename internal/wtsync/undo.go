@@ -88,6 +88,10 @@ func Undo(mainRoot string, worktrees []repo.Worktree, listed []agents.Agent, bra
 	if ferr := ForgetStack(mainRoot, run[0].Epoch); ferr != nil {
 		derr = errors.Join(derr, fmt.Errorf("everything is back, but the stack's markers or record are left: %w", ferr))
 	}
+	// The push a --no-push run left for later names tips that are gone now.
+	if ferr := ForgetPushRecordOfRun(mainRoot, run[0].Epoch); ferr != nil {
+		derr = errors.Join(derr, fmt.Errorf("everything is back, but the record of the push left for later could not be removed: %w", ferr))
+	}
 	return out, derr
 }
 

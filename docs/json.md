@@ -1,7 +1,7 @@
 # wt's JSON output
 
 `wt config`, `wt status`, `wt up`, `wt sweep`, `wt sync` and its verbs `rebase`,
-`resume`, `undo` and `steps`, `wt new`,
+`resume`, `undo`, `push` and `steps`, `wt new`,
 `wt checkout`, `wt remove`, `wt restore`, `wt purge`, `wt refs` and
 `wt session list`, `send` and `stop` print JSON on stdout when given `--json`,
 for tools that drive wt (a git client, an editor, a script). Their human output is
@@ -157,7 +157,7 @@ generating types from it:
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
 | `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.14.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
-| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.21.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.22.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
@@ -1973,7 +1973,7 @@ value for results saved before that), and:
 |---|---|---|---|
 | `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
 | `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows. |
-| `command` | `"sync rebase"` \| `"sync run"` \| `"sync resume"` \| `"sync undo"` \| `"sync steps"` | yes | The verb. sync steps since 1.7.0. sync rebase since 1.3.0: before it the verb was spelled wt sync run and named itself sync run. No wt prints sync run since 1.4.1; the value stays for results saved before it. |
+| `command` | `"sync rebase"` \| `"sync run"` \| `"sync resume"` \| `"sync undo"` \| `"sync steps"` \| `"sync push"` | yes | The verb. sync push since 1.22.0: the push of a --stack line rebased earlier with --no-push; its one worktree row carries stack.push, and result pushed when anything went. sync steps since 1.7.0. sync rebase since 1.3.0: before it the verb was spelled wt sync run and named itself sync run. No wt prints sync run since 1.4.1; the value stays for results saved before it. |
 | `repo` | string \| null | yes | The main checkout, as wt sweep --json names the repository; null when the verb stopped before reading it. |
 | `trunk` | string \| null | yes |  |
 | `trunkRef` | string \| null | yes |  |
@@ -1996,7 +1996,7 @@ value for results saved before that), and:
 | `worktrees[].work` | string | yes | The work name, as wt list prints it. |
 | `worktrees[].branch` | string | yes | The worktree's branch. |
 | `worktrees[].path` | string | yes | The worktree's absolute path. |
-| `worktrees[].result` | `"rebased"` \| `"fastForwarded"` \| `"rebasedStepFailed"` \| `"skipped"` \| `"refused"` \| `"notRun"` \| `"restored"` \| `"needsRecovery"` \| `"handedOver"` \| `"interrupted"` \| `"undone"` | yes | rebased, fastForwarded, rebasedStepFailed, needsRecovery, handedOver, interrupted and undone changed the branch or worktree; skipped, refused, notRun and restored left them as they were. fastForwarded (since 1.2.0): the branch was behind its own remote and has nothing to rebase at the remote's commit, so the run moved it there and that is all; after is that commit, pushCommand is null, undoCommand puts it back. |
+| `worktrees[].result` | `"rebased"` \| `"fastForwarded"` \| `"rebasedStepFailed"` \| `"skipped"` \| `"refused"` \| `"notRun"` \| `"restored"` \| `"needsRecovery"` \| `"handedOver"` \| `"interrupted"` \| `"undone"` \| `"pushed"` | yes | pushed (since 1.22.0, wt sync push only): the recorded branches were sent, at least one, and nothing was rebased; refused is a push that moved nothing. rebased, fastForwarded, rebasedStepFailed, needsRecovery, handedOver, interrupted and undone changed the branch or worktree; skipped, refused, notRun and restored left them as they were. fastForwarded (since 1.2.0): the branch was behind its own remote and has nothing to rebase at the remote's commit, so the run moved it there and that is all; after is that commit, pushCommand is null, undoCommand puts it back. |
 | `worktrees[].reason` | string \| null | yes |  |
 | `worktrees[].before` | string \| null, matching `^[0-9a-f]{40,64}$` | yes |  |
 | `worktrees[].after` | string \| null, matching `^[0-9a-f]{40,64}$` | yes |  |
@@ -2193,7 +2193,10 @@ the commit, and the folds are the ones the plan lists, so a fixup git left out
 because trunk carries its patch is named. The commits an `--edit` amend empties
 on purpose are in neither list, and a run whose line was put back reports neither.
 
-`result` has `wt up`'s values and one more, `undone`: `wt sync undo` put the
+`result` has `wt up`'s values and two more. `pushed` (`wt sync push <work> --stack`,
+`sync-run` 1.22.0): the line's recorded branches were sent, with `stack.push` as for
+a run that pushed; a dry run is `skipped`, and a push that sent nothing `refused`
+with its `reason`. The other is `undone`: `wt sync undo` put the
 branch back at its safety ref, or aborted its handed-over rebase. A branch undo
 finds at its old tip already is `skipped`; one it aborted but could not rewind
 is `needsRecovery`. `outcome` follows the same rules, with `undone` counting as
@@ -2241,6 +2244,18 @@ The push goes to the push URL the run recorded with the leases, not to the remot
 
 A stack is pushed as a whole or not at all: if the line was not left pushable (a step or check failed or is owed), the record has no leases (an older wt wrote it), the line's own branch has nowhere safe to push, or a remote no longer pushes to the one URL the run recorded, nothing is pushed, `push` is null, and the per-branch commands print as they do without `--push`. A layer whose remote branch is at a commit it never held, even a patch-equivalent one such as a teammate's reworded commit, is left out like one with nowhere to push. `push` is
 null in the look, and for a run that pushed nothing.
+
+`wt sync push <work> --stack --json` (`sync-run` 1.22.0, `command` `sync push`)
+reports the push a `--stack` run left for later (`--no-push`, a no to the
+question, nobody to ask) in this same shape: one worktree row, the line's, whose
+`stack.push` is the push over the leases the run recorded, with `branches`,
+`old` and `new` as above. `stack.skipped` names the layers the run left out
+(held, or nowhere safe to push), `reason` saying why; the rest of `stack` is what
+the record kept of the line and `layers` is empty, since the push moves none.
+Nothing is fetched. Before anything is pushed it is refused (`refusal`, result
+`refused`) when the line has no record, a branch of it is no longer at the tip the
+run left, or a remote no longer pushes to the recorded URL; a failed lease moves
+nothing on that remote and the record is kept for what was not sent.
 
 #### Side branches — what hangs off the line
 
@@ -3090,3 +3105,4 @@ change made it.
 | `sync-run` 1.20.0 | [`timings`](#timings--where-the-time-went) on each participant: the run's wall time, how many times each check and step ran and its total, and the slowest runs; `elapsedMs` on each [`layerSteps`](#layersteps--a-step-at-every-layer-tip) entry. All in milliseconds |
 | `remove-plan` 1.6.0, `remove` 1.6.0 | `staleRoutes` (on `branch` in the plan, top level in the result): for a kept branch, each remote branch it could push to that holds commits it lacks, as last fetched, with how (`via`), whether the removal takes the route away (`dropped`) and whether it forces (`forces`). The problem code `staleForcedPush` |
 | `sync` 1.14.0, `sync-run` 1.21.0 | [`push`](#push--a-stacks-push) on `stack`: for a `--stack` run that pushed, each moved layer and the line's own branch with the lease, the commit pushed and what came of it, in one atomic push per remote; null in the look and when nothing was pushed |
+| `sync-run` 1.22.0 | `wt sync push <work> --stack --json`: `command` gains `sync push` and `result` gains `pushed`; the row's `stack.push` is the push a `--no-push` run left for later |

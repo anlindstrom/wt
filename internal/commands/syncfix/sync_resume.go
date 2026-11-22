@@ -907,7 +907,11 @@ func (r *resume) push() error {
 	})
 	// A --stack run's layers and its line go in one atomic push; OfferPush
 	// takes what that leaves.
+	// The resume still holds the line's lock: what may be left unpushed is
+	// kept first, and what the push sends taken out of it after.
+	syncrun.KeepStackPush(ctx, r.w, r.stack, []syncrun.PushTarget{t}, "")
 	left, leftMode, stackPushed, stackFailed := syncrun.PushStack(ctx, r.w, r.opts.Push, r.opts.PushOptions, r.stack, []syncrun.PushTarget{t})
+	syncrun.SettleStackPush(ctx, r.w, r.stack)
 	pushed, failed, err := syncrun.OfferPush(ctx, r.w, leftMode, r.opts.PushOptions, left)
 	if err != nil {
 		return err

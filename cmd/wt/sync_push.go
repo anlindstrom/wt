@@ -6,9 +6,63 @@ import (
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
+	"github.com/anlindstrom/wt/internal/commands/syncfix"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
 	"github.com/spf13/cobra"
 )
+
+func newSyncPushCmd() *cobra.Command {
+	var stack, dryRun, yes, asJSON bool
+	push := &cobra.Command{
+		Use:   "push <work> --stack",
+		Short: "Push a --stack line rebased earlier with --no-push, over the run's leases",
+		Long: "Push, in one atomic push per remote, the layers and the line's own branch\n" +
+			"that a wt sync rebase --stack run moved and left unpushed (--no-push, a no\n" +
+			"to the question, or nobody to ask): for when the result is checked first\n" +
+			"and pushed after. Each branch goes over a --force-with-lease on the commit\n" +
+			"the run recorded for its remote branch, so nothing is fetched and nothing\n" +
+			"a teammate pushed since is replaced: if any remote branch moved, nothing on\n" +
+			"that remote moves and the branch is named.\n\n" +
+			"The run keeps a record of this for the line, beside its other state, until\n" +
+			"the push sends everything in it, wt sync undo puts the line back, or a new\n" +
+			"run of the line replaces it. A line with no record is refused. It is also\n" +
+			"refused, before anything is pushed, when a branch of the record is no\n" +
+			"longer at the tip the run left it at (somebody worked on it since), or a\n" +
+			"remote no longer pushes to the URL the leases were taken for. Layers the\n" +
+			"run held, or that had nowhere safe to push, are left out and named.\n\n" +
+			"It asks first on a terminal (default no); --yes skips the question, and\n" +
+			"with no terminal and no --yes nothing is pushed. --dry-run says what each\n" +
+			"branch would push, lease \u2192 new, and changes nothing. --json prints one\n" +
+			"result object on stdout, as wt sync rebase --json does: the worktree's\n" +
+			"stack.push is the push, as for a run that pushed.",
+		Example: "  wt sync rebase login-crash --stack --no-push   # rebase, check, then\n" +
+			"  wt sync push login-crash --stack --dry-run     # what it would push\n" +
+			"  wt sync push login-crash --stack --yes         # push it",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeWork,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !stack {
+				return usagef("wt sync push pushes a --stack line: add --stack")
+			}
+			return withVerbContext(cmd, args, "sync push", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
+				opts := syncfix.PushLaterOptions{DryRun: dryRun, Journal: j}
+				opts.Push = syncrun.PushAsk
+				switch {
+				case yes:
+					opts.Push = syncrun.PushAlways
+				case canAsk(cmd):
+					opts.ConfirmPush = confirmPush(newPrompter(cmd.InOrStdin(), cmd.OutOrStdout()))
+				}
+				return syncfix.SyncPushLater(ctx, args[0], opts, cmd.OutOrStdout())
+			})
+		},
+	}
+	push.Flags().BoolVar(&stack, "stack", false, "push the line a --stack run left for later")
+	push.Flags().BoolVar(&dryRun, "dry-run", false, "say what would be pushed and change nothing")
+	push.Flags().BoolVarP(&yes, "yes", "y", false, "do not ask first")
+	push.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
+	return push
+}
 
 func newSyncPushToCmd() *cobra.Command {
 	var unset bool
@@ -34,9 +88,11 @@ func newSyncPushToCmd() *cobra.Command {
 			"pushed when they rename one that pushed under its own name, so its\n" +
 			"pushes keep going where its pull request is. wt new gives its branch no\n" +
 			"upstream.\n\n" +
-			"wt pushes at the end of a rebase and at no other time. For a branch with\n" +
-			"something to push now, this command prints the push to run by hand:\n" +
-			"after a run left a branch unpushed, that line is what pushes it.\n\n" +
+			"wt pushes at the end of a rebase, and for a --stack line rebased with\n" +
+			"--no-push, when wt sync push <work> --stack is run; at no other time.\n" +
+			"For a branch with something to push now, this command prints the push to\n" +
+			"run by hand: after a run left a branch unpushed, that line is what\n" +
+			"pushes it.\n\n" +
 			"<remote>/<branch> is read against the remotes that exist, the longest\n" +
 			"remote name first. Trunk is refused, and so is anything but a plain\n" +
 			"branch name. The record is branch.<name>.wtPushTo in the repository's\n" +

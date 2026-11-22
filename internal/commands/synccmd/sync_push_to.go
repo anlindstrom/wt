@@ -47,7 +47,7 @@ func SyncPushTo(ctx *kit.Context, work, dest string, unset bool, w io.Writer) er
 		if _, there, err := ctx.Repo.ResolveRef(to.Tracking); err == nil && !there {
 			fmt.Fprintf(w, "  %s is not there as last fetched: the first push makes it\n", to.Ref())
 		}
-		// wt pushes at the end of a rebase and at no other time, so a
+		// wt pushes at the end of a rebase (and for a --stack line at wt sync push), so a
 		// branch with something to push now is pushed by this line or not
 		// at all until trunk moves again.
 		if state.State != wtsync.OwnInSync {
