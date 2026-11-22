@@ -117,6 +117,9 @@ type StackOptions struct {
 	// BeforeRebase is a test's hook between the read of the line and its
 	// rebase, with the worktree locked. Nil in a real run.
 	BeforeRebase func()
+	// BeforePush is a test's hook after every worktree is done and its lock
+	// released, before the run pushes. Nil in a real run.
+	BeforePush func()
 	// Between is a test's hook into each stage of one layer move
 	// (wtsync.MoveOptions.Between). Nil in a real run.
 	Between func(stage string, m wtsync.LayerMove) error
@@ -411,9 +414,14 @@ func (r *RunPlan) run(works []string) error {
 			fmt.Fprintln(w, line)
 		}
 	}
+	if st := opts.Stack; st != nil && st.BeforePush != nil {
+		st.BeforePush()
+	}
 	// A --stack run pushes the line's moved layers and the line's own branch
 	// in one atomic push per remote; OfferPush takes what is left.
 	left, leftMode, pushed, pushFailed := syncrun.PushStack(r.ctx, w, opts.Push, opts.PushOptions, r.stack, r.Pushable)
+	// What it left unpushed is kept, with its leases, for wt sync push --stack.
+	syncrun.SettleStackPush(r.ctx, w, r.stack)
 	more, moreFailed, err := syncrun.OfferPush(r.ctx, w, leftMode, opts.PushOptions, left)
 	if err != nil {
 		return err
@@ -1421,6 +1429,16 @@ func (r *RunPlan) settleRestored(b string, p *participant, res wtsync.Result) {
 // owed.
 func (r *RunPlan) finishRebase(b string, p *participant, res wtsync.Result, ontoLabel string) {
 	ctx, w, j := r.ctx, r.w, r.opts.Journal
+	// What a --stack run may leave unpushed is kept before the lock goes
+	// (the caller's deferred release), from the tip the run left, and only
+	// for a line left pushable: a step failed or owed leaves none.
+	var pushable []syncrun.PushTarget
+	var tip string
+	defer func() {
+		if r.opts.Stack != nil && r.stack != nil {
+			syncrun.KeepStackPush(ctx, w, r.stack, pushable, tip)
+		}
+	}()
 	line := fmt.Sprintf("  ✓ rebased %s onto %s", kit.Count(res.Replayed, "commit"), ontoLabel)
 	if res.SignaturesDropped > 0 {
 		line += fmt.Sprintf(", %s dropped", kit.Count(res.SignaturesDropped, "signature"))
@@ -1475,6 +1493,7 @@ func (r *RunPlan) finishRebase(b string, p *participant, res wtsync.Result, onto
 	r.settle("rebased", "", "")
 	t := syncrun.PushTarget{Work: p.work, Branch: b, Path: p.wt.Path}
 	r.Pushable = append(r.Pushable, t)
+	pushable, tip = []syncrun.PushTarget{t}, after
 	j.Set(b, func(jp *syncrun.UpParticipant) {
 		jp.Result, jp.After = syncrun.ResultRebased, jsonout.Strp(after)
 		jp.PushCommand, jp.NoPushReason, jp.FixCommand = syncrun.PushJSON(t, syncrun.PushOf(ctx, t))

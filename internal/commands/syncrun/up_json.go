@@ -50,6 +50,9 @@ const (
 	// ResultUndone is a branch wt sync undo put back at its safety ref, or
 	// whose handed-over rebase it aborted. Only wt sync undo reports it.
 	ResultUndone = "undone"
+	// ResultPushed: wt sync push sent the line's recorded branches; nothing
+	// was rebased.
+	ResultPushed = "pushed"
 )
 
 // What a deferred step came to, for wt sync --json.
@@ -584,7 +587,7 @@ func OutcomeOf(ps []*SyncParticipant, failedEarly bool) string {
 	finished, changed := true, false
 	for _, p := range ps {
 		switch p.Result {
-		case ResultRebased, ResultFastForwarded, ResultUndone:
+		case ResultRebased, ResultFastForwarded, ResultUndone, ResultPushed:
 			changed = true
 		case ResultSkipped:
 		case ResultRebasedStepFailed, ResultNeedsRecovery, ResultHandedOver, ResultInterrupted:

@@ -59,6 +59,9 @@ func newSyncCmd() *cobra.Command {
 			"  finish  wt sync resume <work>     continue the rebase a run left at a\n" +
 			"                                    conflict that is yours, then push,\n" +
 			"                                    asked first as for rebase\n" +
+			"          wt sync push <work> --stack\n" +
+			"                                    push a --stack line rebased with\n" +
+			"                                    --no-push, over the run's leases\n" +
 			"          wt sync undo <work>       put back every ref that run moved\n" +
 			"          wt sync steps <work>      run the steps a run left owed, in\n" +
 			"                                    place, without rebasing onto trunk\n" +
@@ -216,7 +219,7 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave out the branches that fork from the line or sit above its top; a run then never moves them")
 	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk")
 	sel.add(sync, true)
-	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
+	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncPushCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
 	return sync
 }
 

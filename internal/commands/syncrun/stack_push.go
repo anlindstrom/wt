@@ -142,16 +142,8 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	}
 	items := append(slices.Clone(s.items), stackItem{BranchPush: *s.top, New: head, Top: true})
 	remotes := byRemote(items)
-	for _, remote := range slices.Sorted(maps.Keys(remotes)) {
-		now, err := wtsync.PushEndpoint(ctx.Repo.MainRoot, remote)
-		if err != nil {
-			return refuse(err.Error())
-		}
-		for _, it := range remotes[remote] {
-			if it.Endpoint != now {
-				return refuse(fmt.Sprintf("%s pushed to %s when the run took its leases and pushes to %s now", remote, it.Endpoint, now))
-			}
-		}
+	if err := checkEndpoints(ctx.Repo.MainRoot, remotes); err != nil {
+		return refuse(err.Error())
 	}
 	rest = slices.DeleteFunc(slices.Clone(targets), func(t PushTarget) bool { return t == *top })
 	fmt.Fprintln(w)
@@ -166,16 +158,7 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 			return targets, PushNever, nil, nil
 		}
 	}
-	if len(remotes) > 1 {
-		fmt.Fprintf(w, "  the branches push to %d remotes: one atomic push per remote; a push is atomic within its remote only\n", len(remotes))
-	}
-	results := map[string]StackPushed{}
-	allIn := true
-	for _, remote := range slices.Sorted(maps.Keys(remotes)) {
-		got, ok := pushGroup(ctx, w, remote, remotes[remote], s.work)
-		allIn = ok && allIn
-		maps.Copy(results, got)
-	}
+	results, allIn := pushRemotes(ctx, w, remotes, s.work)
 	// In item order, whatever the remotes: layers bottom first, then the line.
 	s.Push = &StackPush{Branches: []StackPushed{}}
 	for _, it := range items {
@@ -188,6 +171,39 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 		failed = append(failed, s.work+" (stack push failed)")
 	}
 	return rest, restMode, pushed, failed
+}
+
+// checkEndpoints holds each remote to what the leases were recorded for: it
+// has one push URL, and it is the one every branch of it was recorded with.
+func checkEndpoints(main string, remotes map[string][]stackItem) error {
+	for _, remote := range slices.Sorted(maps.Keys(remotes)) {
+		now, err := wtsync.PushEndpoint(main, remote)
+		if err != nil {
+			return err
+		}
+		for _, it := range remotes[remote] {
+			if it.Endpoint != now {
+				return fmt.Errorf("%s pushed to %s when the run took its leases and pushes to %s now", remote, it.Endpoint, now)
+			}
+		}
+	}
+	return nil
+}
+
+// pushRemotes is one atomic push per remote, in remote name order: what came
+// of each branch, and whether every one is at its new commit.
+func pushRemotes(ctx *kit.Context, w io.Writer, remotes map[string][]stackItem, work string) (map[string]StackPushed, bool) {
+	if len(remotes) > 1 {
+		fmt.Fprintf(w, "  the branches push to %d remotes: one atomic push per remote; a push is atomic within its remote only\n", len(remotes))
+	}
+	results := map[string]StackPushed{}
+	allIn := true
+	for _, remote := range slices.Sorted(maps.Keys(remotes)) {
+		got, ok := pushGroup(ctx, w, remote, remotes[remote], work)
+		allIn = ok && allIn
+		maps.Copy(results, got)
+	}
+	return results, allIn
 }
 
 func byRemote(items []stackItem) map[string][]stackItem {

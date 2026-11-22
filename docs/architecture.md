@@ -258,6 +258,24 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    before saying where each branch is. The push and the read-back go to the
    endpoint URL the record holds, not the remote's name, and wt moves the
    remote-tracking refs itself.
+6. **Push later.** A run or resume that ends with branches unpushed
+   (`--no-push`, a no, nobody to ask) calls `syncrun.KeepStackPush`, which keeps
+   a `wtsync.PushRecord` for the line: each branch's `BranchPush` (remote,
+   lease, endpoint, tracking ref) and the tip the run left it at, plus the
+   layers it left out. A run writes it while it still holds the line's lock
+   (`finishRebase`, or the resume before its push), from the tip it left, and
+   `syncrun.SettleStackPush` takes out what its push sent, only while it is
+   still the record that run wrote. A run that moved nothing leaves the old
+   record; a push that sends everything and `wt sync undo` remove it. No run
+   reads it.
+   `wt sync push <work> --stack` (`syncfix.SyncPushLater` →
+   `syncrun.PushRecorded`) holds the line's worktree lock, as a run and undo do (not with
+   `--dry-run`, which only reads), from reading the record to replacing it (`wtsync.ReplacePushRecord`, only
+   while it is still the record pushed from), re-reads it after the question,
+   and refuses with no record, with a branch no longer at
+   its recorded tip, or when `checkEndpoints` fails, all before pushing, and
+   otherwise goes through the same `pushRemotes` as step 5 over the recorded
+   leases, fetching nothing.
 
 ### Stop, resume, undo
 
@@ -366,6 +384,7 @@ In the repository's common git dir (the main checkout's `.git`):
 |---|---|---|
 | `wt-sync-logs/` (a log and its `.end` per invocation) | `runlog` | `wt sync wait` |
 | `wt-sync-stack/<epoch>.json`, `<epoch>.alone` | a stack run: the record of its layer moves, and the mark of an `--alone` run that moves no layer (`syncrun.MarkAlone`) | `FinishStack`, resume, undo |
+| `wt-sync-push/<branch>.json` | a stack run left unpushed (`syncrun.KeepStackPush`): the line's recorded leases and tips for a later push, keyed by the line's branch (escaped) | `wt sync push --stack` only; removed by it, by undo, and replaced by the next run of the line |
 | `wt-sync-owed/<branch>.json` | a run whose steps failed or were owed | the next run, `wt sync steps`, resume |
 | `wt-sync-keep.json`, `.log`, `.lock`, `.err` | `wt sync keep` (`keepstate`, launchd) | the overview, `wt sync keep status`, doctor |
 | `wt-pr-cache.json` | `kit` | `wt list`, `wt sweep` |
