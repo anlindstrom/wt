@@ -97,7 +97,15 @@ type State struct {
 	// Stopped is every path the rebase stopped on up to this handover,
 	// across every earlier handover of the same run.
 	Stopped []string `json:"stopped"`
-	Lock    LeftLock `json:"lock"`
+	// Unmerged is the paths the index held unmerged when wt stopped at this
+	// handover: a path of Left that is not among them was never a conflict,
+	// and resolving it is no conflict resolution.
+	Unmerged []string `json:"unmerged,omitempty"`
+	// Resolutions is what a person resolved at each conflict stop wt handed
+	// over, as resume found it staged: the fold's content check takes those
+	// paths as intended. Across every earlier handover of the same run.
+	Resolutions []StopResolution `json:"resolutions,omitempty"`
+	Lock        LeftLock         `json:"lock"`
 	// Check is the each_commit check that failed at the stop, when that is
 	// what the handover is: nothing unmerged, HEAD the commit that failed,
 	// and resume runs the check again there before it goes on.
@@ -120,6 +128,17 @@ type State struct {
 	// the hunks of it that lack their context there: resume checks that
 	// the resolution drops none of the fixup's lines.
 	Context []ContextGap `json:"context,omitempty"`
+}
+
+// StopResolution is one path a person resolved at a conflict stop: the commit
+// of the old line being replayed, and the entry the path got when resume
+// continued, Mode and Blob as the index held them. A path the person
+// resolved by deleting has neither.
+type StopResolution struct {
+	Commit string `json:"commit"`
+	Path   string `json:"path"`
+	Mode   string `json:"mode,omitempty"`
+	Blob   string `json:"blob,omitempty"`
 }
 
 // CheckStop is a failed check as the handover records it.

@@ -359,7 +359,12 @@ wt's job is to move branches without losing anything. Every change keeps these:
   `wtsync.TreeGuard`, called by `syncrun.FinishStack`, compares the new tip
   with the old one (a fold in place) or with git's merge of the old line onto the target (a fold that
   moves), leaving out the declared per-layer step paths and, for a moving
-  fold, the conflicting regions a stop resolved. A failed guard moves no layer
+  fold, the conflicting regions a stop resolved. A path a person resolved at
+  a conflict stop wt handed over (`State.Resolutions`, read from the index by
+  `wtsync.ResolutionsAtStop` when resume goes on and carried through every
+  handover) is taken whole as they resolved it, with what the old line
+  changed in it after that commit (`resolvedAtStop`); every other path is held
+  to the merge. A failed guard moves no layer
   and says so; `wt sync undo` puts the folded line back. The result is
   `fold.guard` in `--json`.
 - **The command layer writes no ref or checkout.** Moves go through wtsync,

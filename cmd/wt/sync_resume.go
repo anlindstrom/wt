@@ -72,7 +72,9 @@ func newSyncResumeCmd() *cobra.Command {
 			"with its reason. What it cannot tell (blank lines and braces, a file it\n" +
 			"cannot follow) is printed as not checked. --allow-dropped goes on past\n" +
 			"either when the drop is meant; the fold's content check at the end\n" +
-			"still holds the layers to the old line.\n\n" +
+			"still holds the layers to the old line, except in the files you resolved\n" +
+			"at a conflict stop wt handed over: those are taken as you resolved them\n" +
+			"(a change to one after the stop is refused), and the run names them.\n\n" +
 			"At the stop --stack --edit asked for, HEAD is that commit: amend it, or\n" +
 			"add commits, leaving nothing uncommitted, and this replays the rest of\n" +
 			"the line onto what HEAD is then. Before the line moves its content is\n" +
