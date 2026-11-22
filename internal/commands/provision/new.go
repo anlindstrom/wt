@@ -24,6 +24,9 @@ type NewOptions struct {
 	// NoSuperset leaves the worktree out of the Superset desktop app for this
 	// one invocation, whatever SUPERSET_REGISTER says.
 	NoSuperset bool
+	// NoFetch cuts from trunk as last fetched: wt new fetches trunk's remote
+	// first unless this is set, or Base names what to cut from.
+	NoFetch bool
 }
 
 // New creates a branch and its worktree at the canonical path, then provisions

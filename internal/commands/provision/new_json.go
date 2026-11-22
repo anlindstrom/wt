@@ -66,6 +66,9 @@ type NewPlan struct {
 	CreatePlan
 	Base       *string `json:"base"`
 	BaseCommit *string `json:"baseCommit"`
+	// BaseSource is where the base comes from: BaseLocal, BaseRemote or
+	// BaseGiven.
+	BaseSource string `json:"baseSource"`
 }
 
 // CheckoutPlan is the one object wt checkout --dry-run --json prints.
@@ -93,6 +96,8 @@ type NewResult struct {
 	// Addresses is one entry per app with a domain; empty when there is none,
 	// or devports is absent or did not answer.
 	Addresses []devports.Address `json:"addresses"`
+	// BaseSource is where the base came from, as in the plan.
+	BaseSource string `json:"baseSource"`
 }
 
 // CheckoutResult is the one object wt checkout --json prints.
