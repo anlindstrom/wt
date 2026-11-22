@@ -503,7 +503,9 @@ func TestStackPushCreatesAnAbsentLineBranchInTheSamePush(t *testing.T) {
 	main := p.ctx.Repo.MainRoot
 	testkit.GitIn(t, p.bare, "update-ref", "-d", "refs/heads/"+gittest.StackTmp)
 	testkit.GitIn(t, main, "fetch", "-q", "--prune", "origin")
-	_, human, _ := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, synccmdtest.PushAlways())
+	opts := synccmdtest.PushAlways()
+	opts.PushLine = true // creating the line's branch is asked for: --push-line
+	_, human, _ := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, opts)
 	if got, want := refIn(t, p.bare, gittest.StackTmp), testkit.GitOut(t, main, "rev-parse", "refs/heads/"+gittest.StackTmp); got != want {
 		t.Errorf("remote %s is at %s, want %s\n%s", gittest.StackTmp, got, want, human)
 	}
