@@ -114,3 +114,25 @@ func TestPushAtomicRefusesAnEmptyOrSpacedRewritePrefix(t *testing.T) {
 		})
 	}
 }
+
+// git moves a tracking ref itself after a push to a URL a remote fetches from;
+// one already at the pushed commit counts as moved, and anything else at a
+// third commit is still refused.
+func TestUpdateTrackingTakesARefGitAlreadyMoved(t *testing.T) {
+	dir := gittest.NewRepo(t, t.TempDir(), "r")
+	a := strings.TrimSpace(gittest.Git(t, dir, "rev-parse", "HEAD"))
+	gittest.Git(t, dir, "commit", "-q", "--allow-empty", "-m", "b")
+	b := strings.TrimSpace(gittest.Git(t, dir, "rev-parse", "HEAD"))
+	gittest.Git(t, dir, "commit", "-q", "--allow-empty", "-m", "c")
+	c := strings.TrimSpace(gittest.Git(t, dir, "rev-parse", "HEAD"))
+	gittest.Git(t, dir, "update-ref", "refs/remotes/origin/s1", b)
+	if err := UpdateTracking(dir, "refs/remotes/origin/s1", b, a); err != nil {
+		t.Errorf("a tracking ref already at the pushed commit: %v", err)
+	}
+	if err := UpdateTracking(dir, "refs/remotes/origin/s1", c, a); err == nil {
+		t.Error("a tracking ref at neither the lease nor the new commit was moved")
+	}
+	if got := strings.TrimSpace(gittest.Git(t, dir, "rev-parse", "refs/remotes/origin/s1")); got != b {
+		t.Errorf("origin/s1 is at %s, want it left at %s", got, b)
+	}
+}
