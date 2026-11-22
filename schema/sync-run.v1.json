@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.22.0",
+  "x-version": "1.23.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -243,17 +243,19 @@
     "stackPush": {
       "type": "object",
       "description": "Since 1.21.0: the push of a --stack run. One atomic push (git push --atomic) per remote: if any lease on a remote fails, nothing on that remote moves, and every local branch stays where the rebase put it. Layers that push to different remotes get one push each; atomicity holds within a remote only.",
-      "required": ["branches"],
+      "required": ["branches", "lineLeftOut"],
       "properties": {
+        "lineLeftOut": { "type": ["string", "null"], "description": "Since 1.23.0: why the line's own branch is not in branches, when a stack push left it out: pushing it would create its remote branch, and nothing recorded says it should, so it goes only with --push-line (wt sync rebase --stack --push, wt sync push --stack). Null when it was in the push, or has nowhere to push." },
         "branches": { "type": "array", "items": { "$ref": "#/$defs/stackPushed" }, "description": "Each branch that was in a push, in this order whatever the remotes: moved layers bottom first, then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason)." }
       }
     },
     "stackPushed": {
       "type": "object",
       "description": "Since 1.21.0: one branch of a stack's push.",
-      "required": ["branch", "remote", "remoteBranch", "old", "new", "outcome", "why"],
+      "required": ["branch", "remote", "remoteBranch", "rule", "old", "new", "outcome", "why"],
       "properties": {
         "branch": { "type": "string", "description": "The local branch." },
+        "rule": { "type": "string", "description": "Since 1.23.0: what decided the remote branch: recorded (wt sync push-to), or its own name. Empty for a push recorded before 1.23.0." },
         "remote": { "type": "string", "description": "The remote it was pushed to." },
         "remoteBranch": { "type": "string", "description": "Its name on the remote." },
         "old": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The lease: the commit the remote branch had to be at, as last fetched before the run moved anything. Null for a branch that must not exist on the remote yet." },

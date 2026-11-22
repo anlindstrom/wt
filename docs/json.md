@@ -157,7 +157,7 @@ generating types from it:
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
 | `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.14.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
-| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.22.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.23.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
@@ -2117,8 +2117,10 @@ value for results saved before that), and:
 | `worktrees[].stack.contextGaps[].message` | string | yes | The line wt prints for it: fixup moved ahead of its context: <path>:<lines> needs <sha> "<subject>", which comes later on the line. |
 | `worktrees[].stack.contextUnchecked` | array of string | yes | Since 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run. |
 | `worktrees[].stack.push` | object \| null | yes | Since 1.21.0: for a --stack run that pushed (--push, or yes to the question), what came of the push: every moved layer and the line's own branch that had somewhere safe to push, in one atomic push per remote, each over a lease on the commit the run recorded for its remote branch before it moved anything. Null in the look, and for a run that pushed nothing: with --no-push, a no to the question, or nobody to ask. |
+| `worktrees[].stack.push.lineLeftOut` | string \| null | yes | Since 1.23.0: why the line's own branch is not in branches, when a stack push left it out: pushing it would create its remote branch, and nothing recorded says it should, so it goes only with --push-line (wt sync rebase --stack --push, wt sync push --stack). Null when it was in the push, or has nowhere to push. |
 | `worktrees[].stack.push.branches` | array of object | yes | Each branch that was in a push, in this order whatever the remotes: moved layers bottom first, then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason). |
 | `worktrees[].stack.push.branches[].branch` | string | yes | The local branch. |
+| `worktrees[].stack.push.branches[].rule` | string | yes | Since 1.23.0: what decided the remote branch: recorded (wt sync push-to), or its own name. Empty for a push recorded before 1.23.0. |
 | `worktrees[].stack.push.branches[].remote` | string | yes | The remote it was pushed to. |
 | `worktrees[].stack.push.branches[].remoteBranch` | string | yes | Its name on the remote. |
 | `worktrees[].stack.push.branches[].old` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The lease: the commit the remote branch had to be at, as last fetched before the run moved anything. Null for a branch that must not exist on the remote yet. |

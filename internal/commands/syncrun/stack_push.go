@@ -35,6 +35,9 @@ const (
 // remote; null for a run that pushed nothing.
 type StackPush struct {
 	Branches []StackPushed `json:"branches"`
+	// LineLeftOut is why the line's own branch is not in Branches, when it
+	// was left out; null otherwise.
+	LineLeftOut *string `json:"lineLeftOut"`
 }
 
 // StackPushed is one branch of a stack's push.
@@ -47,8 +50,16 @@ type StackPushed struct {
 	Old     *string `json:"old"`
 	New     string  `json:"new"`
 	Outcome string  `json:"outcome"`
+	// Rule is what decided the remote branch: recorded, or its own name.
+	Rule string `json:"rule"`
 	// Why is, for an outcome other than pushed, what git said.
 	Why *string `json:"why"`
+}
+
+// LineLeftOutWhy is why a stack push leaves the line's own branch out, and the
+// flag that includes it.
+func LineLeftOutWhy(bp wtsync.BranchPush, work string) string {
+	return fmt.Sprintf("pushing it would create %s/%s on %s; wt sync push %s --stack --push-line, or --push-line on the run, pushes it", bp.Remote, bp.RemoteBranch, bp.Remote, work)
 }
 
 // stackItem is one branch that goes into a stack's push.
@@ -140,13 +151,23 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	if err != nil {
 		return refuse("the tip of " + top.Branch + " could not be read: " + pushReason(err))
 	}
-	items := append(slices.Clone(s.items), stackItem{BranchPush: *s.top, New: head, Top: true})
+	items := slices.Clone(s.items)
+	leftOut := s.top.Creates() && !ask.PushLine
+	if !leftOut {
+		items = append(items, stackItem{BranchPush: *s.top, New: head, Top: true})
+	}
 	remotes := byRemote(items)
 	if err := checkEndpoints(ctx.Repo.MainRoot, remotes); err != nil {
 		return refuse(err.Error())
 	}
 	rest = slices.DeleteFunc(slices.Clone(targets), func(t PushTarget) bool { return t == *top })
 	fmt.Fprintln(w)
+	if leftOut {
+		fmt.Fprintf(w, "  = %s left out: %s\n", s.Branch, LineLeftOutWhy(*s.top, s.work))
+		if len(items) == 0 {
+			return rest, restMode, nil, nil
+		}
+	}
 	if asking {
 		names := make([]string, len(items))
 		for i, it := range items {
@@ -161,6 +182,9 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	results, allIn := pushRemotes(ctx, w, remotes, s.work)
 	// In item order, whatever the remotes: layers bottom first, then the line.
 	s.Push = &StackPush{Branches: []StackPushed{}}
+	if leftOut {
+		s.Push.LineLeftOut = jsonout.Strp(LineLeftOutWhy(*s.top, s.work))
+	}
 	for _, it := range items {
 		s.Push.Branches = append(s.Push.Branches, results[it.Branch])
 	}
@@ -229,7 +253,7 @@ func pushGroup(ctx *kit.Context, w io.Writer, remote string, group []stackItem, 
 	fmt.Fprintf(w, "  pushing %d %s to %s in one atomic push\n", len(group), noun, remote)
 	out := map[string]StackPushed{}
 	record := func(it stackItem, outcome, why string) {
-		p := StackPushed{Branch: it.Branch, Remote: remote, RemoteBranch: it.RemoteBranch, New: it.New, Outcome: outcome}
+		p := StackPushed{Branch: it.Branch, Remote: remote, RemoteBranch: it.RemoteBranch, New: it.New, Outcome: outcome, Rule: it.Rule}
 		if it.Lease != "" {
 			p.Old = jsonout.Strp(it.Lease)
 		}

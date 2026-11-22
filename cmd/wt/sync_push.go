@@ -12,7 +12,7 @@ import (
 )
 
 func newSyncPushCmd() *cobra.Command {
-	var stack, dryRun, yes, asJSON bool
+	var stack, dryRun, yes, asJSON, pushLine bool
 	push := &cobra.Command{
 		Use:   "push <work> --stack",
 		Short: "Push a --stack line rebased earlier with --no-push, over the run's leases",
@@ -23,6 +23,11 @@ func newSyncPushCmd() *cobra.Command {
 			"the run recorded for its remote branch, so nothing is fetched and nothing\n" +
 			"a teammate pushed since is replaced: if any remote branch moved, nothing on\n" +
 			"that remote moves and the branch is named.\n\n" +
+			"The line's own branch is left out, and named, when pushing it would create\n" +
+			"its remote branch and nothing recorded for it (wt sync push-to) says it\n" +
+			"should: --push-line includes it. A layer that pushes under another name is\n" +
+			"recorded the same way, for a branch with no worktree too: wt sync push-to\n" +
+			"--branch.\n\n" +
 			"The run keeps a record of this for the line, beside its other state, until\n" +
 			"the push sends everything in it, wt sync undo puts the line back, or a new\n" +
 			"run of the line replaces it. A line with no record is refused. It is also\n" +
@@ -47,6 +52,7 @@ func newSyncPushCmd() *cobra.Command {
 			return withVerbContext(cmd, args, "sync push", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				opts := syncfix.PushLaterOptions{DryRun: dryRun, Journal: j}
 				opts.Push = syncrun.PushAsk
+				opts.PushLine = pushLine
 				switch {
 				case yes:
 					opts.Push = syncrun.PushAlways
@@ -58,6 +64,7 @@ func newSyncPushCmd() *cobra.Command {
 		},
 	}
 	push.Flags().BoolVar(&stack, "stack", false, "push the line a --stack run left for later")
+	push.Flags().BoolVar(&pushLine, "push-line", false, "include the line's own branch when that would create its remote branch")
 	push.Flags().BoolVar(&dryRun, "dry-run", false, "say what would be pushed and change nothing")
 	push.Flags().BoolVarP(&yes, "yes", "y", false, "do not ask first")
 	push.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")

@@ -34,10 +34,17 @@ type BranchPush struct {
 	// have moved: a push to the endpoint's URL moves none, so the run does.
 	Tracking string `json:"tracking,omitempty"`
 	Why      string `json:"why,omitempty"`
+	// Rule is what decided where it pushes: recorded, or its own name.
+	Rule string `json:"rule,omitempty"`
 }
 
 // Pushes reports that the branch has a safe push.
 func (b BranchPush) Pushes() bool { return b.Remote != "" }
+
+// Creates reports that the push would make the remote branch, and that
+// nothing recorded says it should: a line's own branch with no remote branch
+// of its own yet. A stack push leaves such a branch out unless asked.
+func (b BranchPush) Creates() bool { return b.Pushes() && b.Lease == "" && b.Rule != "recorded" }
 
 // BranchPush is the push of a branch of a stack run, from the state the
 // branch stood in against its own remote. The line's own branch (top) may be
@@ -107,7 +114,7 @@ func (o *Own) BranchPush(branch string, top bool) BranchPush {
 		return bp
 	}
 	bp.Endpoint = r.pushURLs[0]
-	bp.Remote, bp.RemoteBranch, bp.SetUpstream, bp.Tracking = to.Remote, to.Branch, to.SetUpstream, to.Tracking
+	bp.Remote, bp.RemoteBranch, bp.SetUpstream, bp.Tracking, bp.Rule = to.Remote, to.Branch, to.SetUpstream, to.Tracking, to.Rule
 	return bp
 }
 
