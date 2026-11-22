@@ -145,6 +145,9 @@ type resume struct {
 	cfg    *wtsync.Config
 	// busy is the rebase still in progress, rather than finished by hand.
 	busy bool
+	// resolved is what a person resolved at the stop this resume goes on
+	// from, as the index held it.
+	resolved []wtsync.StopResolution
 	// lock is the handover's lock, taken over; nil once a fresh handover
 	// keeps it.
 	lock *wtsync.Lock
@@ -334,7 +337,11 @@ func (r *resume) verify() error {
 		if err := wtsync.VerifyLeft(r.target.Path, st); err != nil {
 			return fmt.Errorf("%s: %w; nothing is resumed", name, err)
 		}
-		return verifyHandover(r.target.Path, st, r.w)
+		if err := verifyHandover(r.target.Path, st, r.w); err != nil {
+			return err
+		}
+		r.resolved = wtsync.ResolutionsAtStop(r.target.Path, st)
+		return nil
 	}
 	if a := r.adopt; a != nil {
 		fmt.Fprintf(r.w, "%s  the rebase was finished by hand at %s, with %s made after it; adopting it\n", name, git.ShortID(a.Finish, 7), kit.Count(len(a.Commits), "commit"))
@@ -522,7 +529,7 @@ func (r *resume) handOverAgain(res wtsync.Result) error {
 	herr := syncrun.HandOver(r.ctx, w, syncrun.HandoverInput{
 		Work: name, Branch: st.Branch, Path: r.target.Path, TrunkRef: st.TrunkRef, TrunkSHA: st.Trunk, OntoRef: st.OntoRef,
 		Onto: st.Onto, Upstream: st.Upstream, Epoch: st.Epoch, Cfg: r.cfg, Res: res, Lock: r.lock,
-		Found: st.Found, Earlier: st.Stopped, Tracker: r.tracker, FollowUps: st.FollowUps, ByHand: st.ByHand || !r.confirmed,
+		Found: st.Found, Earlier: st.Stopped, EarlierResolved: r.resolutions(), Tracker: r.tracker, FollowUps: st.FollowUps, ByHand: st.ByHand || !r.confirmed,
 	})
 	if herr != nil {
 		fmt.Fprintf(w, "  ✗ failed: %v\n", herr)
@@ -887,6 +894,7 @@ func (r *resume) finishStack(res wtsync.Result) string {
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinishFor(rec, res, r.cfg, r.opts.Clock(), listed, lerr, syncrun.StackFinishCaller{
 		OldTip: r.st.OldTip, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch),
 		Stopped:   append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...),
+		Resolved:  r.resolutions(),
 		Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked}))
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s; syncrun.SetFold(p, s) })
 	r.restored = s != nil && s.Restored
@@ -1100,4 +1108,10 @@ func noteNotRechecked(w io.Writer, where string, st wtsync.State) {
 		line += ": " + strings.Join(ps, ", ")
 	}
 	fmt.Fprintln(w, line)
+}
+
+// resolutions is what a person resolved at every stop of the run up to this
+// resume's: the earlier handovers' and the one this resume goes on from.
+func (r *resume) resolutions() []wtsync.StopResolution {
+	return append(slices.Clone(r.st.Resolutions), r.resolved...)
 }

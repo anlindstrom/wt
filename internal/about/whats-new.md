@@ -14,6 +14,16 @@ to its recorded branch over that branch's lease. The line's own branch is left
 out, and named, when pushing it would create its remote branch: `--push-line`
 includes it. `--dry-run` shows each branch's rule (`sync-run` 1.23.0).
 
+## 2026-11-22 23:30 — a fold takes what you resolved at a stop
+
+`wt sync rebase --stack --autosquash --onto <ref>` no longer refuses a layer
+move because a conflict you resolved by hand differs from git's textual merge
+(for example, dropping a call to a method trunk deleted). The files you
+resolved at a stop wt handed over are taken as you resolved them, and the run
+says so; every other file is still held to the old line, and a change to a
+resolved file after the stop is refused. `fold.guard` gains `resolvedAtStop`
+when any were taken (`sync-run` 1.24.0).
+
 ## 2026-11-22 22:40 — wt sync push <work> --stack: push a line you rebased with --no-push
 
 After `wt sync rebase <work> --stack --no-push` (or a no to the question), the

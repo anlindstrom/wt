@@ -64,6 +64,8 @@ type HandoverInput struct {
 	ByHand bool
 	// Earlier is the paths the run's earlier handovers stopped on.
 	Earlier []string
+	// EarlierResolved is what a person resolved at the run's earlier stops.
+	EarlierResolved []wtsync.StopResolution
 	// Tracker is the verb's, still set to the rebase being handed over; it
 	// is cleared once the handover is written or has failed.
 	Tracker *RebaseTracker
@@ -144,14 +146,16 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 		Stop: in.Res.Left.Index, Total: in.Res.Left.Total, StoppedCommit: in.Res.Left.Commit, ByHand: in.ByHand, TodoHash: wtsync.TodoHash(in.Path),
 		Resolved: in.Res.Left.Staged, Strategy: map[string]string{}, Lifted: map[string]string{},
 		Deleted: in.Res.Left.Deleted, Left: in.Res.Left.Left,
-		Stopped:    PathsOnce(in.Earlier, wtsync.StopPaths(in.Res.Stops), in.Res.ByHand),
-		Check:      wtsync.CheckStopOf(in.Res.Left.Check),
-		Layers:     in.Res.LayerState,
-		Unchecked:  in.Res.Unchecked,
-		Edit:       in.Res.Edit,
-		AtEdit:     in.Res.Left.Edit,
-		EachCommit: in.Res.EachCommit,
-		Context:    in.Res.Left.Context,
+		Stopped:     PathsOnce(in.Earlier, wtsync.StopPaths(in.Res.Stops), in.Res.ByHand),
+		Resolutions: in.EarlierResolved,
+		Unmerged:    conflictPaths(in.Res.Left.Conflicts),
+		Check:       wtsync.CheckStopOf(in.Res.Left.Check),
+		Layers:      in.Res.LayerState,
+		Unchecked:   in.Res.Unchecked,
+		Edit:        in.Res.Edit,
+		AtEdit:      in.Res.Left.Edit,
+		EachCommit:  in.Res.EachCommit,
+		Context:     in.Res.Left.Context,
 	}
 	if in.Found != "" && in.Found != in.Res.OldTip {
 		st.Found = in.Found
@@ -362,4 +366,13 @@ func lastLines(s string, n int) []string {
 		lines = lines[len(lines)-n:]
 	}
 	return lines
+}
+
+// conflictPaths is the paths of the conflicts a stop found unmerged.
+func conflictPaths(cs []wtsync.Conflict) []string {
+	var paths []string
+	for _, c := range cs {
+		paths = append(paths, c.Path)
+	}
+	return paths
 }

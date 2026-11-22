@@ -85,6 +85,9 @@ func TestFoldTakesWhatAStopResolvedThatTheMergeWouldNotGive(t *testing.T) {
 	if g == nil || g.Outcome != "passed" {
 		t.Fatalf("fold.guard %+v", g)
 	}
+	if len(g.ResolvedAtStop) != 1 || g.ResolvedAtStop[0] != "t.txt" {
+		t.Errorf("resolvedAtStop %v, want t.txt", g.ResolvedAtStop)
+	}
 	layers := stackLayers(p.Stack)
 	for _, b := range []string{"s1", "s2", "s4"} {
 		l := layers[b]

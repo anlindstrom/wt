@@ -29,3 +29,12 @@ func TestGuardPassedDescribesAMovingFoldInPlainWords(t *testing.T) {
 		t.Errorf("a lost hunk: %q", res.Why)
 	}
 }
+
+// A pass that took a stop's resolution names the paths in one line.
+func TestGuardPassedNamesThePathsTakenAsResolvedAtAStop(t *testing.T) {
+	t.Parallel()
+	g := &FoldGuard{OldTip: strings.Repeat("a", 40), ResolvedAtStop: []string{"a.txt", "b.txt"}}
+	if got, want := guardPassed(g), "tip tree equal to aaaaaaa; a.txt, b.txt taken as resolved at a stop"; got != want {
+		t.Errorf("%q, want %q", got, want)
+	}
+}

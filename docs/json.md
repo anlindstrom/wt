@@ -157,7 +157,7 @@ generating types from it:
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
 | `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.14.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
-| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.23.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.24.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
@@ -2130,12 +2130,13 @@ value for results saved before that), and:
 | `worktrees[].fold` | object \| null | yes | Since 1.18.0: for a --stack run that folds the line (--autosquash, --edit, or wt sync steps), what it folded on and what its tree guard compared. Null for any other run. |
 | `worktrees[].fold.inPlace` | boolean | yes | The line is folded on its own base, not moved onto a target. |
 | `worktrees[].fold.base` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's own base: what an in-place fold rebases onto. |
-| `worktrees[].fold.guard` | object \| null | yes | The tree guard once the rebase finished: oldTip, newTip, onto (the commit a moving fold's old line was merged onto to compare, null for a fold in place), excludedGlobs (the declared per-layer step paths a changed file matched, left out), conflictAllowed (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), outcome (passed or failed) and reason (why it failed, else null). Null while the run has not finished, and for an edit. |
+| `worktrees[].fold.guard` | object \| null | yes | The tree guard once the rebase finished: oldTip, newTip, onto (the commit a moving fold's old line was merged onto to compare, null for a fold in place), excludedGlobs (the declared per-layer step paths a changed file matched, left out), conflictAllowed (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), resolvedAtStop (since 1.24.0, only when not empty: paths a person resolved at a stop, taken as they resolved them), outcome (passed or failed) and reason (why it failed, else null). Null while the run has not finished, and for an edit. |
 | `worktrees[].fold.guard.oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
 | `worktrees[].fold.guard.newTip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
 | `worktrees[].fold.guard.onto` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | For a fold that moves the line: the commit the old line was merged onto to compare. Null for a fold in place, which compares with the old tip itself. |
 | `worktrees[].fold.guard.excludedGlobs` | array of string | yes | The declared per-layer step paths a changed file matched, left out of the comparison. |
 | `worktrees[].fold.guard.conflictAllowed` | array of string | yes | For a fold that moves the line: the files that conflicted when merged and were resolved at a stop; every line of the merge outside the conflicting regions must still be in them, in order. Not step paths. |
+| `worktrees[].fold.guard.resolvedAtStop` | array of string | no | Since 1.24.0, present only when not empty: for a fold that moves the line, the paths a person resolved at a conflict stop wt handed over, taken as intended where the merge would have given other content; the check holds each to what the stop resolved it to, with what the old line changed in it after that commit. |
 | `worktrees[].fold.guard.outcome` | `"passed"` \| `"failed"` | yes |  |
 | `worktrees[].fold.guard.reason` | string \| null | yes | Why it failed; null when it passed. |
 | `worktrees[].layerSteps` | array of object | yes | Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish. |
@@ -3108,3 +3109,5 @@ change made it.
 | `remove-plan` 1.6.0, `remove` 1.6.0 | `staleRoutes` (on `branch` in the plan, top level in the result): for a kept branch, each remote branch it could push to that holds commits it lacks, as last fetched, with how (`via`), whether the removal takes the route away (`dropped`) and whether it forces (`forces`). The problem code `staleForcedPush` |
 | `sync` 1.14.0, `sync-run` 1.21.0 | [`push`](#push--a-stacks-push) on `stack`: for a `--stack` run that pushed, each moved layer and the line's own branch with the lease, the commit pushed and what came of it, in one atomic push per remote; null in the look and when nothing was pushed |
 | `sync-run` 1.22.0 | `wt sync push <work> --stack --json`: `command` gains `sync push` and `result` gains `pushed`; the row's `stack.push` is the push a `--no-push` run left for later |
+| `sync-run` 1.23.0 | `rule` on each branch of [`push`](#push--a-stacks-push) (recorded by `wt sync push-to`, or its own name) and `lineLeftOut`: why a stack push left the line's own branch out (pushing it would create its remote branch; `--push-line` includes it) |
+| `sync-run` 1.24.0 | `worktrees[].fold.guard.resolvedAtStop`, present only when a fold took a person's resolution at a stop as intended |
