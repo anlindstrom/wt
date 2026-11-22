@@ -83,6 +83,10 @@ type PushOptions struct {
 	// branches a branch pushes to. It answers with one of the two, or "" when
 	// the person names neither: the branch is then not pushed.
 	ChoosePush func(c PushChoice) (string, error)
+	// PushLine includes the line's own branch in a stack push when it has no
+	// remote branch of its own yet and nothing recorded for it: pushing it
+	// would create it on the remote.
+	PushLine bool
 }
 
 // PushChoice is a branch that tracks a remote branch of another name, and

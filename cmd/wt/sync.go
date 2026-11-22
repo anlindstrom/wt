@@ -236,6 +236,9 @@ type runFlags struct {
 	// alone rebases the one worktree named without the rest of its stack.
 	alone bool
 	push  syncrun.PushMode
+	// pushLine includes a --stack line's own branch in the push when that
+	// would create its remote branch.
+	pushLine bool
 	// json prints one object on stdout: the overview, or the run's result.
 	json bool
 	// expect is the overview's token a run must still match.
@@ -418,6 +421,7 @@ func runOptions(cmd *cobra.Command, f runFlags, bulk bool) (synccmd.RunOptions, 
 		AllowDiverged: f.allowDiverged, Onto: f.onto, Upstream: f.upstream, EachCommit: f.eachCommit}
 	opts.AllowOwed = f.allowOwed
 	opts.Push = f.push
+	opts.PushLine = f.pushLine
 	switch {
 	case f.yes:
 		opts.Push = yesPush(f.push)

@@ -11,6 +11,7 @@ func newSyncRebaseCmd() *cobra.Command {
 	var noFetch, noFFTrunk, yes, ifReady, force, allowDiverged, allowOwed, asJSON, stack, autosquash, alone, noSides bool
 	var expect, onto, upstream, edit, eachCommit string
 	var layers []string
+	var pushLine bool
 	var sel selectionFlags
 	var push func() syncrun.PushMode
 	rebase := &cobra.Command{
@@ -297,7 +298,7 @@ func newSyncRebaseCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f := runFlags{yes: yes, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, force: force,
 				allowDiverged: allowDiverged, allowOwed: allowOwed, push: push(), json: asJSON, expect: expect,
-				stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream, alone: alone, noSides: noSides}
+				stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream, alone: alone, noSides: noSides, pushLine: pushLine}
 			if err := f.check(false); err != nil {
 				return err
 			}
@@ -337,6 +338,7 @@ func newSyncRebaseCmd() *cobra.Command {
 	rebase.Flags().StringVar(&edit, "edit", "", "with --stack: stop at this commit of the line for you to amend, and replay the rest onto it, in place")
 	addOntoFlags(rebase, &onto, &upstream, "rebase the worktrees named onto <ref> instead of trunk: a branch, origin/<branch>, a tag or a commit")
 	sel.add(rebase, true)
+	rebase.Flags().BoolVar(&pushLine, "push-line", false, "with --stack and a push: include the line's own branch when that would create its remote branch (left out otherwise, and named)")
 	push = addPushFlags(rebase, "push the worktrees that finish, without asking",
 		"neither push nor ask; print the push command")
 	return rebase

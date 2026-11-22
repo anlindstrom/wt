@@ -276,6 +276,11 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    its recorded tip, or when `checkEndpoints` fails, all before pushing, and
    otherwise goes through the same `pushRemotes` as step 5 over the recorded
    leases, fetching nothing.
+   A layer that pushes under another name is pushed to what `wt sync push-to
+   --branch` recorded for it (`synccmd.SyncPushToBranch`; the record is read for
+   a branch with no worktree like any other). The line's own branch is left out
+   of both pushes when `BranchPush.Creates` (no remote branch yet, nothing
+   recorded), unless `PushOptions.PushLine` (`--push-line`).
 
 ### Stop, resume, undo
 

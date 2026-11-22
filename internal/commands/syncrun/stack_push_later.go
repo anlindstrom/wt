@@ -89,6 +89,9 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 	case errors.Is(err, wtsync.ErrPushRecordReplaced):
 	case err != nil:
 		fmt.Fprintf(w, "  note: the record of what is left for a later push could not be updated (%v)\n", err)
+	case next != nil && len(left) == 1 && left[0].Top && left[0].Creates():
+		// The line's own branch, left out on purpose and named by the push.
+		fmt.Fprintf(w, "  ↪ %s kept for wt sync push %s --stack --push-line\n", left[0].Branch, s.work)
 	case next != nil:
 		fmt.Fprintf(w, "  ↪ %s left unpushed, with its leases: wt sync push %s --stack pushes it later\n", kit.Count(len(left), "branch"), s.work)
 	}
@@ -168,24 +171,42 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 	if why != "" {
 		return refuse(why)
 	}
-	remotes := byRemote(items)
-	fmt.Fprintf(w, "  %s: the push the run of %s left for later, %s\n", work, rec.Written.Local().Format("2006-01-02 15:04"), kit.Count(len(items), "branch"))
+	// The line's own branch is left out when pushing it would create its
+	// remote branch, unless asked for.
+	isLeftOut := func(it stackItem) bool { return it.Top && it.Creates() && !opts.PushLine }
+	pushing := slices.DeleteFunc(slices.Clone(items), isLeftOut)
+	fmt.Fprintf(w, "  %s: the push the run of %s left for later, %s\n", work, rec.Written.Local().Format("2006-01-02 15:04"), kit.Count(len(pushing), "branch"))
 	for _, l := range rec.Left {
 		fmt.Fprintf(w, "  = %s left out by the run: %s\n", l.Branch, l.Why)
 	}
-	if opts.DryRun {
+	var lineWhy *string
+	if len(pushing) < len(items) {
 		for _, it := range items {
+			if isLeftOut(it) {
+				why := LineLeftOutWhy(it.BranchPush, work)
+				fmt.Fprintf(w, "  = %s left out: %s\n", it.Branch, why)
+				lineWhy = jsonout.Strp(why)
+			}
+		}
+	}
+	if opts.DryRun {
+		for _, it := range pushing {
 			from := "new on " + it.Remote
 			if it.Lease != "" {
 				from = git.ShortID(it.Lease, 7)
 			}
-			fmt.Fprintf(w, "  would push %s  %s/%s  %s → %s\n", it.Branch, it.Remote, it.RemoteBranch, from, git.ShortID(it.New, 7))
+			fmt.Fprintf(w, "  would push %s  %s/%s (%s)  %s → %s\n", it.Branch, it.Remote, it.RemoteBranch, it.Rule, from, git.ShortID(it.New, 7))
 		}
 		fmt.Fprintf(w, "  --dry-run: nothing pushed\n")
 		return s, nil
 	}
-	branches := make([]string, len(items))
-	for i, it := range items {
+	if len(pushing) == 0 {
+		fmt.Fprintf(w, "  nothing to push, and the record is kept\n")
+		return s, nil
+	}
+	remotes := byRemote(pushing)
+	branches := make([]string, len(pushing))
+	for i, it := range pushing {
 		branches[i] = it.Branch
 	}
 	if opts.Push != PushAlways {
@@ -207,17 +228,22 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 		if items, why = recordedItems(main, rec); why != "" {
 			return refuse(why)
 		}
-		remotes = byRemote(items)
+		pushing = slices.DeleteFunc(slices.Clone(items), isLeftOut)
+		remotes = byRemote(pushing)
 	}
 	fmt.Fprintln(w)
 	results, allIn := pushRemotes(ctx, w, remotes, work)
-	s.Push = &StackPush{Branches: []StackPushed{}}
-	var left []wtsync.PushRecordItem
-	for i, it := range items {
+	s.Push = &StackPush{Branches: []StackPushed{}, LineLeftOut: lineWhy}
+	pushedOK := map[string]bool{}
+	for _, it := range pushing {
 		r := results[it.Branch]
 		s.Push.Branches = append(s.Push.Branches, r)
-		if r.Outcome != PushedOK {
-			left = append(left, rec.Items[i])
+		pushedOK[it.Branch] = r.Outcome == PushedOK
+	}
+	var left []wtsync.PushRecordItem
+	for _, it := range rec.Items {
+		if !pushedOK[it.Branch] {
+			left = append(left, it)
 		}
 	}
 	// Only the record that was pushed from is deleted or rewritten.

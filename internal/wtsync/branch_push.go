@@ -34,10 +34,17 @@ type BranchPush struct {
 	// have moved: a push to the endpoint's URL moves none, so the run does.
 	Tracking string `json:"tracking,omitempty"`
 	Why      string `json:"why,omitempty"`
+	// Rule is what decided where it pushes: recorded, or its own name.
+	Rule string `json:"rule,omitempty"`
 }
 
 // Pushes reports that the branch has a safe push.
 func (b BranchPush) Pushes() bool { return b.Remote != "" }
+
+// Creates reports that the push would make the remote branch, and that
+// nothing recorded says it should: a line's own branch with no remote branch
+// of its own yet. A stack push leaves such a branch out unless asked.
+func (b BranchPush) Creates() bool { return b.Pushes() && b.Lease == "" && b.Rule != "recorded" }
 
 // BranchPush is the push of a branch of a stack run, from the state the
 // branch stood in against its own remote. The line's own branch (top) may be
@@ -107,7 +114,7 @@ func (o *Own) BranchPush(branch string, top bool) BranchPush {
 		return bp
 	}
 	bp.Endpoint = r.pushURLs[0]
-	bp.Remote, bp.RemoteBranch, bp.SetUpstream, bp.Tracking = to.Remote, to.Branch, to.SetUpstream, to.Tracking
+	bp.Remote, bp.RemoteBranch, bp.SetUpstream, bp.Tracking, bp.Rule = to.Remote, to.Branch, to.SetUpstream, to.Tracking, to.Rule
 	return bp
 }
 
@@ -252,5 +259,19 @@ func UpdateTracking(dir, tracking, commit, lease string) error {
 	// branch it points at never moves. An empty old value means the ref must
 	// not exist, so one made meanwhile is left alone.
 	_, err := git.Run(dir, "update-ref", "--no-deref", tracking, commit, lease)
+	if err != nil && trackingAt(dir, tracking, commit) {
+		// git moved it itself, as it does after a push to a URL a remote
+		// fetches from: already where the push put it.
+		return nil
+	}
 	return err
+}
+
+// trackingAt is whether tracking is a plain ref (not a symbolic one) at commit.
+func trackingAt(dir, tracking, commit string) bool {
+	if _, code, err := gitEnvAllow(dir, nil, nil, 1, "symbolic-ref", "-q", tracking); err != nil || code == 0 {
+		return false
+	}
+	at, err := git.Run(dir, "rev-parse", "--verify", "-q", tracking)
+	return err == nil && strings.TrimSpace(at) == commit
 }

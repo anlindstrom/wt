@@ -4,6 +4,16 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-22 23:55 — Stack pushes reach layers that push under another name
+
+`wt sync push-to --branch <branch> [<remote>/<branch>]` records where any local
+branch pushes, with a worktree or not; a quoted pattern does it for every match
+(`--branch 'tmp/layer/*' 'origin/feat_wt/*'`), `--unset` and `--dry-run` work
+with it. A stack push (`--push`, `wt sync push --stack`) then pushes such a layer
+to its recorded branch over that branch's lease. The line's own branch is left
+out, and named, when pushing it would create its remote branch: `--push-line`
+includes it. `--dry-run` shows each branch's rule (`sync-run` 1.23.0).
+
 ## 2026-11-22 22:40 — wt sync push <work> --stack: push a line you rebased with --no-push
 
 After `wt sync rebase <work> --stack --no-push` (or a no to the question), the
