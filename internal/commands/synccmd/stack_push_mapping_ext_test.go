@@ -27,7 +27,7 @@ type mappedLine struct {
 
 var mappedLayers = []string{"a", "b", "c"}
 
-const mappedLine_ = "tmp/x"
+const mappedTop = "tmp/x"
 
 func newMappedLine(t *testing.T) *mappedLine {
 	t.Helper()
@@ -37,7 +37,7 @@ func newMappedLine(t *testing.T) *mappedLine {
 		gittest.WriteFile(t, filepath.Join(main, "t.txt"), "t\n")
 		gittest.Git(t, main, "add", "-A")
 		gittest.Git(t, main, "commit", "-q", "--no-verify", "-m", "base")
-		gittest.Git(t, main, "checkout", "-q", "-b", mappedLine_)
+		gittest.Git(t, main, "checkout", "-q", "-b", mappedTop)
 		for _, l := range mappedLayers {
 			gittest.WriteFile(t, filepath.Join(main, l+".txt"), l+"\n")
 			gittest.Git(t, main, "add", "-A")
@@ -45,7 +45,7 @@ func newMappedLine(t *testing.T) *mappedLine {
 			gittest.Git(t, main, "branch", "tmp/layer/"+l)
 			m.tips[l] = gittest.Git(t, main, "rev-parse", "HEAD")
 		}
-		m.tips[mappedLine_] = m.tips["c"]
+		m.tips[mappedTop] = m.tips["c"]
 		gittest.Git(t, main, "checkout", "-q", "main")
 		gittest.WriteFile(t, filepath.Join(main, ".wt-sync.yaml"), "conflicts: []\n")
 		gittest.Git(t, main, "add", "-A")
@@ -61,7 +61,7 @@ func newMappedLine(t *testing.T) *mappedLine {
 		}
 		gittest.Git(t, main, "remote", "add", "origin", m.bare)
 		gittest.Git(t, main, "fetch", "-q", "origin")
-		gittest.Git(t, main, "worktree", "add", "-q", filepath.Join(wtDir, "x"), mappedLine_)
+		gittest.Git(t, main, "worktree", "add", "-q", filepath.Join(wtDir, "x"), mappedTop)
 	})
 	m.ctx = ctx
 	// The mapping a person records by hand, until wt sync push-to --branch.
@@ -79,7 +79,7 @@ func (m *mappedLine) noPushRun(t *testing.T) string {
 	opts := synccmdtest.NoAgents()
 	opts.Push = syncrun.PushNever
 	opts.Stack = &synccmd.StackOptions{Layers: []string{"tmp/layer/*"}}
-	_, human, err := synccmdtest.StackRun(t, m.ctx, mappedLine_, opts)
+	_, human, err := synccmdtest.StackRun(t, m.ctx, mappedTop, opts)
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, human)
 	}
@@ -92,7 +92,7 @@ func (m *mappedLine) pushLater(t *testing.T, dryRun, pushLine bool) (string, err
 	opts := syncfix.PushLaterOptions{DryRun: dryRun}
 	opts.Push = syncrun.PushAlways
 	opts.PushLine = pushLine
-	err := syncfix.SyncPushLater(m.ctx, mappedLine_, opts, &human)
+	err := syncfix.SyncPushLater(m.ctx, mappedTop, opts, &human)
 	return human.String(), err
 }
 
@@ -127,7 +127,7 @@ func TestPushLaterMovesMappedLayersAndCreatesNothing(t *testing.T) {
 	if got := strings.Count(after, "\n") - strings.Count(before, "\n"); got != 0 {
 		t.Errorf("the set of remote refs changed:\nbefore %s\nafter %s", before, after)
 	}
-	if !strings.Contains(human, mappedLine_) || !strings.Contains(human, "--push-line") {
+	if !strings.Contains(human, mappedTop) || !strings.Contains(human, "--push-line") {
 		t.Errorf("the push does not name the line as left out, with the flag that includes it:\n%s", human)
 	}
 }
@@ -170,8 +170,8 @@ func TestPushLaterPushesTheLineOnlyWithPushLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("push: %v\n%s", err, human)
 	}
-	if got, want := refIn(t, m.bare, mappedLine_), m.local(t, mappedLine_); got != want {
-		t.Errorf("origin %s is at %s, want %s\n%s", mappedLine_, got, want, human)
+	if got, want := refIn(t, m.bare, mappedTop), m.local(t, mappedTop); got != want {
+		t.Errorf("origin %s is at %s, want %s\n%s", mappedTop, got, want, human)
 	}
 	for _, l := range mappedLayers {
 		if got, want := refIn(t, m.bare, "feat_wt/"+l), m.local(t, "tmp/layer/"+l); got != want {
@@ -190,7 +190,7 @@ func TestPushRunMappedLayersLeavesTheLineOut(t *testing.T) {
 	opts := synccmdtest.NoAgents()
 	opts.Push = syncrun.PushAlways
 	opts.Stack = &synccmd.StackOptions{Layers: []string{"tmp/layer/*"}}
-	_, human, err := synccmdtest.StackRun(t, m.ctx, mappedLine_, opts)
+	_, human, err := synccmdtest.StackRun(t, m.ctx, mappedTop, opts)
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, human)
 	}
