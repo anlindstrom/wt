@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove.v1.json",
-  "x-version": "1.5.0",
+  "x-version": "1.6.0",
   "title": "wt remove <work> --yes --json",
   "description": "What `wt remove <work>` did, effect by effect. Printed by `wt remove <work> --yes --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends the run. Where the worktree and the quarantine are is read from the disk when the object is written. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -105,6 +105,48 @@
         "null"
       ],
       "description": "From the plan."
+    },
+    "staleRoutes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "ref",
+          "via",
+          "refspec",
+          "forces",
+          "dropped"
+        ],
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "The remote branch, as origin/feat."
+          },
+          "via": {
+            "type": "string",
+            "enum": [
+              "recorded",
+              "upstream",
+              "sameName",
+              "refspec"
+            ]
+          },
+          "refspec": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For via refspec: the setting, remote.<name>.push=<refspec>. Null otherwise."
+          },
+          "forces": {
+            "type": "boolean"
+          },
+          "dropped": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Since 1.6.0. From the plan: the stale routes of the kept copy, as branch.staleRoutes lists them in the plan."
     },
     "steps": {
       "type": "array",
@@ -219,10 +261,11 @@
             "submoduleUnreachable",
             "nestedWorktree",
             "quarantineUnusable",
+            "staleForcedPush",
             "processesUnknown",
             "planChanged"
           ],
-          "description": "dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there."
+          "description": "dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. staleForcedPush: a remote.<name>.push refspec with + would force a plain git push from the kept copy over a remote branch that moved on; nothing is changed (since 1.6.0). quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there."
         },
         "message": {
           "type": "string",
@@ -406,6 +449,7 @@
     "branch",
     "tip",
     "keepAs",
+    "staleRoutes",
     "steps",
     "forced",
     "quarantine",

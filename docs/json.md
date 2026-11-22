@@ -146,8 +146,8 @@ generating types from it:
 | `wt refs sweep --yes --json` | [`schema/refs-sweep.v1.json`](../schema/refs-sweep.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-sweep.v1.json` |
 | `wt refs sweep --dry-run --json` | [`schema/refs-sweep-plan.v1.json`](../schema/refs-sweep-plan.v1.json) | 1.1.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-sweep-plan.v1.json` |
 | `wt refs swept --json` | [`schema/refs-swept.v1.json`](../schema/refs-swept.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/refs-swept.v1.json` |
-| `wt remove <work> --yes --json` | [`schema/remove.v1.json`](../schema/remove.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove.v1.json` |
-| `wt remove <work> --dry-run --json` | [`schema/remove-plan.v1.json`](../schema/remove-plan.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove-plan.v1.json` |
+| `wt remove <work> --yes --json` | [`schema/remove.v1.json`](../schema/remove.v1.json) | 1.6.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove.v1.json` |
+| `wt remove <work> --dry-run --json` | [`schema/remove-plan.v1.json`](../schema/remove-plan.v1.json) | 1.6.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/remove-plan.v1.json` |
 | `wt restore <dir> --json` | [`schema/restore.v1.json`](../schema/restore.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/restore.v1.json` |
 | `wt restore <dir> --dry-run --json` | [`schema/restore-plan.v1.json`](../schema/restore-plan.v1.json) | 1.1.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/restore-plan.v1.json` |
 | `wt session list --json` | [`schema/session-list.v1.json`](../schema/session-list.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/session-list.v1.json` |
@@ -2511,6 +2511,29 @@ what it would leave unreachable, and a token. It changes nothing. `wt remove
 [agent sessions](#sessions--claude-and-codex) and never fetches: merged is measured against
 `origin/<trunk>` as last fetched and `<trunk>`.
 
+An unmerged branch wt made is kept under another name. It carries over where
+it pushed, unless a remote branch it could push to holds commits it lacks, as
+last fetched: a stale copy must not push over what moved on. `branch.staleRoutes`
+lists each such remote branch and the way a push would get there (`via`):
+
+| `via` | The route | The removal |
+|---|---|---|
+| `recorded` | where wt records or infers the branch pushes, which the rename would carry along | removes it (`dropped`) |
+| `upstream` | the upstream, where `push.default` sends a plain push to it: `upstream`, or `simple` with the kept name the upstream's | removes it (`dropped`). An upstream nothing pushes to stays |
+| `sameName` | the kept name on the remote a plain push goes to | leaves it, and says that git refuses the push unless forced |
+| `refspec` | a `remote.<name>.push` refspec whose source is the kept branch or `HEAD`, or a pattern that matches it, mapped to its destination | leaves it, and says so; with a `+` it refuses, below |
+
+Configuration is read as git reads it, from every scope; the writes stay in the
+repository's own. A `remote.<name>.push` refspec is shared by every checkout and
+wt does not change it. One with a `+` (`forces`) makes a plain `git push` from the
+kept copy overwrite the branch that moved on, so the removal refuses before it
+changes anything: the problem `staleForcedPush`, which no `--force` goes past,
+and a null token. Delete the branch by hand with `git branch -D` once you have
+checked it is an old copy, or remove the refspec. The token covers every route and
+the commit compared, so a plan read before the remote moved, or moved further, no
+longer matches. Nothing is fetched, and a destination with no remote-tracking ref
+is not compared.
+
 A plan the removal would refuse is still the whole object, with `error` set, a
 null token and a non-zero exit; so is one that cannot be made (no such
 worktree, the main checkout), with the worktree fields null.
@@ -2539,6 +2562,12 @@ worktree, the main checkout), with the worktree fields null.
 | `branch.pullRequest` | integer \| null | yes | A pull request GitHub merged into trunk at exactly tip, as wt list or wt sweep recorded it; it makes an unmerged branch deletable. |
 | `branch.outcome` | `"delete"` \| `"keep"` \| `"none"` | yes | delete: merged, applied or pullRequest; deleted after the checkout, only at tip. keep: an unmerged branch wt made; renamed to keepAs. none: left as it is; reason says why. The same names recovery.json's branch.plan uses. |
 | `branch.keepAs` | string \| null | yes |  |
+| `branch.staleRoutes` | array of object | yes | Since 1.6.0. For outcome keep: every remote branch the kept copy could push to that holds commits the branch lacks, as last fetched, each with how it would get there and what the removal does about it. via: recorded (where wt records or infers the branch pushes; it goes with the rename), upstream (the upstream, where push.default sends a plain push to it), sameName (the kept name on the remote a plain push goes to), refspec (a remote.<name>.push refspec, as remote.<name>.push=<refspec>, which wt does not change: it is the remote's, shared by every checkout). dropped: the removal takes that route away by removing the branch's own setting; false: it stays, and git refuses a plain push unless forced. forces: a refspec with +, which a plain push follows over a branch that moved on; that refuses the removal (problem staleForcedPush) and nothing is changed. The token covers every route and the commit compared. Empty when none, or the branch is not kept. |
+| `branch.staleRoutes[].ref` | string | yes | The remote branch, as origin/feat. |
+| `branch.staleRoutes[].via` | `"recorded"` \| `"upstream"` \| `"sameName"` \| `"refspec"` | yes |  |
+| `branch.staleRoutes[].refspec` | string \| null | yes | For via refspec: the setting, remote.<name>.push=<refspec>. Null otherwise. |
+| `branch.staleRoutes[].forces` | boolean | yes |  |
+| `branch.staleRoutes[].dropped` | boolean | yes |  |
 | `branch.reason` | string \| null | yes | For none: why. |
 | `bases` | array of object | yes | What merged is measured against, first first: origin/<trunk> as last fetched, then <trunk>. Remove never fetches. |
 | `bases[].name` | string | yes |  |
@@ -2579,7 +2608,7 @@ worktree, the main checkout), with the worktree fields null.
 | `force` | boolean | yes | Bare --force was given: the problems with force true do not refuse. False for --force=<list>, whose categories forceWith names. |
 | `forceWith` | array of `"idle-sessions"` \| `"busy-sessions"` \| `"sessions-unknown"` \| `"hidden-files"` \| `"lock"` | yes | Since 1.2.0. The --force categories given, all five for bare --force; empty without it. The token covers them. |
 | `problems` | array of object | yes | Every problem with the removal; those that refuse it are all of them, less the ones whose forceWith is in the top-level forceWith. |
-| `problems[].code` | `"dirty"` \| `"statusUnknown"` \| `"session"` \| `"sessionsUnknown"` \| `"lockHeld"` \| `"operation"` \| `"hiddenChanges"` \| `"headUnreachable"` \| `"reachUnknown"` \| `"submoduleUnreachable"` \| `"nestedWorktree"` \| `"quarantineUnusable"` \| `"processesUnknown"` \| `"planChanged"` | yes | dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there. |
+| `problems[].code` | `"dirty"` \| `"statusUnknown"` \| `"session"` \| `"sessionsUnknown"` \| `"lockHeld"` \| `"operation"` \| `"hiddenChanges"` \| `"headUnreachable"` \| `"reachUnknown"` \| `"submoduleUnreachable"` \| `"nestedWorktree"` \| `"quarantineUnusable"` \| `"staleForcedPush"` \| `"processesUnknown"` \| `"planChanged"` | yes | dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. staleForcedPush: a remote.<name>.push refspec with + would force a plain git push from the kept copy over a remote branch that moved on; nothing is changed (since 1.6.0). quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there. |
 | `problems[].message` | string | yes | The problem as a sentence. |
 | `problems[].force` | boolean | yes | --force goes past it: somebody's claim on the checkout, not work that would be lost. |
 | `problems[].forceWith` | `"idle-sessions"` \| `"busy-sessions"` \| `"sessions-unknown"` \| `"hidden-files"` \| `"lock"` \| `null` | yes | Since 1.2.0. The --force category that goes past it; null when force is false. A session problem is either idle-sessions or busy-sessions: idle and busy sessions are two problems. Null when force is false (since 1.2.0). |
@@ -2602,6 +2631,7 @@ mean the same there:
 | `reachUnknown` | what would be lost could not be worked out |
 | `nestedWorktree` | another worktree is inside it |
 | `quarantineUnusable` | the `--move-to` folder exists, is on another volume, or is inside the repository |
+| `staleForcedPush` | since 1.6.0: a `remote.<name>.push` refspec with `+` would force a plain `git push` from the kept copy over a remote branch that moved on; no `--force` goes past it |
 | `processesUnknown` | since 1.5.0, with `--reap`: the processes in it could not be found, or told apart from agent sessions; no `--force` goes past it |
 | `planChanged` | result only: `--expect` named another plan |
 
@@ -2658,7 +2688,7 @@ with no object.
 | `outcome` | `"removed"` \| `"removedWithBranchProblem"` \| `"refused"` \| `"partial"` \| `"interrupted"` | yes | removed: the worktree is gone, or quarantined, and the branch step did what the plan said. removedWithBranchProblem: the worktree is gone and the branch was left as it was on purpose (it moved, is no longer merged, or a worktree took it); error says which. refused: nothing in the repository changed; problems says why, and reaped lists any process stopped before the refusal. partial: something changed and a later step failed — a quarantine that stopped after writing recovery.json, the second move, or the branch step; the steps and quarantine say which, and restoreCommand undoes a quarantine. interrupted: a signal ended the run. |
 | `error` | string \| null | yes | Why it refused or stopped. |
 | `problems` | array of object | yes | For refused: why, as the plan names it, and planChanged for --expect. |
-| `problems[].code` | `"dirty"` \| `"statusUnknown"` \| `"session"` \| `"sessionsUnknown"` \| `"lockHeld"` \| `"operation"` \| `"hiddenChanges"` \| `"headUnreachable"` \| `"reachUnknown"` \| `"submoduleUnreachable"` \| `"nestedWorktree"` \| `"quarantineUnusable"` \| `"processesUnknown"` \| `"planChanged"` | yes | dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there. |
+| `problems[].code` | `"dirty"` \| `"statusUnknown"` \| `"session"` \| `"sessionsUnknown"` \| `"lockHeld"` \| `"operation"` \| `"hiddenChanges"` \| `"headUnreachable"` \| `"reachUnknown"` \| `"submoduleUnreachable"` \| `"nestedWorktree"` \| `"quarantineUnusable"` \| `"staleForcedPush"` \| `"processesUnknown"` \| `"planChanged"` | yes | dirty: anything uncommitted, submodules included, or a submodule not at its recorded commit. statusUnknown: git status, the git dir or HEAD could not be read. session: an agent session is in it, idle or busy. sessionsUnknown: the sessions could not be listed. lockHeld: git's worktree lock, and its holder is still running. operation: a rebase, merge, cherry-pick, revert or bisect in progress. hiddenChanges: files git status is told not to look at. headUnreachable: HEAD holds commits no surviving ref or worktree would. reachUnknown: what would be lost could not be worked out. submoduleUnreachable: a submodule commit only this worktree's copy holds. nestedWorktree: another worktree is inside it. staleForcedPush: a remote.<name>.push refspec with + would force a plain git push from the kept copy over a remote branch that moved on; nothing is changed (since 1.6.0). quarantineUnusable: the --move-to folder exists, is on another volume, or is inside the repository. processesUnknown: with --reap, the processes in it could not be found or told apart from agent sessions; no --force goes past it. planChanged (result only): --expect named another plan. The codes shared with sweep-plan's kept mean the same there. |
 | `problems[].message` | string | yes | The problem as a sentence. |
 | `problems[].force` | boolean | yes | --force goes past it: somebody's claim on the checkout, not work that would be lost. |
 | `problems[].forceWith` | `"idle-sessions"` \| `"busy-sessions"` \| `"sessions-unknown"` \| `"hidden-files"` \| `"lock"` \| `null` | yes | Since 1.2.0. The --force category that goes past it; null when force is false. A session problem is either idle-sessions or busy-sessions: idle and busy sessions are two problems. |
@@ -2666,6 +2696,12 @@ with no object.
 | `branch` | string \| null | yes | From the plan. |
 | `tip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | From the plan. |
 | `keepAs` | string \| null | yes | From the plan. |
+| `staleRoutes` | array of object | yes | Since 1.6.0. From the plan: the stale routes of the kept copy, as branch.staleRoutes lists them in the plan. |
+| `staleRoutes[].ref` | string | yes | The remote branch, as origin/feat. |
+| `staleRoutes[].via` | `"recorded"` \| `"upstream"` \| `"sameName"` \| `"refspec"` | yes |  |
+| `staleRoutes[].refspec` | string \| null | yes | For via refspec: the setting, remote.<name>.push=<refspec>. Null otherwise. |
+| `staleRoutes[].forces` | boolean | yes |  |
+| `staleRoutes[].dropped` | boolean | yes |  |
 | `steps` | array of object | yes | worktree, branch and superset, always all three, in that order: step, result, commit, reason and pin. |
 | `steps[].step` | `"worktree"` \| `"branch"` \| `"superset"` | yes |  |
 | `steps[].result` | `"removed"` \| `"quarantined"` \| `"partlyMoved"` \| `"kept"` \| `"notRun"` \| `"interrupted"` \| `"deleted"` \| `"renamed"` \| `"untouched"` \| `"failed"` \| `"deregistered"` \| `"notRegistered"` \| `"skipped"` \| `"optedOut"` | yes | worktree: removed, quarantined (both moves done), partlyMoved (the checkout moved, its admin dir not), kept (still there). branch: deleted, renamed (to keepAs), untouched, kept (turned down on purpose), failed (git failed). superset: deregistered, notRegistered, skipped, failed, optedOut (since 1.1.0: --keep-superset; Superset was not asked). Any: notRun (not reached), interrupted (a signal caught it and its state does not say it finished). |
@@ -2996,3 +3032,4 @@ change made it.
 | `sync-run` 1.18.0 | [`fold`](#fold--what-a-fold-compared) on each participant: for a fold of the line, whether it is in place and on which base, and what its tree guard compared and found |
 | `sync-run` 1.19.0 | `eachCommit` gains `targets`: the run's `--each-commit=targets` mode, checks at each layer's tip and at each commit a fixup folded into |
 | `sync-run` 1.20.0 | [`timings`](#timings--where-the-time-went) on each participant: the run's wall time, how many times each check and step ran and its total, and the slowest runs; `elapsedMs` on each [`layerSteps`](#layersteps--a-step-at-every-layer-tip) entry. All in milliseconds |
+| `remove-plan` 1.6.0, `remove` 1.6.0 | `staleRoutes` (on `branch` in the plan, top level in the result): for a kept branch, each remote branch it could push to that holds commits it lacks, as last fetched, with how (`via`), whether the removal takes the route away (`dropped`) and whether it forces (`forces`). The problem code `staleForcedPush` |

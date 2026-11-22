@@ -4,6 +4,16 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-22 20:50 — wt remove: a kept copy no longer pushes over a remote that moved on
+
+When `wt remove` keeps an unmerged branch under a new name, it now checks the
+remote branches the copy could push to, as last fetched. Where one has commits
+the branch lacks, the kept copy loses the push setting and upstream that sent
+it there, and the plan and result say so; `wt sync push-to <name> <remote>/<branch>`
+sets it again. What git itself would still do is said too. A `+` push refspec
+that would force it refuses the removal before anything changes. The commits
+stay on the branch. `--json` adds `staleRoutes` (`remove-plan` and `remove` 1.6.0).
+
 ## 2026-11-21 19:05 — wt sync no longer takes --rebase, --resume or --undo
 
 The verbs spelled as flags at the end of a `wt sync` line are gone, with the

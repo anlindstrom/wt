@@ -46,15 +46,16 @@ func (t RemoveTarget) locate(ctx *kit.Context) (repo.Worktree, error) {
 
 // RemoveBranchPlan is the branch checked out in the worktree, for --json.
 type RemoveBranchPlan struct {
-	Name        string  `json:"name"`
-	Tip         *string `json:"tip"`
-	Merge       string  `json:"merge"`
-	Base        *string `json:"base"`
-	Ahead       int     `json:"ahead"`
-	PullRequest *int    `json:"pullRequest"`
-	Outcome     string  `json:"outcome"`
-	KeepAs      *string `json:"keepAs"`
-	Reason      *string `json:"reason"`
+	Name        string             `json:"name"`
+	Tip         *string            `json:"tip"`
+	Merge       string             `json:"merge"`
+	Base        *string            `json:"base"`
+	Ahead       int                `json:"ahead"`
+	PullRequest *int               `json:"pullRequest"`
+	Outcome     string             `json:"outcome"`
+	KeepAs      *string            `json:"keepAs"`
+	StaleRoutes []RemoveStaleRoute `json:"staleRoutes"`
+	Reason      *string            `json:"reason"`
 }
 
 // RemoveSession is an agent session working in the checkout; Kind is
@@ -169,27 +170,28 @@ type RemoveQuarantine struct {
 
 // RemoveOutput is the one object wt remove --yes --json prints.
 type RemoveOutput struct {
-	Schema         int               `json:"schema"`
-	SchemaVersion  string            `json:"schemaVersion"`
-	Command        string            `json:"command"`
-	Repo           *string           `json:"repo"`
-	Trunk          *string           `json:"trunk"`
-	TrunkSource    *string           `json:"trunkSource"`
-	Token          *string           `json:"token"`
-	Outcome        string            `json:"outcome"`
-	Error          *string           `json:"error"`
-	Problems       []RemoveProblem   `json:"problems"`
-	Path           *string           `json:"path"`
-	Branch         *string           `json:"branch"`
-	Tip            *string           `json:"tip"`
-	KeepAs         *string           `json:"keepAs"`
-	Steps          []RemoveStep      `json:"steps"`
-	Forced         []string          `json:"forced"`
-	Quarantine     *RemoveQuarantine `json:"quarantine"`
-	RestoreCommand []string          `json:"restoreCommand"`
-	Recovery       *string           `json:"recovery"`
-	RunID          *string           `json:"runId"`
-	Reaped         []ReapedProcess   `json:"reaped"`
+	Schema         int                `json:"schema"`
+	SchemaVersion  string             `json:"schemaVersion"`
+	Command        string             `json:"command"`
+	Repo           *string            `json:"repo"`
+	Trunk          *string            `json:"trunk"`
+	TrunkSource    *string            `json:"trunkSource"`
+	Token          *string            `json:"token"`
+	Outcome        string             `json:"outcome"`
+	Error          *string            `json:"error"`
+	Problems       []RemoveProblem    `json:"problems"`
+	Path           *string            `json:"path"`
+	Branch         *string            `json:"branch"`
+	Tip            *string            `json:"tip"`
+	KeepAs         *string            `json:"keepAs"`
+	StaleRoutes    []RemoveStaleRoute `json:"staleRoutes"`
+	Steps          []RemoveStep       `json:"steps"`
+	Forced         []string           `json:"forced"`
+	Quarantine     *RemoveQuarantine  `json:"quarantine"`
+	RestoreCommand []string           `json:"restoreCommand"`
+	Recovery       *string            `json:"recovery"`
+	RunID          *string            `json:"runId"`
+	Reaped         []ReapedProcess    `json:"reaped"`
 }
 
 // removeToken names a plan: the repository, trunk and the bases' commits,
@@ -219,6 +221,11 @@ func hashRemove(t *jsonout.Token, ctx *kit.Context, p Plan) *jsonout.Token {
 	}
 	t.Str("Path", p.Path).Str("AdminDir", p.AdminDir).Str("Head", p.Head).Str("Branch", p.Branch).Str("Tip", p.Tip).
 		Str("Outcome", outcomeNames[p.Outcome]).Str("KeepAs", p.KeepAs)
+	t.Int("Stale", int64(len(p.Stale)))
+	for _, r := range p.Stale {
+		t.Str("Stale.Ref", r.Ref).Str("Stale.Tip", r.Tip).Str("Stale.Via", r.Via).Str("Stale.Refspec", r.Refspec).
+			Bool("Stale.Forces", r.Forces).Bool("Stale.Dropped", r.Dropped)
+	}
 	if p.KeepAs != "" {
 		// A name taken meanwhile turns the rename into a failure.
 		taken, _, err := ctx.Repo.ResolveRef("refs/heads/" + p.KeepAs)
@@ -292,7 +299,8 @@ func removePlanOutput(ctx *kit.Context, p Plan, token string) RemovePlanOutput {
 	o.Path, o.AdminDir, o.Head, o.Detached = jsonout.Strp(p.Path), jsonout.Strp(p.AdminDir), jsonout.Strp(p.Head), p.Branch == ""
 	if p.Branch != "" {
 		b := &RemoveBranchPlan{Name: p.Branch, Tip: jsonout.Strp(p.Tip), Merge: mergeNames[p.Merge], Base: jsonout.Strp(p.Base),
-			Ahead: p.Ahead, Outcome: outcomeNames[p.Outcome], KeepAs: jsonout.Strp(p.KeepAs)}
+			Ahead: p.Ahead, Outcome: outcomeNames[p.Outcome], KeepAs: jsonout.Strp(p.KeepAs),
+			StaleRoutes: staleRoutesOf(p.Stale)}
 		if p.MergedPR > 0 {
 			n := p.MergedPR
 			b.PullRequest = &n
@@ -523,7 +531,7 @@ func (j *RemoveJournal) Interrupted(inFlight, recovery string) {
 func removeOutput(ctx *kit.Context, plan *Plan, token, runID string, started bool, res *RemoveResult, err error,
 	recovery string) RemoveOutput {
 	o := RemoveOutput{Schema: 1, SchemaVersion: schema.VersionOf("remove"), Command: "remove",
-		Token: jsonout.Strp(token), Problems: []RemoveProblem{}, Forced: []string{}, Recovery: jsonout.Strp(recovery),
+		StaleRoutes: []RemoveStaleRoute{}, Token: jsonout.Strp(token), Problems: []RemoveProblem{}, Forced: []string{}, Recovery: jsonout.Strp(recovery),
 		Reaped: []ReapedProcess{}}
 	if res != nil {
 		o.Reaped = reapedProcesses(res.Reaped)
@@ -545,6 +553,7 @@ func removeOutput(ctx *kit.Context, plan *Plan, token, runID string, started boo
 		tip := ""
 		if plan != nil {
 			o.Path, o.Branch, o.Tip, o.KeepAs = jsonout.Strp(plan.Path), jsonout.Strp(plan.Branch), jsonout.Strp(plan.Tip), jsonout.Strp(plan.KeepAs)
+			o.StaleRoutes = staleRoutesOf(plan.Stale)
 			tip = plan.Tip
 			if res != nil {
 				o.Problems = blockingOf(*plan)
@@ -558,6 +567,7 @@ func removeOutput(ctx *kit.Context, plan *Plan, token, runID string, started boo
 	}
 
 	o.Path, o.Branch, o.Tip, o.KeepAs = jsonout.Strp(plan.Path), jsonout.Strp(plan.Branch), jsonout.Strp(plan.Tip), jsonout.Strp(plan.KeepAs)
+	o.StaleRoutes = staleRoutesOf(plan.Stale)
 	worktree := WorktreeKept
 	if dir := plan.Quarantine; dir != "" {
 		q := &RemoveQuarantine{Dir: dir, RecoveryFile: filepath.Join(dir, quarantine.FileName), Steps: []quarantine.Step{}}
@@ -671,4 +681,22 @@ func interruptedBranch(ctx *kit.Context, p Plan, worktreeGone, branchGone bool) 
 		}
 	}
 	return jsonout.StepInterrupted
+}
+
+// RemoveStaleRoute is a way the kept copy could push to a remote branch that
+// has moved on, for --json.
+type RemoveStaleRoute struct {
+	Ref     string  `json:"ref"`
+	Via     string  `json:"via"`
+	Refspec *string `json:"refspec"`
+	Forces  bool    `json:"forces"`
+	Dropped bool    `json:"dropped"`
+}
+
+func staleRoutesOf(routes []StaleRoute) []RemoveStaleRoute {
+	out := []RemoveStaleRoute{}
+	for _, r := range routes {
+		out = append(out, RemoveStaleRoute{Ref: r.Ref, Via: r.Via, Refspec: jsonout.Strp(r.Refspec), Forces: r.Forces, Dropped: r.Dropped})
+	}
+	return out
 }

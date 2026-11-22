@@ -13,6 +13,21 @@ fetched, or from the local trunk, so a pull request merged on the
 remote counts even while the main checkout's trunk is behind. Remove
 never fetches. A branch that moves after the plan is kept.
 
+A kept branch keeps pushing where it pushed, unless a remote branch it
+could push to has commits the branch lacks, as last fetched: its recorded
+destination, its upstream where `push.default` sends a push to it, and the
+destinations of the remote's push refspecs. A stale copy must not push over
+what moved on. The routes wt owns (the record, an upstream a push uses) are
+removed from the kept copy, the plan says so (`--dry-run`, and `staleRoutes` in
+`--json`, which the token covers), and `wt sync push-to` sets one again. What
+git itself would still do (the kept name on the remote, a refspec without `+`)
+is said: git refuses a push that is not a fast-forward unless forced. A refspec
+with `+` would force it, and the setting is shared, so the removal refuses and
+changes nothing; delete the branch with `git branch -D` after checking it is an
+old copy, or remove the refspec. Level with or ahead of its remote, or with no
+remote-tracking ref, the branch is kept as it always was; the commits are kept
+either way.
+
 A squash or rebase merge leaves no such tip, so git reads the branch as
 unmerged for ever. Where `wt list` or `wt sweep` has already recorded
 that GitHub merged this branch into trunk at exactly this commit, remove
