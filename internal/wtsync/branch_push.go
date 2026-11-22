@@ -259,5 +259,19 @@ func UpdateTracking(dir, tracking, commit, lease string) error {
 	// branch it points at never moves. An empty old value means the ref must
 	// not exist, so one made meanwhile is left alone.
 	_, err := git.Run(dir, "update-ref", "--no-deref", tracking, commit, lease)
+	if err != nil && trackingAt(dir, tracking, commit) {
+		// git moved it itself, as it does after a push to a URL a remote
+		// fetches from: already where the push put it.
+		return nil
+	}
 	return err
+}
+
+// trackingAt is whether tracking is a plain ref (not a symbolic one) at commit.
+func trackingAt(dir, tracking, commit string) bool {
+	if _, code, err := gitEnvAllow(dir, nil, nil, 1, "symbolic-ref", "-q", tracking); err != nil || code == 0 {
+		return false
+	}
+	at, err := git.Run(dir, "rev-parse", "--verify", "-q", tracking)
+	return err == nil && strings.TrimSpace(at) == commit
 }
