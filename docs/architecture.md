@@ -128,8 +128,10 @@ bats suites.
 `wt new` (`cmd/wt/new.go`) hands four functions to `runCreate`: the plain
 run, `--dry-run`, `--dry-run --json` and `--json`. The plain run is
 `provision.New` (`internal/commands/provision/new.go`): `kit.ParseWork` turns
-the spec into type, work and branch, `ctx.Scheme().Dir` gives the path, and
-`AddAndProvision` runs `ctx.Repo.AddWorktree`, excludes the folder from Time
+the spec into type, work and branch, `ctx.Scheme().Dir` gives the path, and,
+without `--base`, `new_base.go` fetches trunk (`fetchTrunk`), picks local trunk
+or `origin/<trunk>` (`chooseTrunkBase`) and moves local trunk up only when no
+worktree has it (`bringTrunkUp`); `AddAndProvision` runs `ctx.Repo.AddWorktree`, excludes the folder from Time
 Machine, then `setup` (developer config copied, caches cloned, `provision.sh`,
 submodules, the build command) and `supersetws.Register`. `wt checkout` is the
 same with `provision.Checkout` and `CheckoutAdd` putting the worktree on an

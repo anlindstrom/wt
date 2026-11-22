@@ -35,6 +35,7 @@ var gitWriteAllowlist = []struct {
 	{"syncrun/own_remote.go", "FastForwardOwn", "merge", 1, "merge --ff-only in the branch's own checkout, with the run's lock held, after repo.OnBranch confirmed HEAD is on the branch; git touches nothing when it cannot fast-forward"},
 	{"syncrun/trunk_sync.go", "SyncLocalTrunk", "update-ref", 1, "trunk with no checkout: update-ref with the old value as the guard, only after trunkOwners found no checkout and no operation holding it"},
 	{"syncrun/trunk_sync.go", "SyncLocalTrunk", "merge", 1, "trunk checked out in one worktree: merge --ff-only after repo.OnBranch confirmed that checkout is still on trunk"},
+	{"provision/new_base.go", "bringTrunkUp", "update-ref", 1, "wt new, trunk behind origin and checked out in no worktree (Worktrees.ByBranch found none): update-ref with the old value as the guard, a pure fast-forward to the commit the base was cut from"},
 	{"refs/refs_sweep.go", "contain", "unread", 1, "git for-each-ref --merged with the refs as arguments: a read"},
 	{"syncrun/own_remote.go", "FetchOwn", "unread", 1, "git fetch of the remote and its refspecs: writes remote-tracking refs, no local branch and no checkout"},
 	{"syncrun/own_remote.go", "onRemote", "unread", 1, "git ls-remote --heads: a read"},

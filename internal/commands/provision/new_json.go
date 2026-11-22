@@ -66,6 +66,20 @@ type NewPlan struct {
 	CreatePlan
 	Base       *string `json:"base"`
 	BaseCommit *string `json:"baseCommit"`
+	// BaseSource is where the base comes from: BaseLocal, BaseRemote or
+	// BaseGiven.
+	BaseSource string `json:"baseSource"`
+	// choice is the trunk base this plan chose; zero for --base.
+	choice baseChoice
+}
+
+// cutFrom is what git is given to cut from: the commit the plan pinned for a
+// trunk base, else the base as named.
+func (p NewPlan) cutFrom() string {
+	if p.choice.Commit != "" && p.BaseCommit != nil {
+		return *p.BaseCommit
+	}
+	return *p.Base
 }
 
 // CheckoutPlan is the one object wt checkout --dry-run --json prints.
@@ -93,6 +107,9 @@ type NewResult struct {
 	// Addresses is one entry per app with a domain; empty when there is none,
 	// or devports is absent or did not answer.
 	Addresses []devports.Address `json:"addresses"`
+	// BaseSource is where the base came from, as in the plan; null when the
+	// run stopped before it planned.
+	BaseSource *string `json:"baseSource"`
 }
 
 // CheckoutResult is the one object wt checkout --json prints.
@@ -159,11 +176,12 @@ func basePlan(ctx *kit.Context, command string, opts NewOptions) CreatePlan {
 // writes nothing.
 func PlanNew(ctx *kit.Context, spec string, opts NewOptions) NewPlan {
 	p := NewPlan{CreatePlan: basePlan(ctx, "new", opts)}
-	base := opts.Base
+	base, source := opts.Base, BaseGiven
 	if base == "" {
-		base = ctx.Config.MainBranch
+		p.choice = chooseTrunkBase(ctx)
+		base, source = p.choice.Ref, p.choice.Source
 	}
-	p.Base = jsonout.Strp(base)
+	p.Base, p.BaseSource = jsonout.Strp(base), source
 	if err := dotOrRoot(spec); err != nil {
 		p.problem(jsonout.ProblemInvalidName, "%v", err)
 	} else if typ, work, err := naming.ParseSpec(spec, ctx.Config.DefaultType, ctx.Vocab()); err != nil {
@@ -186,7 +204,10 @@ func PlanNew(ctx *kit.Context, spec string, opts NewOptions) NewPlan {
 		}
 	}
 	// No base at all is no trunk and no --base: noConfiguration says so.
-	if oid, ok, err := ctx.Repo.ResolveRef(base); err != nil {
+	if p.choice.Commit != "" {
+		// Trunk: the commit chosen, not a second resolve of its shorthand.
+		p.BaseCommit = jsonout.Strp(p.choice.Commit)
+	} else if oid, ok, err := ctx.Repo.ResolveRef(base); err != nil {
 		// No code says "git failed"; baseMissing refuses, and the message says why.
 		p.problem(jsonout.ProblemBaseMissing, "git could not read %q: %s", base, git.Reason(err))
 	} else if ok {
@@ -264,7 +285,7 @@ func (t CheckoutTarget) source() CheckoutSource {
 // newTokenOf is wt new's: the commit is the base's.
 func newTokenOf(ctx *kit.Context, p NewPlan) *jsonout.Token {
 	return jsonout.NewToken("1:", "wt-create").Str("Command", p.Command).Str("Branch", *p.Branch).Str("Path", *p.Path).
-		Str("BaseCommit", *p.BaseCommit).Config(kit.ConfigFingerprint(ctx))
+		Str("BaseSource", p.BaseSource).Str("BaseCommit", *p.BaseCommit).Config(kit.ConfigFingerprint(ctx))
 }
 
 // checkoutTokenOf is wt checkout's: the commit is the branch's tip or the
@@ -283,6 +304,9 @@ func checkoutTokenOf(ctx *kit.Context, p CheckoutPlan) *jsonout.Token {
 
 // NewPlanJSON writes wt new --dry-run --json.
 func NewPlanJSON(ctx *kit.Context, spec string, opts NewOptions, w io.Writer) error {
+	if line := fetchTrunk(ctx, opts); line != "" {
+		ctx.Warnf(kit.WarnTrunkFetch, "%s", line)
+	}
 	return jsonout.WriteJSON(w, PlanNew(ctx, spec, opts))
 }
 
@@ -294,11 +318,17 @@ func CheckoutPlanJSON(ctx *kit.Context, branch, work string, opts NewOptions, w 
 // NewDryRun is wt new --dry-run for a person: what would be made, or why
 // not.
 func NewDryRun(ctx *kit.Context, spec string, opts NewOptions, w io.Writer) error {
+	if line := fetchTrunk(ctx, opts); line != "" {
+		ctx.Warnf(kit.WarnTrunkFetch, "%s", line)
+	}
 	p := PlanNew(ctx, spec, opts)
 	if err := problemsError(p.Problems); err != nil {
 		return err
 	}
 	fmt.Fprintf(w, "Would create %s from %s (%s)\n  at %s\n", *p.Branch, *p.Base, git.ShortID(*p.BaseCommit, 7), *p.Path)
+	if p.choice.Note != "" {
+		fmt.Fprintln(w, "  "+p.choice.Note)
+	}
 	return nil
 }
 
@@ -331,12 +361,20 @@ func problemsError(ps []Problem) error {
 // NewJSON is wt new --json: the plan recomputed, --expect held to it, then
 // the same creation as without --json, recorded step by step in j.
 func NewJSON(ctx *kit.Context, spec string, opts NewOptions, expect string, j *CreateJournal, w io.Writer) error {
+	if line := fetchTrunk(ctx, opts); line != "" {
+		fmt.Fprintln(w, line)
+	}
 	p := PlanNew(ctx, spec, opts)
 	j.plan(p.CreatePlan, p.Base, p.BaseCommit)
+	j.baseFrom(p.BaseSource)
 	if err := j.admit(p.CreatePlan, expect); err != nil {
 		return err
 	}
-	path, err := AddAndProvision(ctx, *p.Path, newAdd(ctx, *p.Path, *p.Branch, *p.Base, w), opts, w, j)
+	if p.choice.Note != "" {
+		fmt.Fprintln(w, p.choice.Note)
+	}
+	bringTrunkUp(ctx, p.choice, w)
+	path, err := AddAndProvision(ctx, *p.Path, newAdd(ctx, *p.Path, *p.Branch, *p.Base, p.cutFrom(), w), opts, w, j)
 	if path != "" {
 		j.addressed(devports.Addresses(path))
 	}
@@ -381,6 +419,18 @@ type CreateJournal struct {
 	co *CheckoutResult
 	// addresses is what wt new adds to the result; guarded by the journal's lock.
 	addresses []devports.Address
+	// baseSource is where wt new's base came from; guarded by the journal's lock.
+	baseSource *string
+}
+
+// baseFrom records where wt new's base comes from.
+func (j *CreateJournal) baseFrom(source string) {
+	if j == nil {
+		return
+	}
+	j.Lock()
+	defer j.Unlock()
+	j.baseSource = jsonout.Strp(source)
 }
 
 // addressed records the addresses of the worktree wt new made.
@@ -642,7 +692,7 @@ func (j *CreateJournal) close(r *CreateResult, signalled bool, _ string) any {
 		if a == nil {
 			a = []devports.Address{}
 		}
-		return NewResult{CreateResult: *r, Addresses: a}
+		return NewResult{CreateResult: *r, Addresses: a, BaseSource: j.baseSource}
 	}
 	return r
 }
