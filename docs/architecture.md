@@ -265,15 +265,25 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    layers it left out. A run writes it while it still holds the line's lock
    (`finishRebase`, or the resume before its push), from the tip it left, and
    `syncrun.SettleStackPush` takes out what its push sent, only while it is
-   still the record that run wrote. A run that moved nothing leaves the old
-   record; a push that sends everything and `wt sync undo` remove it. No run
-   reads it.
+   still the record that run wrote. Unpushed runs add up: `wtsync.AddPushRun`
+   keeps the earlier runs' contributions (`PushRecord.Earlier`, oldest first;
+   the record's own fields are the newest run's, so a record of one run is the
+   shape older builds wrote), and `PushRecord.Merged` is the push they make:
+   per branch the oldest run's lease and the newest run's tip, or a
+   `PushConflict` when the runs disagree on the remote branch, the endpoint or
+   the lease (the remote moved between them). A run that moved nothing, or that is not
+   pushable (a step failed or owed), leaves the record as it is; every write gives it a new
+   `Rev`, which `ReplacePushRecord` compares with the epoch and time, so a settle made from
+   an older read is refused; a push that sends everything removes it, and one that sends some
+   takes those branches out of every run. `wt sync undo` takes out the undone
+   run's contribution only (`ForgetPushRecordOfRun`, by epoch). No run reads it.
    `wt sync push <work> --stack` (`syncfix.SyncPushLater` →
    `syncrun.PushRecorded`) holds the line's worktree lock, as a run and undo do (not with
    `--dry-run`, which only reads), from reading the record to replacing it (`wtsync.ReplacePushRecord`, only
    while it is still the record pushed from), re-reads it after the question,
    and refuses with no record, with a branch no longer at
-   its recorded tip, or when `checkEndpoints` fails, all before pushing, and
+   the newest run's recorded tip, with a conflicted branch, or when
+   `checkEndpoints` fails, all before pushing, and
    otherwise goes through the same `pushRemotes` as step 5 over the recorded
    leases, fetching nothing.
    A layer that pushes under another name is pushed to what `wt sync push-to
@@ -281,6 +291,8 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    a branch with no worktree like any other). The line's own branch is left out
    of both pushes when `BranchPush.Creates` (no remote branch yet, nothing
    recorded), unless `PushOptions.PushLine` (`--push-line`).
+   `--forget` (`syncfix.forgetPushRecord`) drops the record under the records'
+   flock and does nothing else; it removes a record it cannot read too.
 
 ### Stop, resume, undo
 
@@ -394,7 +406,7 @@ In the repository's common git dir (the main checkout's `.git`):
 |---|---|---|
 | `wt-sync-logs/` (a log and its `.end` per invocation) | `runlog` | `wt sync wait` |
 | `wt-sync-stack/<epoch>.json`, `<epoch>.alone` | a stack run: the record of its layer moves, and the mark of an `--alone` run that moves no layer (`syncrun.MarkAlone`) | `FinishStack`, resume, undo |
-| `wt-sync-push/<branch>.json` | a stack run left unpushed (`syncrun.KeepStackPush`): the line's recorded leases and tips for a later push, keyed by the line's branch (escaped) | `wt sync push --stack` only; removed by it, by undo, and replaced by the next run of the line |
+| `wt-sync-push/<branch>.json` | a stack run left unpushed (`syncrun.KeepStackPush`): the line's recorded leases and tips for a later push, keyed by the line's branch (escaped) | `wt sync push --stack` only; removed by it (also `--forget`) and by undo, and added to by the next run of the line: one contribution per unpushed run |
 | `wt-sync-owed/<branch>.json` | a run whose steps failed or were owed | the next run, `wt sync steps`, resume |
 | `wt-sync-keep.json`, `.log`, `.lock`, `.err` | `wt sync keep` (`keepstate`, launchd) | the overview, `wt sync keep status`, doctor |
 | `wt-pr-cache.json` | `kit` | `wt list`, `wt sweep` |

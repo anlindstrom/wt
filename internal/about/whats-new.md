@@ -4,6 +4,17 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-23 12:30 — Unpushed runs of a line add up
+
+Two `--no-push` runs of one `--stack` line before a push no longer replace each
+other: the record keeps both, and `wt sync push <work> --stack` sends each branch
+to the newest run's tip over the oldest run's lease, so the lower layers an earlier
+run moved go with the upper ones. `--dry-run` names the run each branch came from.
+If the remote moved between the runs, that branch is refused and named; nothing
+moves. `wt sync undo` takes back the last run only and says earlier ones are still
+recorded. `wt sync push <work> --stack --forget` drops the record and nothing else
+(`sync-run` 1.25.0).
+
 ## 2026-11-22 23:55 — Stack pushes reach layers that push under another name
 
 `wt sync push-to --branch <branch> [<remote>/<branch>]` records where any local

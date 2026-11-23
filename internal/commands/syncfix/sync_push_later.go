@@ -1,13 +1,16 @@
 package syncfix
 
 import (
+	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
 	"github.com/anlindstrom/wt/internal/jsonout"
+	"github.com/anlindstrom/wt/internal/repo"
 	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
@@ -41,6 +44,9 @@ func syncPushLater(ctx *kit.Context, work string, opts PushLaterOptions, w io.Wr
 		j.Repo(ctx.Repo.MainRoot)
 		tip, _, _ := ctx.Repo.ResolveRef("refs/heads/" + target.Branch)
 		j.Join(name, target.Branch, target.Path, tip, nil)
+	}
+	if opts.Forget {
+		return forgetPushRecord(ctx, target, name, opts, w)
 	}
 	// The line's worktree lock, which a run and wt sync undo take for it,
 	// from reading the record to deleting or rewriting it: no run or undo
@@ -88,5 +94,64 @@ func syncPushLater(ctx *kit.Context, work string, opts PushLaterOptions, w io.Wr
 		// the error, as for an undo that stopped part way.
 		j.FailWith(err)
 	}
+	return err
+}
+
+// forgetPushRecord is wt sync push <work> --stack --forget: the line's record
+// dropped, and nothing else. No ref moves and nothing is pushed. It holds the
+// record's flock while it reads and deletes, so a run saving its record is
+// not dropped unseen; a --dry-run only reads.
+func forgetPushRecord(ctx *kit.Context, target repo.Worktree, name string, opts PushLaterOptions, w io.Writer) error {
+	main := ctx.Repo.MainRoot
+	var rec *wtsync.PushRecord
+	var unreadable, err error
+	if opts.DryRun {
+		rec, unreadable, err = wtsync.InspectPushRecord(main, target.Branch)
+	} else {
+		rec, unreadable, err = wtsync.ForgetPushRecordLocked(main, target.Branch)
+	}
+	if err == nil {
+		verb, done := "dropped", "no ref moved and nothing was pushed"
+		if opts.DryRun {
+			verb, done = "would drop", "--dry-run: nothing dropped"
+		}
+		switch {
+		case unreadable != nil:
+			rm := "removed"
+			if opts.DryRun {
+				rm = "would remove"
+			}
+			fmt.Fprintf(w, "  %s: the push record could not be read (%v); %s it\n  %s\n", name, unreadable, rm, done)
+		case rec == nil:
+			fmt.Fprintf(w, "  %s: nothing recorded, nothing to drop\n", name)
+		default:
+			runs := rec.Runs()
+			fmt.Fprintf(w, "  %s: %s the push record of %s: %s\n", name, verb, kit.Count(len(runs), "run"), strings.Join(rec.Branches(), ", "))
+			for _, r := range runs {
+				fmt.Fprintf(w, "    run %d, %s\n", r.Epoch, r.Written.Local().Format("2006-01-02 15:04"))
+			}
+			fmt.Fprintf(w, "  %s\n", done)
+		}
+	}
+	opts.Journal.SetSync(target.Branch, func(p *syncrun.SyncParticipant) {
+		if err != nil {
+			p.Result, p.Reason = syncrun.ResultRefused, jsonout.Strp(err.Error())
+			return
+		}
+		p.Result = syncrun.ResultSkipped
+		if rec == nil && unreadable == nil {
+			return
+		}
+		d := &syncrun.DroppedRecordJSON{Runs: []syncrun.StackRunRef{}, Branches: []string{}, Dropped: !opts.DryRun}
+		if unreadable != nil {
+			d.Unreadable = jsonout.Strp(unreadable.Error())
+		} else {
+			d.Branches = rec.Branches()
+			for _, r := range rec.Runs() {
+				d.Runs = append(d.Runs, syncrun.StackRunRef{Epoch: r.Epoch, Time: r.Written})
+			}
+		}
+		p.DroppedRecord = d
+	})
 	return err
 }

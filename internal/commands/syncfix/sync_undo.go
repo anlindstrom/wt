@@ -139,7 +139,21 @@ func syncUndo(ctx *kit.Context, work string, opts UndoOptions, w io.Writer) erro
 			syncrun.TellIdle(w, syncrun.SessionsOf(told, r.Branch), wtsync.UndoneLine(rowWork, git.ShortID(r.To, 7), true))
 		}
 	}
+	if err == nil {
+		tellEarlierRunsKept(ctx.Repo.MainRoot, w, target.Branch, kit.WorktreeName(ctx, target.Branch, target.Path))
+	}
 	return err
+}
+
+// tellEarlierRunsKept says, after an undo took the newest run's push record
+// away, that the runs before it are still recorded for wt sync push --stack.
+func tellEarlierRunsKept(main string, w io.Writer, branch, work string) {
+	rec, ok, err := wtsync.ReadPushRecord(main, branch)
+	if err != nil || !ok {
+		return
+	}
+	n := len(rec.Runs())
+	fmt.Fprintf(w, "  ↪ %s still recorded for wt sync push %s --stack (undo takes back the last run only); --forget drops them\n", kit.Count(n, "earlier run"), work)
 }
 
 // tellAdoptedKept says where the tip a resume --adopt took over is still

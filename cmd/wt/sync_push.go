@@ -12,7 +12,7 @@ import (
 )
 
 func newSyncPushCmd() *cobra.Command {
-	var stack, dryRun, yes, asJSON, pushLine bool
+	var stack, dryRun, yes, asJSON, pushLine, forget bool
 	push := &cobra.Command{
 		Use:   "push <work> --stack",
 		Short: "Push a --stack line rebased earlier with --no-push, over the run's leases",
@@ -29,28 +29,44 @@ func newSyncPushCmd() *cobra.Command {
 			"recorded the same way, for a branch with no worktree too: wt sync push-to\n" +
 			"--branch.\n\n" +
 			"The run keeps a record of this for the line, beside its other state, until\n" +
-			"the push sends everything in it, wt sync undo puts the line back, or a new\n" +
-			"run of the line replaces it. A line with no record is refused. It is also\n" +
-			"refused, before anything is pushed, when a branch of the record is no\n" +
-			"longer at the tip the run left it at (somebody worked on it since), or a\n" +
-			"remote no longer pushes to the URL the leases were taken for. Layers the\n" +
-			"run held, or that had nowhere safe to push, are left out and named.\n\n" +
+			"the push sends everything in it or wt sync undo puts the line back. Runs\n" +
+			"that were not pushed add up: a run that moves something adds its layers\n" +
+			"to the record, and the push sends each branch to the newest run's tip over\n" +
+			"the oldest run's lease, so a later run of the top layers does not drop the\n" +
+			"lower layers an earlier run moved. wt sync undo takes back the last run\n" +
+			"only and says when earlier ones are still recorded. A line with no record\n" +
+			"is refused. It is also refused, before anything is pushed, when a branch\n" +
+			"of the record is no longer at the tip the newest run left it at (somebody\n" +
+			"worked on it since), a remote no longer pushes to the URL the leases were\n" +
+			"taken for, or the runs disagree about a branch: they push it to different\n" +
+			"remote branches, or took different leases because the remote moved between\n" +
+			"them. That branch is named; --forget and a fresh --no-push run get out of\n" +
+			"it. Layers the run held, or that had nowhere safe to push, are left out and\n" +
+			"named.\n\n" +
+			"--forget drops the line's record, and only that: no ref moves and nothing\n" +
+			"is pushed. It says what it dropped; with --dry-run it says what it would.\n" +
+			"Use it after a push made by hand, which leaves leases out of date.\n\n" +
 			"It asks first on a terminal (default no); --yes skips the question, and\n" +
 			"with no terminal and no --yes nothing is pushed. --dry-run says what each\n" +
-			"branch would push, lease \u2192 new, and changes nothing. --json prints one\n" +
+			"branch would push, lease \u2192 new, and, for a record of several runs, the\n" +
+			"run each came from, and changes nothing. --json prints one\n" +
 			"result object on stdout, as wt sync rebase --json does: the worktree's\n" +
 			"stack.push is the push, as for a run that pushed.",
 		Example: "  wt sync rebase login-crash --stack --no-push   # rebase, check, then\n" +
 			"  wt sync push login-crash --stack --dry-run     # what it would push\n" +
-			"  wt sync push login-crash --stack --yes         # push it",
+			"  wt sync push login-crash --stack --yes         # push it\n" +
+			"  wt sync push login-crash --stack --forget      # drop the record, push nothing",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !stack {
 				return usagef("wt sync push pushes a --stack line: add --stack")
 			}
+			if forget && (yes || pushLine) {
+				return usagef("--forget pushes nothing: it takes neither --yes nor --push-line")
+			}
 			return withVerbContext(cmd, args, "sync push", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				opts := syncfix.PushLaterOptions{DryRun: dryRun, Journal: j}
+				opts := syncfix.PushLaterOptions{DryRun: dryRun, Forget: forget, Journal: j}
 				opts.Push = syncrun.PushAsk
 				opts.PushLine = pushLine
 				switch {
@@ -65,7 +81,8 @@ func newSyncPushCmd() *cobra.Command {
 	}
 	push.Flags().BoolVar(&stack, "stack", false, "push the line a --stack run left for later")
 	push.Flags().BoolVar(&pushLine, "push-line", false, "include the line's own branch when that would create its remote branch")
-	push.Flags().BoolVar(&dryRun, "dry-run", false, "say what would be pushed and change nothing")
+	push.Flags().BoolVar(&forget, "forget", false, "drop the line's push record and nothing else: no ref moves, nothing is pushed")
+	push.Flags().BoolVar(&dryRun, "dry-run", false, "say what would be pushed (or, with --forget, dropped) and change nothing")
 	push.Flags().BoolVarP(&yes, "yes", "y", false, "do not ask first")
 	push.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
 	return push

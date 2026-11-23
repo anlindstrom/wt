@@ -176,6 +176,21 @@ type SyncParticipant struct {
 	// Timings is how long the run's each_commit checks and per-layer steps
 	// took; empty lists when none ran.
 	Timings TimingsJSON `json:"timings"`
+	// DroppedRecord is what wt sync push --stack --forget dropped of the
+	// line's push record; null for anything else.
+	DroppedRecord *DroppedRecordJSON `json:"droppedRecord"`
+}
+
+// DroppedRecordJSON is the push record --forget dropped (or, with --dry-run,
+// would drop): its runs, oldest first, and the branches they held entries for.
+type DroppedRecordJSON struct {
+	Runs     []StackRunRef `json:"runs"`
+	Branches []string      `json:"branches"`
+	// Dropped is false for --dry-run, which drops nothing.
+	Dropped bool `json:"dropped"`
+	// Unreadable is why the record's contents could not be read, when they
+	// could not: runs and branches are then empty. Null otherwise.
+	Unreadable *string `json:"unreadable"`
 }
 
 // AdoptedJSON is what wt sync resume --adopt took over: the ref that keeps

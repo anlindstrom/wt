@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.24.0",
+  "x-version": "1.25.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -73,7 +73,7 @@
     },
     "participant": {
       "type": "object",
-      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "layers", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "fold", "layerSteps", "emptied", "testsOnly", "adopted", "timings"],
+      "required": ["work", "branch", "path", "result", "reason", "before", "after", "failedSteps", "recovery", "pushCommand", "pushed", "noPushReason", "fixCommand", "safetyRef", "deferred", "undoCommand", "planFile", "ownRemoteSync", "layers", "checked", "eachCommit", "checkFailed", "rechecked", "stack", "fold", "layerSteps", "emptied", "testsOnly", "adopted", "timings", "droppedRecord"],
       "properties": {
         "work": { "type": "string", "description": "The work name, as wt list prints it."  },
         "branch": { "type": "string", "description": "The worktree's branch."  },
@@ -138,7 +138,8 @@
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/adopted" }],
           "description": "Since 1.12.0: for wt sync resume --adopt, the rebase finished by hand that it took over. Null for every other run, and for a resume --adopt that refused. keptRef is the ref that keeps the tip it found, made before anything moved: refs/wt-sync-kept/<branch>/<epoch>-adopted, or -adopted-2 and on when that is taken; undo leaves it. rebaseTip is where the rebase itself finished, which the layers are moved against. commits are the commits made after the rebase, oldest first, each with commit and subject; they stay on the branch. A check that failed at a tip is in failedSteps."
         },
-        "timings": { "$ref": "#/$defs/timings", "description": "Since 1.20.0: how long the run's each_commit checks and per-layer steps took. A resume's covers what that resume ran. Empty lists when none ran; wt sync undo, which runs none, says 0 and empty." }
+        "timings": { "$ref": "#/$defs/timings", "description": "Since 1.20.0: how long the run's each_commit checks and per-layer steps took. A resume's covers what that resume ran. Empty lists when none ran; wt sync undo, which runs none, says 0 and empty." },
+        "droppedRecord": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/droppedRecord" }], "description": "Since 1.25.0: for wt sync push <work> --stack --forget, the push record it dropped, or, with --dry-run, would drop. Null for every other run, and for a --forget of a line with no record. The result is skipped: no ref moved and nothing was pushed." }
       }
     },
     "adopted": {
@@ -241,19 +242,49 @@
         "push": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stackPush" }], "description": "Since 1.21.0: for a --stack run that pushed (--push, or yes to the question), what came of the push: every moved layer and the line's own branch that had somewhere safe to push, in one atomic push per remote, each over a lease on the commit the run recorded for its remote branch before it moved anything. Null in the look, and for a run that pushed nothing: with --no-push, a no to the question, or nobody to ask." }
       }
     },
+    "droppedRecord": {
+      "type": "object",
+      "description": "Since 1.25.0: the push record wt sync push --stack --forget dropped. The record holds one entry per unpushed run of the line, oldest first.",
+      "required": ["runs", "branches", "dropped", "unreadable"],
+      "properties": {
+        "runs": { "type": "array", "items": { "$ref": "#/$defs/runRef" }, "description": "The runs the record held, oldest first. Empty when the record could not be read (unreadable)." },
+        "branches": { "type": "array", "items": { "type": "string" }, "description": "The branches the runs held entries for, each once: layers in the order the runs first recorded them (bottom first within one run), then the line's own branch. Empty when the record could not be read." },
+        "dropped": { "type": "boolean", "description": "True when the record was dropped; false for --dry-run, which drops nothing." },
+        "unreadable": { "type": ["string", "null"], "description": "Why the record's contents could not be read, when they could not: the record file is removed all the same, as it blocks the line's next record. Null when it was read." }
+      }
+    },
+    "runRef": {
+      "type": "object",
+      "description": "Since 1.25.0: a run of a line, by its epoch (the run's own, as in a safety ref refs/wt-sync/<branch>/<epoch>) and when its push record was written.",
+      "required": ["epoch", "time"],
+      "properties": {
+        "epoch": { "type": "integer", "description": "The run's epoch." },
+        "time": { "type": "string", "format": "date-time", "description": "When the run wrote its record." }
+      }
+    },
+    "stackConflicted": {
+      "type": "object",
+      "description": "Since 1.25.0: a branch the unpushed runs of a line cannot make one push of.",
+      "required": ["branch", "why"],
+      "properties": {
+        "branch": { "type": "string", "description": "The local branch." },
+        "why": { "type": "string", "description": "Why: the runs push it to different remote branches or endpoints, or took different leases (the remote moved between the runs)." }
+      }
+    },
     "stackPush": {
       "type": "object",
       "description": "Since 1.21.0: the push of a --stack run. One atomic push (git push --atomic) per remote: if any lease on a remote fails, nothing on that remote moves, and every local branch stays where the rebase put it. Layers that push to different remotes get one push each; atomicity holds within a remote only.",
-      "required": ["branches", "lineLeftOut"],
+      "required": ["branches", "lineLeftOut", "conflicted"],
       "properties": {
         "lineLeftOut": { "type": ["string", "null"], "description": "Since 1.23.0: why the line's own branch is not in branches, when a stack push left it out: pushing it would create its remote branch, and nothing recorded says it should, so it goes only with --push-line (wt sync rebase --stack --push, wt sync push --stack). Null when it was in the push, or has nowhere to push." },
-        "branches": { "type": "array", "items": { "$ref": "#/$defs/stackPushed" }, "description": "Each branch that was in a push, in this order whatever the remotes: moved layers bottom first, then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason)." }
+        "branches": { "type": "array", "items": { "$ref": "#/$defs/stackPushed" }, "description": "Each branch that was in a push, in this order whatever the remotes: moved layers bottom first (for a push of several recorded runs, in the order the runs first recorded them), then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason)." },
+        "conflicted": { "type": "array", "items": { "$ref": "#/$defs/stackConflicted" }, "description": "Since 1.25.0: for wt sync push --stack refused because the runs the line's record holds disagree about a branch (see why), the branches that disagree, and branches is empty: nothing was pushed, and the record is kept. Empty for a run's own push and when no branch disagrees." }
       }
     },
     "stackPushed": {
       "type": "object",
       "description": "Since 1.21.0: one branch of a stack's push.",
-      "required": ["branch", "remote", "remoteBranch", "rule", "old", "new", "outcome", "why"],
+      "required": ["branch", "remote", "remoteBranch", "rule", "old", "new", "outcome", "why", "from"],
       "properties": {
         "branch": { "type": "string", "description": "The local branch." },
         "rule": { "type": "string", "description": "Since 1.23.0: what decided the remote branch: recorded (wt sync push-to), or its own name. Empty for a push recorded before 1.23.0." },
@@ -262,7 +293,8 @@
         "old": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The lease: the commit the remote branch had to be at, as last fetched before the run moved anything. Null for a branch that must not exist on the remote yet." },
         "new": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit pushed: the branch's new tip." },
         "outcome": { "enum": ["pushed", "leaseFailed", "notSent", "unknown"], "description": "pushed: the remote branch is at new. leaseFailed: git rejected it as stale: the remote branch was not at old any more, somebody pushed to it since; this is the branch that moved under the push. Any other refusal (a hook, a policy) is notSent, with git's own reason in why. notSent: nothing on its remote moved: another branch of the same push failed its lease, or the remote refused the push as a whole (a remote that does not accept --atomic is refused, never pushed branch by branch). unknown: the push ended in a transport failure (a timeout, a dropped connection) and the remote's own refs, read back, show the branch at neither old nor new, or could not be read: whether it moved is not known. A transport failure whose read-back shows the branch at new is pushed, and at old notSent." },
-        "why": { "type": ["string", "null"], "description": "For an outcome other than pushed, what git said. Null for pushed." }
+        "why": { "type": ["string", "null"], "description": "For an outcome other than pushed, what git said. Null for pushed." },
+        "from": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/runRef" }], "description": "Since 1.25.0: for wt sync push --stack, the run the pushed tip (new) is from: the newest unpushed run that moved the branch; old is the lease of the oldest. Null for a run's own push." }
       }
     },
     "stackContextGap": {
