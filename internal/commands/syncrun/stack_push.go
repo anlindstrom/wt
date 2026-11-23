@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/git"
@@ -38,6 +39,22 @@ type StackPush struct {
 	// LineLeftOut is why the line's own branch is not in Branches, when it
 	// was left out; null otherwise.
 	LineLeftOut *string `json:"lineLeftOut"`
+	// Conflicted are the branches a push from a record of several runs
+	// refused for: the runs disagree about the branch's lease or where it
+	// pushes. Empty for a run's own push and when none did.
+	Conflicted []StackConflicted `json:"conflicted"`
+}
+
+// StackConflicted is a branch whose recorded runs cannot be one push.
+type StackConflicted struct {
+	Branch string `json:"branch"`
+	Why    string `json:"why"`
+}
+
+// StackRunRef names a run: its epoch and when it was written.
+type StackRunRef struct {
+	Epoch int64     `json:"epoch"`
+	Time  time.Time `json:"time"`
 }
 
 // StackPushed is one branch of a stack's push.
@@ -54,6 +71,10 @@ type StackPushed struct {
 	Rule string `json:"rule"`
 	// Why is, for an outcome other than pushed, what git said.
 	Why *string `json:"why"`
+	// From is, for the push of a record kept by several runs
+	// (wt sync push --stack), the run the pushed tip is from: the newest that
+	// moved the branch. Null for a run's own push.
+	From *StackRunRef `json:"from"`
 }
 
 // LineLeftOutWhy is why a stack push leaves the line's own branch out, and the
@@ -181,7 +202,7 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	}
 	results, allIn := pushRemotes(ctx, w, remotes, s.work)
 	// In item order, whatever the remotes: layers bottom first, then the line.
-	s.Push = &StackPush{Branches: []StackPushed{}}
+	s.Push = &StackPush{Branches: []StackPushed{}, Conflicted: []StackConflicted{}}
 	if leftOut {
 		s.Push.LineLeftOut = jsonout.Strp(LineLeftOutWhy(*s.top, s.work))
 	}

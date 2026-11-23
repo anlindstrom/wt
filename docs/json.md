@@ -157,7 +157,7 @@ generating types from it:
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
 | `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.14.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
-| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.24.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.25.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
@@ -2118,7 +2118,7 @@ value for results saved before that), and:
 | `worktrees[].stack.contextUnchecked` | array of string | yes | Since 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup over an earlier fixup of the same target that conflicts, whose missing context cannot be told apart from that fixup's, or the analysis failing as a whole. Empty when every fixup was analysed and for any other look or run. |
 | `worktrees[].stack.push` | object \| null | yes | Since 1.21.0: for a --stack run that pushed (--push, or yes to the question), what came of the push: every moved layer and the line's own branch that had somewhere safe to push, in one atomic push per remote, each over a lease on the commit the run recorded for its remote branch before it moved anything. Null in the look, and for a run that pushed nothing: with --no-push, a no to the question, or nobody to ask. |
 | `worktrees[].stack.push.lineLeftOut` | string \| null | yes | Since 1.23.0: why the line's own branch is not in branches, when a stack push left it out: pushing it would create its remote branch, and nothing recorded says it should, so it goes only with --push-line (wt sync rebase --stack --push, wt sync push --stack). Null when it was in the push, or has nowhere to push. |
-| `worktrees[].stack.push.branches` | array of object | yes | Each branch that was in a push, in this order whatever the remotes: moved layers bottom first, then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason). |
+| `worktrees[].stack.push.branches` | array of object | yes | Each branch that was in a push, in this order whatever the remotes: moved layers bottom first (for a push of several recorded runs, in the order the runs first recorded them), then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason). |
 | `worktrees[].stack.push.branches[].branch` | string | yes | The local branch. |
 | `worktrees[].stack.push.branches[].rule` | string | yes | Since 1.23.0: what decided the remote branch: recorded (wt sync push-to), or its own name. Empty for a push recorded before 1.23.0. |
 | `worktrees[].stack.push.branches[].remote` | string | yes | The remote it was pushed to. |
@@ -2127,6 +2127,12 @@ value for results saved before that), and:
 | `worktrees[].stack.push.branches[].new` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit pushed: the branch's new tip. |
 | `worktrees[].stack.push.branches[].outcome` | `"pushed"` \| `"leaseFailed"` \| `"notSent"` \| `"unknown"` | yes | pushed: the remote branch is at new. leaseFailed: git rejected it as stale: the remote branch was not at old any more, somebody pushed to it since; this is the branch that moved under the push. Any other refusal (a hook, a policy) is notSent, with git's own reason in why. notSent: nothing on its remote moved: another branch of the same push failed its lease, or the remote refused the push as a whole (a remote that does not accept --atomic is refused, never pushed branch by branch). unknown: the push ended in a transport failure (a timeout, a dropped connection) and the remote's own refs, read back, show the branch at neither old nor new, or could not be read: whether it moved is not known. A transport failure whose read-back shows the branch at new is pushed, and at old notSent. |
 | `worktrees[].stack.push.branches[].why` | string \| null | yes | For an outcome other than pushed, what git said. Null for pushed. |
+| `worktrees[].stack.push.branches[].from` | object \| null | yes | Since 1.25.0: for wt sync push --stack, the run the pushed tip (new) is from: the newest unpushed run that moved the branch; old is the lease of the oldest. Null for a run's own push. |
+| `worktrees[].stack.push.branches[].from.epoch` | integer | yes | The run's epoch. |
+| `worktrees[].stack.push.branches[].from.time` | string (date-time) | yes | When the run wrote its record. |
+| `worktrees[].stack.push.conflicted` | array of object | yes | Since 1.25.0: for wt sync push --stack refused because the runs the line's record holds disagree about a branch (see why), the branches that disagree, and branches is empty: nothing was pushed, and the record is kept. Empty for a run's own push and when no branch disagrees. |
+| `worktrees[].stack.push.conflicted[].branch` | string | yes | The local branch. |
+| `worktrees[].stack.push.conflicted[].why` | string | yes | Why: the runs push it to different remote branches or endpoints, or took different leases (the remote moved between the runs). |
 | `worktrees[].fold` | object \| null | yes | Since 1.18.0: for a --stack run that folds the line (--autosquash, --edit, or wt sync steps), what it folded on and what its tree guard compared. Null for any other run. |
 | `worktrees[].fold.inPlace` | boolean | yes | The line is folded on its own base, not moved onto a target. |
 | `worktrees[].fold.base` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's own base: what an in-place fold rebases onto. |
@@ -2177,6 +2183,12 @@ value for results saved before that), and:
 | `worktrees[].timings.slowest[].run` | string | yes |  |
 | `worktrees[].timings.slowest[].at` | string | yes | Where it ran: a commit's short id and subject for a check, a layer and its branch for a step. |
 | `worktrees[].timings.slowest[].ms` | integer, at least 0 | yes |  |
+| `worktrees[].droppedRecord` | object \| null | yes | Since 1.25.0: for wt sync push <work> --stack --forget, the push record it dropped, or, with --dry-run, would drop. Null for every other run, and for a --forget of a line with no record. The result is skipped: no ref moved and nothing was pushed. |
+| `worktrees[].droppedRecord.runs` | array of object | yes | The runs the record held, oldest first. Empty when the record could not be read (unreadable). |
+| `worktrees[].droppedRecord.runs[]` | object | yes | Fields as at `worktrees[].stack.push.branches[].from`. |
+| `worktrees[].droppedRecord.branches` | array of string | yes | The branches the runs held entries for, each once: layers in the order the runs first recorded them (bottom first within one run), then the line's own branch. Empty when the record could not be read. |
+| `worktrees[].droppedRecord.dropped` | boolean | yes | True when the record was dropped; false for --dry-run, which drops nothing. |
+| `worktrees[].droppedRecord.unreadable` | string \| null | yes | Why the record's contents could not be read, when they could not: the record file is removed all the same, as it blocks the line's next record. Null when it was read. |
 | `leftAlone` | array of object | yes | Since 1.13.0: what a `--alone` run did not take along and left on the commits it was on, each named by `work`, `branch` and `path`: the worktrees stacked on the same history as the one it rebased, the branches in no worktree on the commits it replayed, or, with --stack, the layer branches of the line. [] for every other run. |
 | `leftAlone[].work` | string \| null | yes | The worktree; null for a branch that is in no worktree. Null for a branch in no worktree. |
 | `leftAlone[].branch` | string | yes |  |
@@ -2257,8 +2269,22 @@ question, nobody to ask) in this same shape: one worktree row, the line's, whose
 the record kept of the line and `layers` is empty, since the push moves none.
 Nothing is fetched. Before anything is pushed it is refused (`refusal`, result
 `refused`) when the line has no record, a branch of it is no longer at the tip the
-run left, or a remote no longer pushes to the recorded URL; a failed lease moves
-nothing on that remote and the record is kept for what was not sent.
+run left, a remote no longer pushes to the recorded URL, or the runs the record
+holds disagree about a branch (`stack.push.conflicted`, then with an empty
+`branches`); a failed lease moves nothing on that remote and the record is kept
+for what was not sent.
+
+Runs that were not pushed add up (`sync-run` 1.25.0): the record holds a
+contribution per run, and the push sends each branch to the newest run's tip over
+the oldest run's lease. `stack.push.branches[].from` names the run the pushed tip
+is from (epoch and time); it is null for a run's own push. A branch whose runs
+push it to different remote branches or took different leases (the remote moved
+between the runs) is `conflicted`: the whole push is refused and nothing moves.
+
+`wt sync push <work> --stack --forget --json` drops the line's record and nothing
+else. Its row is `skipped`, and `droppedRecord` gives the `runs` (epoch and time,
+oldest first) and `branches` it held and whether it was `dropped` (false with
+`--dry-run`); `unreadable` says why when the record's contents could not be read (it is removed all the same, with `runs` and `branches` empty). `droppedRecord` is null in every other result, and when the line had no record.
 
 #### Side branches — what hangs off the line
 
@@ -3111,3 +3137,4 @@ change made it.
 | `sync-run` 1.22.0 | `wt sync push <work> --stack --json`: `command` gains `sync push` and `result` gains `pushed`; the row's `stack.push` is the push a `--no-push` run left for later |
 | `sync-run` 1.23.0 | `rule` on each branch of [`push`](#push--a-stacks-push) (recorded by `wt sync push-to`, or its own name) and `lineLeftOut`: why a stack push left the line's own branch out (pushing it would create its remote branch; `--push-line` includes it) |
 | `sync-run` 1.24.0 | `worktrees[].fold.guard.resolvedAtStop`, present only when a fold took a person's resolution at a stop as intended |
+| `sync-run` 1.25.0 | `from` on each branch of [`push`](#push--a-stacks-push) (the run its tip is from), `push.conflicted` (branches the unpushed runs disagree on) and `worktrees[].droppedRecord` (what `wt sync push --stack --forget` dropped) |

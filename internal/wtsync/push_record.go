@@ -1,12 +1,15 @@
 package wtsync
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"syscall"
 	"time"
 )
@@ -36,6 +39,201 @@ type PushRecord struct {
 	Items []PushRecordItem `json:"items"`
 	// Left are the layers the run left out, named again by the push.
 	Left []PushLeft `json:"left,omitempty"`
+	// Rev names this version of the record: every write of it gives it a new
+	// one, so a settle made from an older read, which still has the newest
+	// run's epoch and time, is told from the record it was made from. Empty
+	// for a record an older build wrote.
+	Rev string `json:"rev,omitempty"`
+	// Earlier are the runs before this one whose pushes are still owed,
+	// oldest first: what the fields above say is the newest run's. A record
+	// of one run, as a build before this one wrote it, has none.
+	Earlier []PushRun `json:"earlier,omitempty"`
+}
+
+// PushRun is one run's contribution to a line's record: the fields of a
+// PushRecord that belong to a run.
+type PushRun struct {
+	Path    string           `json:"path,omitempty"`
+	Epoch   int64            `json:"epoch"`
+	Written time.Time        `json:"written"`
+	Head    string           `json:"head"`
+	Base    string           `json:"base"`
+	Commits int              `json:"commits"`
+	Subject string           `json:"subject"`
+	Items   []PushRecordItem `json:"items"`
+	Left    []PushLeft       `json:"left,omitempty"`
+}
+
+// Run is the record's own (newest) run as a PushRun.
+func (r *PushRecord) Run() PushRun {
+	return PushRun{Path: r.Path, Epoch: r.Epoch, Written: r.Written, Head: r.Head, Base: r.Base,
+		Commits: r.Commits, Subject: r.Subject, Items: r.Items, Left: r.Left}
+}
+
+// Runs is every run the record holds, oldest first.
+func (r *PushRecord) Runs() []PushRun {
+	return append(slices.Clone(r.Earlier), r.Run())
+}
+
+// withRuns is a record for line branch and work holding runs, oldest first:
+// the newest is the record's own fields. nil when runs is empty.
+func withRuns(branch, work string, runs []PushRun) *PushRecord {
+	if len(runs) == 0 {
+		return nil
+	}
+	n := runs[len(runs)-1]
+	return &PushRecord{Branch: branch, Work: work, Path: n.Path, Epoch: n.Epoch, Written: n.Written,
+		Head: n.Head, Base: n.Base, Commits: n.Commits, Subject: n.Subject, Items: n.Items, Left: n.Left,
+		Earlier: slices.Clone(runs[:len(runs)-1])}
+}
+
+// Without is the record with the entries for the branches in sent taken out
+// of every run, a run with nothing left dropped; nil when no run is left. A
+// push of a branch supersedes what every run recorded for it.
+func (r *PushRecord) Without(sent map[string]bool) *PushRecord {
+	var runs []PushRun
+	for _, run := range r.Runs() {
+		run.Items = slices.DeleteFunc(slices.Clone(run.Items), func(it PushRecordItem) bool { return sent[it.Branch] })
+		if len(run.Items) > 0 {
+			runs = append(runs, run)
+		}
+	}
+	return withRuns(r.Branch, r.Work, runs)
+}
+
+// Branches are the branches the record's runs hold entries for, once each:
+// layers in the order they were first moved, the line's own branch last, as
+// Merged orders them.
+func (r *PushRecord) Branches() []string {
+	var out []string
+	top := map[string]bool{}
+	for _, run := range r.Runs() {
+		for _, it := range run.Items {
+			if !slices.Contains(out, it.Branch) {
+				out = append(out, it.Branch)
+			}
+			top[it.Branch] = top[it.Branch] || it.Top
+		}
+	}
+	slices.SortStableFunc(out, func(a, b string) int {
+		switch {
+		case top[a] == top[b]:
+			return 0
+		case top[a]:
+			return 1
+		}
+		return -1
+	})
+	return out
+}
+
+// LeftOut is what the runs left out of the push, newest run first by
+// branch: a branch a run moved is not left out, whatever another run said.
+func (r *PushRecord) LeftOut() []PushLeft {
+	moved := r.Branches()
+	var out []PushLeft
+	runs := r.Runs()
+	for i := len(runs) - 1; i >= 0; i-- {
+		for _, l := range runs[i].Left {
+			if slices.Contains(moved, l.Branch) || slices.ContainsFunc(out, func(o PushLeft) bool { return o.Branch == l.Branch }) {
+				continue
+			}
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// MergedItem is one branch of the push the record makes: its entry from the
+// oldest run that moved it for the lease and the newest for the tip.
+type MergedItem struct {
+	PushRecordItem
+	// LeaseFrom is the run the lease is from, the oldest that moved the
+	// branch; TipFrom is the run the tip is from, the newest.
+	LeaseFrom, TipFrom RunRef
+}
+
+// RunRef names a run of a record.
+type RunRef struct {
+	Epoch int64     `json:"epoch"`
+	Time  time.Time `json:"time"`
+}
+
+// PushConflict is a branch the record cannot make one push of, and why.
+type PushConflict struct {
+	Branch string `json:"branch"`
+	Why    string `json:"why"`
+}
+
+// Merged is the push the record's runs add up to, branches in the order they
+// were first moved (the line's own last), and the branches that cannot be
+// pushed. A branch moved by one run has that run's entry. One moved by
+// several goes over the oldest run's lease to the newest run's tip, and only
+// while every run agrees on where it pushes and on the lease: a different
+// lease says the remote moved between the runs, which no one run's lease
+// covers, and the branch is a PushConflict.
+func (r *PushRecord) Merged() ([]MergedItem, []PushConflict) {
+	var order []string
+	by := map[string][]MergedItem{}
+	for _, run := range r.Runs() {
+		ref := RunRef{Epoch: run.Epoch, Time: run.Written}
+		for _, it := range run.Items {
+			if _, ok := by[it.Branch]; !ok {
+				order = append(order, it.Branch)
+			}
+			by[it.Branch] = append(by[it.Branch], MergedItem{PushRecordItem: it, LeaseFrom: ref, TipFrom: ref})
+		}
+	}
+	var items []MergedItem
+	var conflicts []PushConflict
+	for _, b := range order {
+		entries := by[b]
+		oldest, newest := entries[0], entries[len(entries)-1]
+		merged := newest
+		merged.Lease, merged.LeaseFrom = oldest.Lease, oldest.LeaseFrom
+		if why := disagreement(entries); why != "" {
+			conflicts = append(conflicts, PushConflict{Branch: b, Why: why})
+			continue
+		}
+		items = append(items, merged)
+	}
+	// The line's own branch goes last, as in each run.
+	slices.SortStableFunc(items, func(a, b MergedItem) int {
+		switch {
+		case a.Top == b.Top:
+			return 0
+		case a.Top:
+			return 1
+		}
+		return -1
+	})
+	return items, conflicts
+}
+
+// disagreement is why the runs' entries for one branch cannot be one push, or "".
+func disagreement(entries []MergedItem) string {
+	first := entries[0]
+	for _, e := range entries[1:] {
+		switch {
+		case e.Remote != first.Remote || e.RemoteBranch != first.RemoteBranch:
+			return fmt.Sprintf("run %d pushes it to %s/%s, run %d to %s/%s", first.TipFrom.Epoch, first.Remote, first.RemoteBranch, e.TipFrom.Epoch, e.Remote, e.RemoteBranch)
+		case e.Endpoint != first.Endpoint:
+			return fmt.Sprintf("%s pushed to %s when run %d took its lease and to %s for run %d", e.Remote, first.Endpoint, first.TipFrom.Epoch, e.Endpoint, e.TipFrom.Epoch)
+		case e.Lease != first.Lease:
+			return fmt.Sprintf("the remote moved between run %d and run %d: their leases on it differ (%s, %s)", first.TipFrom.Epoch, e.TipFrom.Epoch, leaseText(first.Lease), leaseText(e.Lease))
+		}
+	}
+	return ""
+}
+
+func leaseText(l string) string {
+	if l == "" {
+		return "none"
+	}
+	if len(l) > 7 {
+		l = l[:7]
+	}
+	return l
 }
 
 // PushRecordItem is one branch of a later push: where it pushes, the lease,
@@ -94,6 +292,28 @@ func lockPushRecords(mainRoot string) (func(), error) {
 // change; tests use it to put another write there.
 var pushRecordBeforeChange = func() {}
 
+// AddPushRun saves rec as the line's newest run, after the runs the line's
+// record already holds, which it keeps, and returns the record as saved. A
+// record of the same run (a resume) is replaced by it. The read and the write
+// are one step under the records' flock.
+func AddPushRun(mainRoot string, rec *PushRecord) (*PushRecord, error) {
+	unlock, err := lockPushRecords(mainRoot)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	cur, ok, err := ReadPushRecord(mainRoot, rec.Branch)
+	if err != nil {
+		return nil, err
+	}
+	runs := []PushRun{}
+	if ok {
+		runs = slices.DeleteFunc(cur.Runs(), func(r PushRun) bool { return r.Epoch == rec.Epoch })
+	}
+	merged := withRuns(rec.Branch, rec.Work, append(runs, rec.Run()))
+	return merged, writePushRecord(mainRoot, merged)
+}
+
 // WritePushRecord writes rec in full, atomically, replacing the line's.
 func WritePushRecord(mainRoot string, rec *PushRecord) error {
 	unlock, err := lockPushRecords(mainRoot)
@@ -109,6 +329,11 @@ func writePushRecord(mainRoot string, rec *PushRecord) error {
 	if err != nil {
 		return err
 	}
+	var token [8]byte
+	if _, err := rand.Read(token[:]); err != nil {
+		return err
+	}
+	rec.Rev = hex.EncodeToString(token[:])
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -154,6 +379,50 @@ func ForgetPushRecord(mainRoot, branch string) error {
 	return forgetPushRecord(mainRoot, branch)
 }
 
+// ForgetPushRecordLocked deletes the line's record under the flock, reading it
+// first, and returns what it dropped; nil when the line had none. A record
+// that cannot be read or decoded is deleted all the same (it is what blocks
+// the line's next record), and unreadable says why it could not be read.
+func ForgetPushRecordLocked(mainRoot, branch string) (rec *PushRecord, unreadable, err error) {
+	unlock, err := lockPushRecords(mainRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer unlock()
+	rec, exists, unreadable, err := inspectPushRecord(mainRoot, branch)
+	if err != nil || !exists {
+		return nil, nil, err
+	}
+	return rec, unreadable, forgetPushRecord(mainRoot, branch)
+}
+
+// InspectPushRecord is what ForgetPushRecordLocked would drop, and changes
+// nothing: the record, or why the line's record file cannot be read; both nil
+// when the line has none.
+func InspectPushRecord(mainRoot, branch string) (rec *PushRecord, unreadable, err error) {
+	rec, _, unreadable, err = inspectPushRecord(mainRoot, branch)
+	return rec, unreadable, err
+}
+
+func inspectPushRecord(mainRoot, branch string) (rec *PushRecord, exists bool, unreadable, err error) {
+	path, err := pushRecordPath(mainRoot, branch)
+	if err != nil {
+		return nil, false, nil, err
+	}
+	b, rerr := os.ReadFile(path)
+	if os.IsNotExist(rerr) {
+		return nil, false, nil, nil
+	}
+	if rerr != nil {
+		return nil, true, rerr, nil
+	}
+	var r PushRecord
+	if derr := json.Unmarshal(b, &r); derr != nil {
+		return nil, true, fmt.Errorf("%s: %w", path, derr), nil
+	}
+	return &r, true, nil, nil
+}
+
 func forgetPushRecord(mainRoot, branch string) error {
 	path, err := pushRecordPath(mainRoot, branch)
 	if err != nil {
@@ -165,9 +434,10 @@ func forgetPushRecord(mainRoot, branch string) error {
 	return nil
 }
 
-// ForgetPushRecordOfRun deletes the record the run of epoch left, whatever
-// line it names: undo puts the line back, and the tips the record names are
-// gone. A record of a later run is left.
+// ForgetPushRecordOfRun takes the run of epoch out of the record it left,
+// whatever line it names: undo puts the line back, and the tips that run's
+// entries name are gone. The runs before it stay recorded;
+// a record left with no run is deleted. A record of a later run is left.
 func ForgetPushRecordOfRun(mainRoot string, epoch int64) error {
 	unlock, err := lockPushRecords(mainRoot)
 	if err != nil {
@@ -187,13 +457,23 @@ func ForgetPushRecordOfRun(mainRoot string, epoch int64) error {
 		if err != nil {
 			return err
 		}
-		var rec struct {
-			Epoch int64 `json:"epoch"`
-		}
-		if json.Unmarshal(b, &rec) != nil || rec.Epoch != epoch {
+		var rec PushRecord
+		if json.Unmarshal(b, &rec) != nil {
 			continue
 		}
-		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+		runs := rec.Runs()
+		rest := slices.DeleteFunc(slices.Clone(runs), func(r PushRun) bool { return r.Epoch == epoch })
+		if len(rest) == len(runs) {
+			continue
+		}
+		next := withRuns(rec.Branch, rec.Work, rest)
+		if next == nil {
+			if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			continue
+		}
+		if err := writePushRecord(mainRoot, next); err != nil {
 			return err
 		}
 	}
@@ -206,7 +486,8 @@ var ErrPushRecordReplaced = errors.New("the line's push record is no longer the 
 
 // ReplacePushRecord replaces from, the record a push was made from, with to
 // (nil deletes it), and only while the line's record is still from: the same
-// run and the same time. Any other is left, and an error says so.
+// run, the same time and the same revision. Any other is left, and an error
+// says so.
 func ReplacePushRecord(mainRoot string, from, to *PushRecord) error {
 	unlock, err := lockPushRecords(mainRoot)
 	if err != nil {
@@ -217,7 +498,7 @@ func ReplacePushRecord(mainRoot string, from, to *PushRecord) error {
 	if err != nil {
 		return err
 	}
-	if !ok || cur.Epoch != from.Epoch || !cur.Written.Equal(from.Written) {
+	if !ok || cur.Rev != from.Rev || cur.Epoch != from.Epoch || !cur.Written.Equal(from.Written) {
 		return ErrPushRecordReplaced
 	}
 	pushRecordBeforeChange()

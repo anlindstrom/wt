@@ -1,6 +1,6 @@
 export default {
   "schema": 1,
-  "schemaVersion": "1.24.0",
+  "schemaVersion": "1.25.0",
   "command": "sync undo",
   "repo": "/repos/app",
   "trunk": "main",
@@ -43,7 +43,8 @@ export default {
       "emptied": [],
       "testsOnly": [],
       "adopted": null,
-      "timings": { "wallMs": 0, "runs": [], "slowest": [] }
+      "timings": { "wallMs": 0, "runs": [], "slowest": [] },
+      "droppedRecord": null
     }
   ],
   "recovery": null
