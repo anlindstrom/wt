@@ -53,7 +53,7 @@ jobs:
       - run: echo "WT_LDFLAGS=$(scripts/ldflags.sh)" >> "$GITHUB_ENV"
         env:
           TZ: Europe/Stockholm
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: ${{ env.ACT && env.LOCAL_RELEASE_DRY_RUN == 'true' && 'release --clean --snapshot' || 'release --clean' }}
