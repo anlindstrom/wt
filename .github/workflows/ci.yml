@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26"
+          go-version: "1.27"
       # The suite shells out to git and commits, so it needs an identity.
       - name: Configure git
         run: |
@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26"
+          go-version: "1.27"
       # Pinned, so lint changes only when this line does; match it to
       # `golangci-lint version` on the machine you lint on.
       - uses: golangci/golangci-lint-action@v9
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26"
+          go-version: "1.27"
       # No git identity here: test/helpers.bash gives the tests their own.
       - name: Install bats
         run: sudo apt-get update && sudo apt-get install -y bats
