@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - name: Verify tagged source
         shell: bash
@@ -46,14 +46,14 @@ jobs:
           done
           echo "CI on $sha did not finish within an hour; not releasing" >&2
           exit 1
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version: "1.26"
+          go-version: "1.27"
       # Local time, as on the machine make build runs on.
       - run: echo "WT_LDFLAGS=$(scripts/ldflags.sh)" >> "$GITHUB_ENV"
         env:
           TZ: Europe/Stockholm
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: ${{ env.ACT && env.LOCAL_RELEASE_DRY_RUN == 'true' && 'release --clean --snapshot' || 'release --clean' }}
