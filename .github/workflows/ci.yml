@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "26"
       # Pinned, so the mod's test kit changes only when this line does. The
       # suite needs no login and no network: it runs the mod against fakes.
       - run: npm install -g @anthropic-ai/claude-code@2.1.312
