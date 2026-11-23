@@ -17,6 +17,8 @@ type PushLaterOptions struct {
 	syncrun.PushOptions
 	// DryRun says what would be pushed and moves nothing.
 	DryRun bool
+	// Forget drops the line's record and does nothing else (--forget).
+	Forget bool
 	// Journal records the push, for --json; nil records nothing.
 	Journal *syncrun.RunJournal
 }
