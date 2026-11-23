@@ -46,7 +46,7 @@ jobs:
           done
           echo "CI on $sha did not finish within an hour; not releasing" >&2
           exit 1
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
       # Local time, as on the machine make build runs on.
