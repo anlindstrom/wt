@@ -337,7 +337,10 @@ type driver struct {
 	// own work; a resume's would throw away a person's, so a resume that
 	// fails leaves the worktree exactly as it is and says so.
 	keep bool
-	res  Result
+	// watch is what the run saw of its folds (fold_evidence.go): nil when
+	// the plan is unknown or was recorded before wt watched.
+	watch *foldWatch
+	res   Result
 	// before is HEAD as the last break left it: what the pick after the
 	// break is applied on. At that pick's edit stop HEAD either moved past
 	// it, so the pick was committed, or did not, so git dropped the pick as
@@ -655,6 +658,10 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 				d.noteUnread(rerr)
 				d.res.Replay = nil
 			}
+			if d.res.Replay != nil {
+				d.res.Replay.Observed = true
+				d.watch = &foldWatch{}
+			}
 		}
 	}
 	return d.drive(err)
@@ -779,6 +786,18 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 	busy, err := RebaseInProgress(req.Path)
 	if err != nil {
 		return d.res, err
+	}
+	if rp := req.ReportPlan; rp != nil && rp.Observed {
+		// The run's record of the folds it saw run goes on, so what this
+		// resume sees is added to it.
+		plan := *rp
+		plan.Folded = slices.Clone(rp.Folded)
+		d.res.Replay = &plan
+		if busy {
+			d.watch = startAt(req.Path, rp.Folded)
+		} else {
+			d.watch = &foldWatch{executed: slices.Clone(rp.Folded)}
+		}
 	}
 	if !busy {
 		if err := d.verifyFinished(); err != nil {
@@ -1246,6 +1265,7 @@ func (d *driver) drive(err error) (Result, error) {
 		if perr != nil {
 			return d.fail(perr)
 		}
+		d.seeFolds()
 		// The guard below compares one stop with the one before it, which an
 		// alternating unmerged set would walk straight past; this cap bounds
 		// the loop whatever the sequencer does. Three stops per commit (a
@@ -1412,6 +1432,7 @@ func (d *driver) drive(err error) (Result, error) {
 				return d.fail(err)
 			}
 			d.res.Left = h
+			d.saveFolds()
 			return d.res, nil
 		}
 		_, err = d.git("rebase", "--continue")
@@ -1520,6 +1541,12 @@ func (d *driver) finish() (Result, error) {
 	}
 	if d.res.Replayed, err = strconv.Atoi(count); err != nil {
 		return unread(err)
+	}
+	if d.watch != nil {
+		// The rebase wt drove has gone on to its end: what it was at, and
+		// what it had still to do, ran.
+		d.watch.settle()
+		d.seeFolds()
 	}
 	if d.res.Replay != nil && !d.keep {
 		// A rebase wt drove from its start to its end carried out its plan.
@@ -1728,4 +1755,32 @@ func (r Request) timings() *Timings {
 		return r.Timings
 	}
 	return NewTimings()
+}
+
+// seeFolds takes the folds the sequencer has run into the plan the result
+// carries, which a stop records for the resume to go on from.
+func (d *driver) seeFolds() {
+	if d.watch == nil || d.res.Replay == nil {
+		return
+	}
+	if busy, err := RebaseInProgress(d.req.Path); err == nil && busy {
+		d.watch.look(d.req.Path)
+	}
+	d.res.Replay.Folded = slices.Clone(d.watch.executed)
+}
+
+// saveFolds keeps what a resume saw of the folds in the stack's record, so
+// the resume after the stop it hands over at goes on from it. A run's first
+// stop is recorded by its caller, with the whole plan; a record that cannot
+// be written leaves the folds unconfirmed, which only warns.
+func (d *driver) saveFolds() {
+	if d.watch == nil || !d.keep || d.req.Epoch == 0 {
+		return
+	}
+	rec, ok, err := ReadStackRecord(d.mainRoot, d.req.Epoch)
+	if err != nil || !ok || rec.Replay == nil || !rec.Replay.Observed {
+		return
+	}
+	rec.Replay.Folded = slices.Clone(d.watch.executed)
+	_ = WriteStackRecord(d.mainRoot, rec)
 }

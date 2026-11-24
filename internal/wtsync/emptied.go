@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -48,6 +49,13 @@ type ReplayPlan struct {
 	// Confirmed says wt drove the rebase from its start to its end, so the
 	// folds were carried out as planned.
 	Confirmed bool `json:"confirmed,omitempty"`
+	// Observed says wt has watched the rebase from its start, through every
+	// stop and resume, so Folded is what ran. A plan recorded before wt
+	// watched is not observed: its folds are checked against the result.
+	Observed bool `json:"observed,omitempty"`
+	// Folded are the full ids of the folds wt saw the rebase carry out,
+	// recorded as they ran. Only an observed plan has them.
+	Folded []string `json:"folded,omitempty"`
 }
 
 // replayPlanOf reads the plan from the list a rebase of the line started
@@ -206,9 +214,12 @@ func ReportReplay(dir string, in ReplayInput) (ReplayReport, error) {
 		}
 		if folded[o.sha] {
 			// A fold is left out only once it is confirmed: wt carried the
-			// whole rebase out, or the fixup's change is in the result. A
-			// rebase a person went on with by hand may have skipped it.
-			if in.Plan.Confirmed || changePresent(dir, o.sha, in.New) {
+			// whole rebase out, or saw the fold run. A plan wt did not
+			// watch is checked against the result instead; a watched one
+			// is not, since a change in the result does not show the fold
+			// ran: a rebase a person went on with by hand may have skipped
+			// it.
+			if in.Plan.Confirmed || slices.Contains(in.Plan.Folded, o.sha) || (!in.Plan.Observed && changePresent(dir, o.sha, in.New)) {
 				continue
 			}
 			rep.Emptied = append(rep.Emptied, named(o, true))
