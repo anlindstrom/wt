@@ -16,6 +16,9 @@ type Owed struct {
 	Branch string     `json:"branch"`
 	Epoch  int64      `json:"epoch"`
 	Steps  []OwedStep `json:"steps"`
+	// EachCommit is the --each-commit mode of the run that left these steps
+	// owed, which wt sync steps keeps. Empty for a record an older build wrote.
+	EachCommit string `json:"eachCommit,omitempty"`
 }
 
 // OwedStep is one deferred step owed: at a layer of a stack, or for the

@@ -92,7 +92,8 @@ func targetsStop(t *testing.T) (*targetsLine, string) {
 
 // A stop at a fold target is handed over like any check stop: an amend that
 // adds the fix and a resume, which takes no flag, run the check at the
-// amended target, go on under targets and finish the line.
+// amended target, go on under targets and finish the line. Layer 1 lies below
+// the fixup's target and is left as it was: it is not checked.
 func TestSyncResumeAfterATargetsStopKeepsTargets(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -112,7 +113,7 @@ func TestSyncResumeAfterATargetsStopKeepsTargets(t *testing.T) {
 	if p := synccmdtest.Participant(t, res, gittest.StackTmp); p.Result != syncrun.ResultRebased || p.EachCommit != "targets" {
 		t.Fatalf("participant %+v", p)
 	}
-	want := []string{"feat(s1): a2.txt", "feat(s2): b1.txt", "feat(s2): b1.txt", "feat(s2): b3.txt", "chore(s3): bump to 1.0.1", "feat(s4): d2.txt", "feat(s5): e3.txt"}
+	want := []string{"feat(s2): b1.txt", "feat(s2): b1.txt", "feat(s2): b3.txt", "chore(s3): bump to 1.0.1", "feat(s4): d2.txt", "feat(s5): e3.txt"}
 	if got := synccmdtest.CheckedSubjects(t, logPath); !slices.Equal(got, want) {
 		t.Errorf("checked %q, want %q", got, want)
 	}

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.25.0",
+  "x-version": "1.26.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -111,7 +111,7 @@
         "layers": { "type": "array", "items": { "$ref": "#/$defs/layerBranch" }, "description": "Since sync-run 1.15.0: the branches in no worktree on this participant's line, bottom first, that the run moved with its rebase or left, and why. Empty when there are none, and for a participant the run did not rebase." },
         "ownRemoteSync": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/ownRemoteSync" }], "description": "Since 1.2.0. Always an object from wt sync rebase; always null from resume and undo, which do not check: the check ran when the run started." },
         "checked": { "type": "integer", "minimum": 0, "description": "Since 1.5.0: how many replayed commits the each_commit checks ran at, in this run or this resume. 0 when nothing was checked." },
-        "eachCommit": { "enum": ["all", "tips", "targets", "off"], "description": "Since 1.11.0 (targets since 1.19.0): where the run's each_commit checks ran, as wt sync rebase --each-commit named it. all: at every replayed commit that touches a step's paths, the default. tips: only at the tip of each layer of a --stack line, or of the branch; the commits between are not checked and not owed. targets: at each layer's tip and at each commit a fixup, squash or amend! folded into, in an in-place --stack --autosquash fold; the commits between are not checked and not owed. off: no each_commit check ran. A resume says its run's; wt sync undo, which checks nothing, says all." },
+        "eachCommit": { "enum": ["all", "tips", "targets", "off"], "description": "Since 1.11.0 (targets since 1.19.0): where the run's each_commit checks ran, as wt sync rebase --each-commit named it. all: at every replayed commit that touches a step's paths, the default. tips: only at the tip of each layer of a --stack line, or of the branch; the commits between are not checked and not owed. targets: at each layer's tip and at each commit a fixup, squash or amend! folded into, in an in-place --stack --autosquash fold; the commits between are not checked and not owed. off: no each_commit check ran. A resume says its run's; wt sync undo, which checks nothing, says all. wt sync steps says the mode it ran under: --each-commit's, else the mode of the run that owed the steps (targets reads as tips), else all." },
         "rechecked": { "type": "integer", "minimum": 0, "description": "Since 1.7.0: how many commits the each_commit checks that read a per-layer step's files ran at again, once the step had folded its output into them or committed it. 0 when none." },
         "checkFailed": {
           "description": "Since 1.5.0: the each_commit check that stopped the rebase: handedOver at that commit, or restored for a stack parent. Null when none failed. The step, the commit (the replayed commit it failed at), its subject and its error. The participant is handedOver at that commit, HEAD the commit, nothing unmerged, and wt sync resume runs the check again there once the fix is amended in or committed; a stack parent is restored instead, and its children notRun.",
@@ -383,8 +383,8 @@
         "step": { "type": "string", "description": "The step's run line from .wt-sync.yaml." },
         "ran": { "type": "boolean", "description": "Whether the step ran at this layer." },
         "result": {
-          "enum": ["unchanged", "folded", "committed", "skipped", "owed", "failed"],
-          "description": "unchanged: ran and changed nothing. folded: its output was folded into owner. committed: no commit of the layer changed its paths, and its output is the step's own commit at the layer's tip. skipped: no listed path changed in the layer. owed: not run, because a need did not answer or it failed at a layer below. failed: ran and failed, changed files outside its paths, or its fold was not proved; owed, and owed at every layer above."
+          "enum": ["unchanged", "folded", "committed", "skipped", "untouched", "owed", "failed"],
+          "description": "unchanged: ran and changed nothing. folded: its output was folded into owner. committed: no commit of the layer changed its paths, and its output is the step's own commit at the layer's tip. skipped: no listed path changed in the layer. untouched (since 1.26.0): the run left the layer's tip as it was, so the step did not run; ran is false. owed: not run, because a need did not answer or it failed at a layer below. failed: ran and failed, changed files outside its paths, or its fold was not proved; owed, and owed at every layer above."
         },
         "reason": { "type": ["string", "null"], "description": "Why it ran, or why not, or why it failed." },
         "owner": { "$ref": "#/$defs/shaOrNull", "description": "For folded, the commit its output was folded into, as rewritten: the last commit of the layer that changed one of its paths." },

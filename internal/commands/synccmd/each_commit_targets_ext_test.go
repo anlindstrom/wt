@@ -24,8 +24,10 @@ func targetsFold() synccmd.RunOptions {
 
 // The issue's shape: a fixup at the top of the line for a commit in layer 2.
 // Under targets the check runs at each layer's tip and at the commit the
-// fixup folded into, and nowhere between. The check fails at that target
-// (b1.txt without fix.txt), so the run stops there, before layer 2's tip.
+// fixup folded into, and nowhere between. Layer 1 lies below that target and
+// comes out as it went in, so its tip is not checked either. The check fails
+// at that target (b1.txt without fix.txt), so the run stops there, before
+// layer 2's tip.
 func TestEachCommitTargetsChecksTheFoldTargetAndTheTips(t *testing.T) {
 	t.Parallel()
 	skipShort(t)
@@ -35,7 +37,7 @@ func TestEachCommitTargetsChecksTheFoldTargetAndTheTips(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "needs you") {
 		t.Fatalf("err %v\n%s", err, human)
 	}
-	want := []string{"feat(s1): a2.txt", "feat(s2): b1.txt"}
+	want := []string{"feat(s2): b1.txt"}
 	if got := synccmdtest.CheckedSubjects(t, logPath); !slices.Equal(got, want) {
 		t.Errorf("checked %q, want %q\n%s", got, want, human)
 	}
@@ -76,7 +78,7 @@ func rebased(t *testing.T, res syncrun.RunResult, err error, human string) {
 
 // With every check passing, the run finishes: the checks ran at each layer's
 // tip and at the target (b1, which took the fixup), once each, and at no
-// other commit: not at b2.
+// other commit: not at b2, and not at layer 1's tip, which the run left as it was.
 func TestEachCommitTargetsFinishesWithTheTargetAndTipChecksOnly(t *testing.T) {
 	t.Parallel()
 	skipShort(t)
@@ -85,7 +87,7 @@ func TestEachCommitTargetsFinishesWithTheTargetAndTipChecksOnly(t *testing.T) {
 	fixup(t, s.Paths[gittest.StackTmp], "b1.txt", "feat(s2): b1.txt")
 	res, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, targetsFold())
 	rebased(t, res, err, human)
-	want := []string{"feat(s1): a2.txt", "feat(s2): b1.txt", "feat(s2): b3.txt", "chore(s3): bump to 1.0.1", "feat(s4): d2.txt", "feat(s5): e3.txt"}
+	want := []string{"feat(s2): b1.txt", "feat(s2): b3.txt", "chore(s3): bump to 1.0.1", "feat(s4): d2.txt", "feat(s5): e3.txt"}
 	if got := synccmdtest.CheckedSubjects(t, logPath); !slices.Equal(got, want) {
 		t.Errorf("checked %q, want %q\n%s", got, want, human)
 	}
@@ -95,7 +97,8 @@ func TestEachCommitTargetsFinishesWithTheTargetAndTipChecksOnly(t *testing.T) {
 }
 
 // A target whose folded change does not touch the step's paths is not
-// checked there: only layer 1, whose tip touches a1.txt, is.
+// checked there. Layer 1's tip touches a1.txt, but the run leaves layer 1 as
+// it was, so nothing is checked.
 func TestEachCommitTargetsDoesNotCheckATargetOutsideTheStepsPaths(t *testing.T) {
 	t.Parallel()
 	skipShort(t)
@@ -104,7 +107,7 @@ func TestEachCommitTargetsDoesNotCheckATargetOutsideTheStepsPaths(t *testing.T) 
 	fixup(t, s.Paths[gittest.StackTmp], "b1.txt", "feat(s2): b1.txt")
 	res, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, targetsFold())
 	rebased(t, res, err, human)
-	want := []string{"feat(s1): a2.txt"}
+	want := []string{}
 	if got := synccmdtest.CheckedSubjects(t, logPath); !slices.Equal(got, want) {
 		t.Errorf("checked %q, want %q\n%s", got, want, human)
 	}

@@ -1,6 +1,7 @@
 package syncrun
 
 import (
+	"cmp"
 	"fmt"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
@@ -73,7 +74,7 @@ func FoldPaths(cfg *wtsync.Config) []string {
 // RecordOwed records, for wt sync steps, what a finished rebase of branch
 // left owed of its deferred steps; nothing owed removes the record.
 func RecordOwed(mainRoot, branch string, epoch int64, res wtsync.Result, ran []wtsync.DeferredResult) error {
-	o := &wtsync.Owed{Branch: branch, Epoch: epoch}
+	o := &wtsync.Owed{Branch: branch, Epoch: epoch, EachCommit: cmp.Or(res.EachCommit, wtsync.EachAll)}
 	for _, s := range res.LayerSteps {
 		if s.Owed() {
 			o.Steps = append(o.Steps, wtsync.OwedStep{Step: s.Step.Run, Layer: s.Branch, Why: kit.OneLine(s.Why)})

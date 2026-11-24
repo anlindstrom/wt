@@ -76,7 +76,7 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 		left = next.Branches()
 	}
 	if len(left) == len(all) && len(left) > 0 {
-		fmt.Fprintf(w, "  ↪ %s left unpushed, with its leases: wt sync push %s --stack pushes it later\n", kit.Count(len(left), "branch"), s.work)
+		fmt.Fprintf(w, "  ↪ %s: wt sync push %s --stack pushes it later\n", s.unpushedLine(left), s.work)
 		return
 	}
 	err := wtsync.ReplacePushRecord(ctx.Repo.MainRoot, s.kept, next)
@@ -88,7 +88,7 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 		// The line's own branch, left out on purpose and named by the push.
 		fmt.Fprintf(w, "  ↪ %s kept for wt sync push %s --stack --push-line\n", left[0], s.work)
 	case next != nil:
-		fmt.Fprintf(w, "  ↪ %s left unpushed, with its leases: wt sync push %s --stack pushes it later\n", kit.Count(len(left), "branch"), s.work)
+		fmt.Fprintf(w, "  ↪ %s: wt sync push %s --stack pushes it later\n", s.unpushedLine(left), s.work)
 	}
 }
 
@@ -364,4 +364,32 @@ func recordedStack(rec *wtsync.PushRecord) *Stack {
 		s.Skipped = append(s.Skipped, StackSkipped{Branch: l.Branch, Tip: l.Tip, Reason: l.Why})
 	}
 	return s
+}
+
+// unpushedLine is how many branches the record leaves for a later push, and
+// how many of them an earlier run left there and this run did not move.
+func (s *Stack) unpushedLine(left []string) string {
+	own := map[string]bool{}
+	for _, it := range s.kept.Run().Items {
+		own[it.Branch] = true
+	}
+	earlier := 0
+	for _, b := range left {
+		if !own[b] {
+			earlier++
+		}
+	}
+	line := kit.Count(len(left), "branch", "branches") + " left unpushed"
+	switch {
+	case earlier == 1 && len(left) == 1:
+		line += " (from an earlier run)"
+	case earlier == len(left) && earlier > 0:
+		line += " (all from earlier runs)"
+	case earlier > 0:
+		line += fmt.Sprintf(" (%d of them from earlier runs)", earlier)
+	}
+	if len(left) == 1 {
+		return line + ", with its lease"
+	}
+	return line + ", with their leases"
 }
