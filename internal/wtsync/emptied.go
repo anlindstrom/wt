@@ -60,9 +60,13 @@ type ReplayPlan struct {
 	// Folded are the full ids of the folds wt saw the rebase carry out,
 	// recorded as they ran. Only an observed plan has them.
 	Folded []string `json:"folded,omitempty"`
-	// Seen is how many commands of the rebase's done list wt had seen when
-	// it last looked: a list longer than that on a resume was moved by hand.
-	Seen int `json:"seen,omitempty"`
+	// Seen and SeenLast are how many lines the rebase's done list held when
+	// wt last looked, and the last of them: a list that differs on a resume
+	// was moved by hand.
+	Seen     int    `json:"seen,omitempty"`
+	SeenLast string `json:"seenLast,omitempty"`
+	// Floor is how many entries of the done list can never be new evidence.
+	Floor int `json:"floor,omitempty"`
 }
 
 // replayPlanOf reads the plan from the list a rebase of the line started

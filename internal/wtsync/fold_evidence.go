@@ -17,8 +17,9 @@ import (
 // and squash commands that contains F, no other pick between, and wt drove
 // the rebase through that stretch. The list cannot show a pick a person
 // skipped, so wt records how far the list had gone where it handed over
-// (ReplayPlan.Seen): a list that has gone further was moved by hand, and
-// nothing from the stop it was left at on is confirmed. Break and exec
+// (ReplayPlan.Seen and SeenLast, every line of the list): a list that differs
+// was moved by hand, and nothing in it so far is confirmed, now or on any later
+// look (ReplayPlan.Floor). Break and exec
 // commands wt puts in the list are not commands of that run. Nothing else
 // confirms a fold: not the commit HEAD is at, not the fixup's change being
 // in the result.
@@ -30,11 +31,14 @@ type foldWatch struct {
 	inFlight []string
 	// targets is each fold's planned target.
 	targets map[string]string
-	// seen is how many commands the done list held at the last look.
-	seen int
-	// taintFrom and taintTo are the positions of the done list a person
-	// moved the rebase through by hand: nothing in them is confirmed.
-	taintFrom, taintTo int
+	// seen and seenLast are how many lines the done list held at the last
+	// look, break and exec lines included, and its last line.
+	seen     int
+	seenLast string
+	// floor is how many entries of the filtered done list can never be new
+	// evidence: wt saw them and could not confirm them, or a person moved
+	// the rebase through them by hand.
+	floor int
 }
 
 // seqCommand is one command of a sequencer list that names a commit.
@@ -89,6 +93,26 @@ func readSequencerList(wtPath, file string) ([]seqCommand, error) {
 	return out, nil
 }
 
+// rawDone is how many lines the done list holds, break and exec lines
+// included, and the last of them. A list that cannot be read has none.
+func rawDone(wtPath string) (int, string) {
+	dir, err := rebaseDir(wtPath)
+	if err != nil {
+		return 0, ""
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "done"))
+	if err != nil {
+		return 0, ""
+	}
+	n, last := 0, ""
+	for _, l := range strings.Split(string(data), "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
+			n, last = n+1, l
+		}
+	}
+	return n, last
+}
+
 // conflictedPick is whether the sequencer is stopped at a pick with a
 // conflict: its command is not finished.
 func conflictedPick(wtPath string) bool {
@@ -103,7 +127,7 @@ func conflictedPick(wtPath string) bool {
 // confirmedAt is whether the fold at position i of list is the run of folds
 // right behind its target's pick, and is not in what a person moved by hand.
 func (w *foldWatch) confirmedAt(list []seqCommand, i int) bool {
-	tainted := func(pos int) bool { return pos >= w.taintFrom && pos < w.taintTo }
+	tainted := func(pos int) bool { return pos < w.floor }
 	t := w.targets[list[i].sha]
 	if t == "" || tainted(i) {
 		return false
@@ -127,7 +151,7 @@ func (w *foldWatch) look(wtPath string) {
 	if err != nil {
 		return
 	}
-	w.seen = len(done)
+	w.seen, w.seenLast = rawDone(wtPath)
 	list := slices.Concat(done, todo)
 	stopped := -1
 	if n := len(done); n > 0 && done[n-1].isFold() && conflictedPick(wtPath) {
@@ -165,14 +189,15 @@ func (w *foldWatch) settle() {
 func startAt(wtPath string, plan *ReplayPlan) *foldWatch {
 	w := newFoldWatch(plan)
 	w.executed = slices.Clone(plan.Folded)
+	w.floor = plan.Floor
 	done, err := readSequencerList(wtPath, "done")
 	if err != nil {
 		return w
 	}
-	if len(done) != plan.Seen {
-		// The command the rebase was stopped at is the first of what a
-		// person may have skipped or continued.
-		w.taintFrom, w.taintTo = max(plan.Seen-1, 0), len(done)
+	if n, last := rawDone(wtPath); n != plan.Seen || last != plan.SeenLast {
+		// The rebase is not where wt left it: a person moved it, and
+		// what they skipped or continued the list cannot show.
+		w.floor = max(w.floor, len(done))
 	}
 	w.look(wtPath)
 	return w
@@ -184,4 +209,9 @@ func newFoldWatch(plan *ReplayPlan) *foldWatch {
 		w.targets = plan.Targets
 	}
 	return w
+}
+
+// record puts what the watch saw into plan, which a stop saves for the resume.
+func (w *foldWatch) record(plan *ReplayPlan) {
+	plan.Folded, plan.Seen, plan.SeenLast, plan.Floor = slices.Clone(w.executed), w.seen, w.seenLast, w.floor
 }

@@ -1767,12 +1767,12 @@ func (d *driver) seeFolds() {
 	if d.watch == nil || d.res.Replay == nil {
 		return
 	}
-	before, seen := len(d.watch.executed), d.watch.seen
+	before, was := len(d.watch.executed), *d.res.Replay
 	if busy, err := RebaseInProgress(d.req.Path); err == nil && busy {
 		d.watch.look(d.req.Path)
 	}
-	d.res.Replay.Folded, d.res.Replay.Seen = slices.Clone(d.watch.executed), d.watch.seen
-	if len(d.watch.executed) != before || d.watch.seen != seen {
+	d.watch.record(d.res.Replay)
+	if len(d.watch.executed) != before || d.res.Replay.Seen != was.Seen || d.res.Replay.SeenLast != was.SeenLast || d.res.Replay.Floor != was.Floor {
 		// Recorded as they are seen, so a handover or an interrupt at any
 		// point leaves the record with them.
 		d.saveFolds()
@@ -1791,6 +1791,6 @@ func (d *driver) saveFolds() {
 	if err != nil || !ok || rec.Replay == nil || !rec.Replay.Observed {
 		return
 	}
-	rec.Replay.Folded, rec.Replay.Seen = slices.Clone(d.watch.executed), d.watch.seen
+	d.watch.record(rec.Replay)
 	_ = WriteStackRecord(d.mainRoot, rec)
 }
