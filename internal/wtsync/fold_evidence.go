@@ -12,24 +12,29 @@ import (
 // report of a folded fixup rests on, kept through stops, handovers and
 // resumes in ReplayPlan.Folded.
 //
-// A fold counts when it ran into the commit it was planned for: the done
-// list holds it right behind that commit's pick, and the commit was not
-// skipped. A fold the rebase is stopped at, or has still to run, counts when
-// the commit HEAD is at is its target, so a target a person skipped is seen.
-// What a person did by hand between wt's looks is not seen and not counted.
+// One rule confirms a fold of fixup F into target T: git's list shows T's own
+// pick (by its original id) immediately followed by an unbroken run of fixup
+// and squash commands that contains F, no other pick between, and wt drove
+// the rebase through that stretch. The list cannot show a pick a person
+// skipped, so wt records how far the list had gone where it handed over
+// (ReplayPlan.Seen): a list that has gone further was moved by hand, and
+// nothing from the stop it was left at on is confirmed. Break and exec
+// commands wt puts in the list are not commands of that run. Nothing else
+// confirms a fold: not the commit HEAD is at, not the fixup's change being
+// in the result.
 type foldWatch struct {
-	// skip is the leading fold commands of the done list that wt did not
-	// see run: they are in the plan or are not counted.
-	skip     int
 	executed []string
 	// inFlight is what the next finished rebase will have carried out: the
 	// fold a conflict is stopped at, and the folds after it, each with its
-	// target in place.
+	// target's pick right before its run in the list.
 	inFlight []string
-	// targets is each fold's planned target, and subjects the subject an
-	// amend! gave a target, by the target's id.
-	targets  map[string]string
-	subjects map[string]string
+	// targets is each fold's planned target.
+	targets map[string]string
+	// seen is how many commands the done list held at the last look.
+	seen int
+	// taintFrom and taintTo are the positions of the done list a person
+	// moved the rebase through by hand: nothing in them is confirmed.
+	taintFrom, taintTo int
 }
 
 // seqCommand is one command of a sequencer list that names a commit.
@@ -95,34 +100,24 @@ func conflictedPick(wtPath string) bool {
 	return err == nil
 }
 
-// atTarget is whether HEAD is the replay of commit target, by author, author
-// date and subject: the subject target has, or one an amend! of it gave.
-func (w *foldWatch) atTarget(wtPath, target string) bool {
-	const format = "--format=%an%x00%ae%x00%ad%x00%s"
-	key := func(rev string) (string, string) {
-		out, err := gitEnv(wtPath, nil, nil, "log", "-1", "--date=raw", format, rev)
-		if err != nil {
-			return "", ""
-		}
-		f := strings.SplitN(out, "\x00", 4)
-		if len(f) < 4 {
-			return "", ""
-		}
-		return strings.Join(f[:3], "\x00"), f[3]
-	}
-	want, subject := key(target)
-	got, head := key("HEAD")
-	if want == "" || want != got {
+// confirmedAt is whether the fold at position i of list is the run of folds
+// right behind its target's pick, and is not in what a person moved by hand.
+func (w *foldWatch) confirmedAt(list []seqCommand, i int) bool {
+	tainted := func(pos int) bool { return pos >= w.taintFrom && pos < w.taintTo }
+	t := w.targets[list[i].sha]
+	if t == "" || tainted(i) {
 		return false
 	}
-	if head == subject {
-		return true
+	p := i - 1
+	for p >= 0 && list[p].isFold() {
+		p--
 	}
-	return w.subjects[target] == head
+	return p >= 0 && list[p].sha == t && !tainted(p)
 }
 
-// look reads the sequencer's lists and counts the folds it has run since
-// wt's last look. A list that cannot be read counts nothing.
+// look reads the sequencer's lists and counts the folds it has run, and
+// notes the ones it will have run when the rebase wt drives ends. A list that
+// cannot be read counts nothing.
 func (w *foldWatch) look(wtPath string) {
 	done, err := readSequencerList(wtPath, "done")
 	if err != nil {
@@ -132,46 +127,23 @@ func (w *foldWatch) look(wtPath string) {
 	if err != nil {
 		return
 	}
-	w.inFlight = nil
-	var stopped *seqCommand
+	w.seen = len(done)
+	list := slices.Concat(done, todo)
+	stopped := -1
 	if n := len(done); n > 0 && done[n-1].isFold() && conflictedPick(wtPath) {
-		stopped = &done[n-1]
-		done = done[:n-1]
+		stopped = n - 1
 	}
-	// A fold run since the last look counts when the pick right before it,
-	// folds and nothing else between, is the commit it was planned for.
-	pick, nth := "", 0
-	for _, c := range done {
-		if c.isPick() {
-			pick = c.sha
+	w.inFlight = nil
+	for i, c := range list {
+		if !c.isFold() || !w.confirmedAt(list, i) {
 			continue
 		}
-		if nth++; nth > w.skip && w.targets[c.sha] == pick && !slices.Contains(w.executed, c.sha) {
-			w.executed = append(w.executed, c.sha)
-		}
-	}
-	// The folds still to run count when their target is picked first, or is
-	// the commit HEAD is at.
-	picks := map[string]bool{}
-	for _, c := range todo {
-		if c.isPick() {
-			picks[c.sha] = true
-		}
-	}
-	if n := len(done); stopped == nil && n > 0 && done[n-1].isPick() && conflictedPick(wtPath) {
-		// A pick stopped at its conflict is committed by the --continue.
-		picks[done[n-1].sha] = true
-	}
-	later := todo
-	if stopped != nil {
-		later = append([]seqCommand{*stopped}, todo...)
-	}
-	for _, c := range later {
-		if !c.isFold() {
-			continue
-		}
-		t := w.targets[c.sha]
-		if t != "" && (picks[t] || (t == pick && w.atTarget(wtPath, t))) {
+		switch {
+		case i < len(done) && i != stopped:
+			if !slices.Contains(w.executed, c.sha) {
+				w.executed = append(w.executed, c.sha)
+			}
+		default:
 			w.inFlight = append(w.inFlight, c.sha)
 		}
 	}
@@ -188,25 +160,20 @@ func (w *foldWatch) settle() {
 }
 
 // startAt makes a watch of a rebase wt takes up where an earlier look left
-// it: seen is what the plan recorded, and the folds the sequencer holds in
-// done now that are not the command it is stopped at were run, or not, out
-// of wt's sight.
-func startAt(wtPath string, seen []string, plan *ReplayPlan) *foldWatch {
+// it: plan carries what wt saw before. A done list longer than the plan says
+// it was when wt handed over was moved by hand from the stop it was left at.
+func startAt(wtPath string, plan *ReplayPlan) *foldWatch {
 	w := newFoldWatch(plan)
-	w.executed = slices.Clone(seen)
+	w.executed = slices.Clone(plan.Folded)
 	done, err := readSequencerList(wtPath, "done")
 	if err != nil {
 		return w
 	}
-	for _, c := range done {
-		if c.isFold() {
-			w.skip++
-		}
+	if len(done) != plan.Seen {
+		// The command the rebase was stopped at is the first of what a
+		// person may have skipped or continued.
+		w.taintFrom, w.taintTo = max(plan.Seen-1, 0), len(done)
 	}
-	if n := len(done); n > 0 && done[n-1].isFold() && conflictedPick(wtPath) {
-		w.skip--
-	}
-	// What the --continue wt makes next carries out.
 	w.look(wtPath)
 	return w
 }
@@ -214,7 +181,7 @@ func startAt(wtPath string, seen []string, plan *ReplayPlan) *foldWatch {
 func newFoldWatch(plan *ReplayPlan) *foldWatch {
 	w := &foldWatch{}
 	if plan != nil {
-		w.targets, w.subjects = plan.Targets, plan.Subjects
+		w.targets = plan.Targets
 	}
 	return w
 }

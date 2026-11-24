@@ -794,7 +794,7 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		plan.Folded = slices.Clone(rp.Folded)
 		d.res.Replay = &plan
 		if busy {
-			d.watch = startAt(req.Path, rp.Folded, &plan)
+			d.watch = startAt(req.Path, &plan)
 		} else {
 			d.watch = newFoldWatch(&plan)
 			d.watch.executed = slices.Clone(rp.Folded)
@@ -1547,7 +1547,10 @@ func (d *driver) finish() (Result, error) {
 		// The rebase wt drove has gone on to its end: what it was at, and
 		// what it had still to do, ran.
 		d.watch.settle()
-		d.seeFolds()
+		d.res.Replay.Folded = slices.Clone(d.watch.executed)
+		// Before anything after the rebase runs: an interrupt there must
+		// leave the record with them.
+		d.saveFolds()
 	}
 	if d.res.Replay != nil && !d.keep {
 		// A rebase wt drove from its start to its end carried out its plan.
@@ -1764,12 +1767,12 @@ func (d *driver) seeFolds() {
 	if d.watch == nil || d.res.Replay == nil {
 		return
 	}
-	before := len(d.watch.executed)
+	before, seen := len(d.watch.executed), d.watch.seen
 	if busy, err := RebaseInProgress(d.req.Path); err == nil && busy {
 		d.watch.look(d.req.Path)
 	}
-	d.res.Replay.Folded = slices.Clone(d.watch.executed)
-	if len(d.watch.executed) != before {
+	d.res.Replay.Folded, d.res.Replay.Seen = slices.Clone(d.watch.executed), d.watch.seen
+	if len(d.watch.executed) != before || d.watch.seen != seen {
 		// Recorded as they are seen, so a handover or an interrupt at any
 		// point leaves the record with them.
 		d.saveFolds()
@@ -1788,6 +1791,6 @@ func (d *driver) saveFolds() {
 	if err != nil || !ok || rec.Replay == nil || !rec.Replay.Observed {
 		return
 	}
-	rec.Replay.Folded = slices.Clone(d.watch.executed)
+	rec.Replay.Folded, rec.Replay.Seen = slices.Clone(d.watch.executed), d.watch.seen
 	_ = WriteStackRecord(d.mainRoot, rec)
 }
