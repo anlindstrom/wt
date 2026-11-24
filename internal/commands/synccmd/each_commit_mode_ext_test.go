@@ -293,8 +293,9 @@ func TestEachCommitOffDoesNotAskForTheNeedsOfDisabledChecks(t *testing.T) {
 }
 
 // In place, git keeps the leading picks of a fold as they were, without a
-// rewrite to record. Only layer 1 calls for a check: it is checked once.
-func TestEachCommitTipsChecksAFirstLayerGitKeptAsItWas(t *testing.T) {
+// rewrite to record. Only layer 1 calls for a check, but the run leaves layer
+// 1 as it was, so it is not checked.
+func TestEachCommitTipsSkipsAFirstLayerGitKeptAsItWas(t *testing.T) {
 	t.Parallel()
 	skipShort(t)
 	logPath := filepath.Join(t.TempDir(), "checked.log")
@@ -308,7 +309,7 @@ func TestEachCommitTipsChecksAFirstLayerGitKeptAsItWas(t *testing.T) {
 	if err != nil && strings.Contains(err.Error(), "needs you") {
 		t.Fatalf("stopped: %v\n%s", err, human)
 	}
-	want := []string{"feat(s1): a2.txt"}
+	want := []string{}
 	if got := synccmdtest.CheckedSubjects(t, logPath); !slices.Equal(got, want) {
 		t.Errorf("checked %q, want %q\n%s", got, want, human)
 	}

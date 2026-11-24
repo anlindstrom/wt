@@ -43,8 +43,10 @@ const (
 	LayerFolded    = "folded"    // its output folded into the layer's owner
 	LayerCommitted = "committed" // its output committed at the layer's tip
 	LayerSkipped   = "skipped"   // not due: no listed path changed in the layer
-	LayerOwed      = "owed"      // not run: a need did not answer, or it failed below
-	LayerFailed    = "failed"    // ran and failed, or its output could not be kept
+	// LayerUntouched: the run left the layer's tip as it was; the step did not run.
+	LayerUntouched = "untouched"
+	LayerOwed      = "owed"   // not run: a need did not answer, or it failed below
+	LayerFailed    = "failed" // ran and failed, or its output could not be kept
 	ProofHeld      = "held"
 )
 
@@ -229,15 +231,20 @@ func (d *driver) atLayerEnd(n int) error {
 		return err
 	}
 	final := n == total
+	sameTip := n <= d.unchangedLayers() && head == old && !d.layerDebt(n)
+	skippedHere := false
 	for _, step := range d.layerSteps() {
 		if step.Each != EachLayer && !final {
 			continue
 		}
 		r := LayerStep{Layer: n, Layers: total, Branch: branch, Step: step}
 		switch below, failed := d.stepFailed[step.Run]; {
+		case sameTip:
+			r.Result, r.Why = LayerUntouched, "the run left this layer's tip as it was; the step did not run"
+			skippedHere = true
 		case failed:
 			r.Result, r.Why = LayerOwed, fmt.Sprintf("not run: it failed at layer %d (%s)", below, d.layerName(below))
-		case !d.req.ForceSteps && len(step.Paths) > 0 && !anyMatches(step.Paths, changed):
+		case !d.req.ForceSteps && len(step.Paths) > 0 && !anyMatches(step.Paths, changed) && !d.owedBefore(step.Run, branch):
 			r.Result, r.Why = LayerSkipped, "no listed path changed in this layer"
 		case d.unavailable(step.Needs) != "":
 			r.Result, r.Why = LayerOwed, "not run: "+d.unavailable(step.Needs)
@@ -258,6 +265,9 @@ func (d *driver) atLayerEnd(n int) error {
 		}
 		d.logLayerStep(r)
 		d.res.LayerSteps = append(d.res.LayerSteps, r)
+	}
+	if skippedHere {
+		d.noteUntouched(n)
 	}
 	tip, err := d.git("rev-parse", "HEAD")
 	if err != nil {

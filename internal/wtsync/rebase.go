@@ -392,6 +392,13 @@ type driver struct {
 	subjectMoved bool
 	// liftMarks is the picks a lifting rule marked, full ids.
 	liftMarks []string
+	// untouched is the layers whose checks and steps this run skipped
+	// since the line saying so was last printed.
+	untouched map[int]bool
+	// owedSet is what the last run of the branch left owed, by step and
+	// layer branch, once read; owedUnknown when it could not be read.
+	owedSet               map[string]bool
+	owedRead, owedUnknown bool
 }
 
 func (d *driver) git(args ...string) (string, error) {
@@ -1221,6 +1228,7 @@ func commitOf(dir, rev string) (string, error) {
 // exits clean, the edit after it, or the break after a pick to check, where
 // the each_commit steps run at the commit as it stays.
 func (d *driver) drive(err error) (Result, error) {
+	defer d.sayUntouched()
 	lastIndex, lastUnmerged := -1, ""
 	stops, limit := 0, 0
 	for {
@@ -1261,12 +1269,20 @@ func (d *driver) drive(err error) (Result, error) {
 				return d.fail(cerr)
 			}
 			if sha != "" {
-				f, cerr := d.atCheck(sha, edited, p, recheck)
+				d.recheck = recheck
+				skip, cerr := d.checkUntouched(sha)
+				d.recheck = false
 				if cerr != nil {
 					return d.fail(cerr)
 				}
-				if f != nil {
-					return d.failCheck(f)
+				if !skip {
+					f, cerr := d.atCheck(sha, edited, p, recheck)
+					if cerr != nil {
+						return d.fail(cerr)
+					}
+					if f != nil {
+						return d.failCheck(f)
+					}
 				}
 			}
 			n, end, lerr := d.layerAt()
