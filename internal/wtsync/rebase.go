@@ -660,7 +660,7 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 			}
 			if d.res.Replay != nil {
 				d.res.Replay.Observed = true
-				d.watch = &foldWatch{}
+				d.watch = newFoldWatch(d.res.Replay)
 			}
 		}
 	}
@@ -794,9 +794,10 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		plan.Folded = slices.Clone(rp.Folded)
 		d.res.Replay = &plan
 		if busy {
-			d.watch = startAt(req.Path, rp.Folded)
+			d.watch = startAt(req.Path, rp.Folded, &plan)
 		} else {
-			d.watch = &foldWatch{executed: slices.Clone(rp.Folded)}
+			d.watch = newFoldWatch(&plan)
+			d.watch.executed = slices.Clone(rp.Folded)
 		}
 	}
 	if !busy {
@@ -1763,10 +1764,16 @@ func (d *driver) seeFolds() {
 	if d.watch == nil || d.res.Replay == nil {
 		return
 	}
+	before := len(d.watch.executed)
 	if busy, err := RebaseInProgress(d.req.Path); err == nil && busy {
 		d.watch.look(d.req.Path)
 	}
 	d.res.Replay.Folded = slices.Clone(d.watch.executed)
+	if len(d.watch.executed) != before {
+		// Recorded as they are seen, so a handover or an interrupt at any
+		// point leaves the record with them.
+		d.saveFolds()
+	}
 }
 
 // saveFolds keeps what a resume saw of the folds in the stack's record, so

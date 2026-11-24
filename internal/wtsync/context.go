@@ -152,6 +152,19 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 				} else if has {
 					continue
 				}
+				// foldedHas is whether this hunk's context is in commit t's
+				// tree with its fixups folded in so far: what that commit
+				// comes to in the rebase, not the tree of the fixup that
+				// holds the context in the line. A tree that cannot be read
+				// has nothing.
+				foldedHas := func(t int) bool {
+					tree, ok := folded[t]
+					if !ok {
+						tree = all[t].sha + "^{tree}"
+					}
+					has, err := blobs.has(tree, c.Path, h.before)
+					return err == nil && has
+				}
 				for k := j + 1; k < i; k++ {
 					later := all[k]
 					has, err := blobs.has(later.sha+"^{tree}", c.Path, h.before)
@@ -176,7 +189,7 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 						// A fixup of a later commit folds into that commit,
 						// so what it adds is that commit's. Any other
 						// fixup's share of it cannot be told.
-						if t, ok := foldTarget(dir, all[:k], later.subject, index); ok && t > j && cleanFold[k] {
+						if t, ok := foldTarget(dir, all[:k], later.subject, index); ok && t > j && cleanFold[k] && foldedHas(t) {
 							needs = t
 						} else if why == "" {
 							why = fmt.Sprintf("the context is in the fixup %s, whose own fold wt cannot predict", git.ShortID(later.sha, 7))

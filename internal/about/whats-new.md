@@ -21,7 +21,7 @@ and says how many were already unpushed before this run. `sync-run` 1.26.0:
 later commit adds, which commit it needs, instead of skipping it. A fixup it still
 cannot analyse says how many files and hunks lack context and how many later commits
 add it. After a stop and `wt sync resume`, a fixup the rebase folded is no longer
-reported as `not found after the rebase`; a fold wt did not see run still is.
+reported as missing; a fold wt did not see run into its target is named `not confirmed folded`.
 
 ## 2026-11-23 12:30 — Unpushed runs of a line add up
 

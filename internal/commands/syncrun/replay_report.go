@@ -40,6 +40,10 @@ func printReplayReport(w io.Writer, res wtsync.Result) {
 		fmt.Fprintf(w, "  ⚠ %s: %s %s%s (%s)\n", what, git.ShortID(d.Commit, 7), d.Subject, layer, why)
 	}
 	for _, d := range res.Emptied {
+		if d.Planned {
+			line(d, "not confirmed folded", "it was planned to fold into its target and wt could not confirm that the rebase ran that fold; check the result for its change")
+			continue
+		}
 		if d.Unmatched {
 			line(d, "not found after the rebase", "wt cannot tell whether a commit of the result is this one: its author date or subject may have changed, or another commit shares them; check the result for it")
 			continue

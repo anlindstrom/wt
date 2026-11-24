@@ -1,10 +1,7 @@
 package wtsync
 
 import (
-	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -20,6 +17,10 @@ type Dropped struct {
 	// commit of the same author, author date and subject, of which fewer
 	// came out than went in. Only an Emptied entry is ever unmatched.
 	Unmatched bool
+	// Planned says the commit was planned to fold into another and wt could
+	// not confirm that the rebase ran that fold. Such an entry is also
+	// Unmatched.
+	Planned bool
 }
 
 // ReplayReport is what a finished rebase did to the commits it replayed
@@ -53,6 +54,9 @@ type ReplayPlan struct {
 	// stop and resume, so Folded is what ran. A plan recorded before wt
 	// watched is not observed: its folds are checked against the result.
 	Observed bool `json:"observed,omitempty"`
+	// Targets is, for each fold, the commit of the line it is planned to
+	// fold into.
+	Targets map[string]string `json:"targets,omitempty"`
 	// Folded are the full ids of the folds wt saw the rebase carry out,
 	// recorded as they ran. Only an observed plan has them.
 	Folded []string `json:"folded,omitempty"`
@@ -92,6 +96,12 @@ func replayPlanOf(dir string, line Line, todo string) (*ReplayPlan, error) {
 			continue
 		}
 		plan.Folds = append(plan.Folds, e.sha)
+		if start != "" {
+			if plan.Targets == nil {
+				plan.Targets = map[string]string{}
+			}
+			plan.Targets[e.sha] = start
+		}
 		if e.amend {
 			amend = e.sha
 		}
@@ -214,15 +224,17 @@ func ReportReplay(dir string, in ReplayInput) (ReplayReport, error) {
 		}
 		if folded[o.sha] {
 			// A fold is left out only once it is confirmed: wt carried the
-			// whole rebase out, or saw the fold run. A plan wt did not
-			// watch is checked against the result instead; a watched one
-			// is not, since a change in the result does not show the fold
-			// ran: a rebase a person went on with by hand may have skipped
-			// it.
-			if in.Plan.Confirmed || slices.Contains(in.Plan.Folded, o.sha) || (!in.Plan.Observed && changePresent(dir, o.sha, in.New)) {
+			// whole rebase out, or saw the fold run into its target
+			// (ReplayPlan.Folded). The fixup's change being in the result
+			// shows nothing of that: a rebase a person went on with by hand
+			// may have skipped the fold while another commit carries the
+			// change. A fold wt cannot confirm is named as planned.
+			if in.Plan.Confirmed || slices.Contains(in.Plan.Folded, o.sha) {
 				continue
 			}
-			rep.Emptied = append(rep.Emptied, named(o, true))
+			d := named(o, true)
+			d.Planned = true
+			rep.Emptied = append(rep.Emptied, d)
 			continue
 		}
 		out := cameOut[o.key]
@@ -238,33 +250,6 @@ func ReportReplay(dir string, in ReplayInput) (ReplayReport, error) {
 		}
 	}
 	return rep, nil
-}
-
-// changePresent is whether the change commit made is in the tree of tip: its
-// patch applies in reverse to it. It reads history and writes nothing but a
-// scratch index that is removed again. Where that cannot be read, the change
-// is not known to be there.
-func changePresent(dir, commit, tip string) bool {
-	patch, err := runGit(dir, nil, nil, "diff", "--binary", "--no-ext-diff", "--no-renames", commit+"^", commit)
-	if err != nil {
-		return false
-	}
-	if len(patch) == 0 {
-		// A message-only fixup leaves nothing in the tree to find: only a
-		// rebase wt carried out can say it ran.
-		return false
-	}
-	scratch, err := os.MkdirTemp("", "wt-report-")
-	if err != nil {
-		return false
-	}
-	defer func() { _ = os.RemoveAll(scratch) }()
-	env := []string{"GIT_INDEX_FILE=" + filepath.Join(scratch, "index")}
-	if _, err := gitEnv(dir, env, nil, "read-tree", tip); err != nil {
-		return false
-	}
-	_, err = gitEnv(dir, env, bytes.NewReader(patch), "apply", "--cached", "--check", "--reverse")
-	return err == nil
 }
 
 // testsOnly is whether a replay that changed replayed kept only the paths
