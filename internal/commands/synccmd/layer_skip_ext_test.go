@@ -13,7 +13,9 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
 	"github.com/anlindstrom/wt/internal/commands/synccmd/synccmdtest"
 	"github.com/anlindstrom/wt/internal/commands/syncfix"
+	"github.com/anlindstrom/wt/internal/commands/testkit"
 	"github.com/anlindstrom/wt/internal/gittest"
+	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
 // layerSkipLine is the FoldLine with a recording check at the commits and a
@@ -64,6 +66,8 @@ func TestInPlaceFoldSkipsTheChecksAndStepsOfAnUnchangedLayer(t *testing.T) {
 			main := ctx.Repo.MainRoot
 			branches := append(append([]string{}, s.Layers...), gittest.FoldTmp)
 			before := refsOf(t, main, branches)
+			beforeTree := testkit.GitOut(t, main, "rev-parse", gittest.FoldTmp+"^{tree}")
+			beforeWork := worktreeStates(t, ctx, s.Paths)
 			opts := synccmdtest.NoAgents()
 			opts.EachCommit = tc.mode
 			opts.Stack = &synccmd.StackOptions{Autosquash: true}
@@ -93,6 +97,17 @@ func TestInPlaceFoldSkipsTheChecksAndStepsOfAnUnchangedLayer(t *testing.T) {
 			if after["f1"] != before["f1"] || after["f2"] == before["f2"] || after[gittest.FoldTmp] == before[gittest.FoldTmp] {
 				t.Errorf("refs before %v after %v", before, after)
 			}
+			// The fold changes no content outside the step's paths, and no worktree
+			// but the line's own is touched; the safety ref holds the old tip.
+			if got := testkit.GitOut(t, main, "rev-parse", gittest.FoldTmp+"^{tree}"); got != beforeTree {
+				t.Errorf("the line's tree is %s, want %s", got, beforeTree)
+			}
+			if got := worktreeStates(t, ctx, s.Paths); got != beforeWork {
+				t.Errorf("worktrees after the run:\n%s\nbefore:\n%s", got, beforeWork)
+			}
+			if got := testkit.GitOut(t, main, "for-each-ref", "--format=%(refname) %(objectname)", "refs/wt-sync/"+gittest.FoldTmp+"/"); got != "refs/wt-sync/"+gittest.FoldTmp+"/99 "+before[gittest.FoldTmp] {
+				t.Errorf("safety refs %q, want one at the old tip %s", got, before[gittest.FoldTmp])
+			}
 			var undone bytes.Buffer
 			if err := syncfix.SyncUndo(ctx, gittest.FoldTmp, syncfix.UndoOptions{VerbOptions: opts.VerbOptions}, &undone); err != nil {
 				t.Fatalf("undo: %v\n%s", err, undone.String())
@@ -100,6 +115,52 @@ func TestInPlaceFoldSkipsTheChecksAndStepsOfAnUnchangedLayer(t *testing.T) {
 			if got := refsOf(t, main, branches); !maps.Equal(got, before) {
 				t.Errorf("after undo %v, want %v\n%s", got, before, undone.String())
 			}
+			if got := worktreeStates(t, ctx, s.Paths); got != beforeWork {
+				t.Errorf("worktrees after undo:\n%s\nbefore:\n%s", got, beforeWork)
+			}
 		})
+	}
+}
+
+// worktreeStates is the status, with every untracked file, and the diff of the
+// trunk checkout and every worktree of the line, in a fixed order.
+func worktreeStates(t *testing.T, ctx *kit.Context, paths map[string]string) string {
+	t.Helper()
+	dirs := []string{ctx.Repo.MainRoot}
+	for _, b := range slices.Sorted(maps.Keys(paths)) {
+		dirs = append(dirs, paths[b])
+	}
+	var b strings.Builder
+	for _, dir := range dirs {
+		b.WriteString(dir + "\n" + testkit.GitOut(t, dir, "status", "--porcelain=v1", "-uall") + "\n" + testkit.GitOut(t, dir, "diff") + "\n")
+	}
+	return b.String()
+}
+
+// A step the last run left owed at an unchanged layer still runs there, and
+// its owed record is settled: this run neither skips it nor drops it. A layer
+// with work owed is not skipped at all, so its check runs too.
+func TestAnOwedStepAtAnUnchangedLayerStillRunsAndSettles(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx, _, checks, steps := layerSkipLine(t)
+	main := ctx.Repo.MainRoot
+	step := "git log -1 --format=%s >> '" + steps + "'"
+	owed := &wtsync.Owed{Branch: gittest.FoldTmp, Epoch: 1, Steps: []wtsync.OwedStep{{Step: step, Layer: "f1", Why: "docker did not answer"}}}
+	if err := wtsync.WriteOwed(main, owed); err != nil {
+		t.Fatal(err)
+	}
+	opts := synccmdtest.NoAgents()
+	opts.EachCommit = "tips"
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	_, human, _ := synccmdtest.StackRun(t, ctx, gittest.FoldTmp, opts)
+	if got, want := ranAt(t, steps), []string{"chore(f1):_bump_to_1.1.0", "feat(f2):_more", "chore(f3):_bump_to_1.1.1", "feat(f4):_docs", "chore(f5):_bump_to_1.1.2", "chore(f5):_bump_to_1.1.2"}; !slices.Equal(got, want) {
+		t.Errorf("step ran at %q, want %q\n%s", got, want, human)
+	}
+	if got, want := ranAt(t, checks), []string{"chore(f1):_bump_to_1.1.0", "feat(f2):_more", "chore(f3):_bump_to_1.1.1", "feat(f4):_docs", "chore(f5):_bump_to_1.1.2"}; !slices.Equal(got, want) {
+		t.Errorf("checked %q, want %q\n%s", got, want, human)
+	}
+	if left, err := wtsync.ReadOwed(main, gittest.FoldTmp); err != nil || left != nil {
+		t.Errorf("the owed record is %+v (%v), want it settled", left, err)
 	}
 }
