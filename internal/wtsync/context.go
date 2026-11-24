@@ -179,7 +179,7 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 						if t, ok := foldTarget(dir, all[:k], later.subject, index); ok && t > j && cleanFold[k] {
 							needs = t
 						} else if why == "" {
-							why = fmt.Sprintf("the context is in the fixup %s, whose own fold is not modelled here", git.ShortID(later.sha, 7))
+							why = fmt.Sprintf("the context is in the fixup %s, whose own fold wt cannot predict", git.ShortID(later.sha, 7))
 						}
 					}
 					atRiskLater[needs] = true
