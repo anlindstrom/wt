@@ -78,3 +78,33 @@ func TestContextGapsNameTheLaterCommitAFixupOfItAddsContextTo(t *testing.T) {
 		t.Errorf("gaps %+v, want the last fixup's y.txt needing feat: b", gaps)
 	}
 }
+
+// The files the preview counts at risk for a fixup it cannot analyse are the
+// files that fixup stops with: git's own autosquash, with the first fixup
+// resolved to its target's side, stops at the second in the 2 files.
+func TestContextGapsCountMatchesTheFilesTheStopHas(t *testing.T) {
+	t.Parallel()
+	dir, commits, _ := foldPreviewLine(t, [][]string{
+		{"base", "y.txt", "y\n", "z.txt", "z\n"},
+		{"feat: a", "y.txt", "y\na\n", "z.txt", "z\na\n"},
+		{"feat: c", "y.txt", "y\na\nc\n", "z.txt", "z\na\nc\n"},
+		{"fixup! feat: a", "y.txt", "y\na\nc\nf1\n", "z.txt", "z\na\nc\nf1\n"},
+		{"fixup! feat: a", "y.txt", "y\na\nc\nf2\n", "z.txt", "z\na\nc\nf2\n"},
+	})
+	_, unchecked, err := ContextGaps(dir, commits)
+	if err != nil || len(unchecked) != 1 || !strings.Contains(unchecked[0], ": not analysed: 2 files (2 hunks) lack context") {
+		t.Fatalf("unchecked %q, err %v; want the second fixup counted at 2 files", unchecked, err)
+	}
+	base := gitIn(t, dir, "rev-parse", commits[0]+"^")
+	if out, err := gittest.Try(t, dir, "rebase", "-q", "-i", "--autosquash", base); err == nil {
+		t.Fatalf("the fold did not stop at the first fixup:\n%s", out)
+	}
+	gitIn(t, dir, "checkout", "--ours", "y.txt", "z.txt")
+	gitIn(t, dir, "add", "y.txt", "z.txt")
+	if out, err := gittest.Try(t, dir, "-c", "core.editor=true", "rebase", "--continue"); err == nil {
+		t.Fatalf("the fold did not stop at the second fixup:\n%s", out)
+	}
+	if got := strings.Fields(gitIn(t, dir, "diff", "--name-only", "--diff-filter=U")); len(got) != 2 {
+		t.Errorf("the second fixup stops with %q, want the 2 files the preview counted", got)
+	}
+}
