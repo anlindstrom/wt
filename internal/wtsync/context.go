@@ -89,6 +89,8 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 	// which the analysis cannot fold in.
 	conflicted := map[int]int{}
 	isFoldAt := map[int]bool{}
+	// cleanFold is the fixups that merge clean onto their target.
+	cleanFold := map[int]bool{}
 	for i, e := range all {
 		isFoldAt[i] = isFold(e.subject)
 	}
@@ -115,6 +117,7 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 		}
 		if clean {
 			folded[j] = tree
+			cleanFold[i] = true
 			continue
 		}
 		// The fixups after this one are checked against its clean part:
@@ -128,7 +131,12 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 		} else {
 			folded[j] = cur
 		}
-		uncertain := false
+		// Everything that lacks its context behind the target and is found
+		// later is at risk: the files, the hunks and the commits that add
+		// it. why is set when the analysis cannot place a hunk.
+		why := ""
+		atRiskFiles, atRiskLater := map[string]bool{}, map[int]bool{}
+		atRiskHunks := 0
 		var mine []ContextGap
 		for _, c := range conflicts {
 			hunks, err := fixupHunks(dir, e.sha, c.Path)
@@ -153,26 +161,38 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 					if !has {
 						continue
 					}
-					// Found at or after an earlier fixup of the same target
-					// that conflicted, or in a fixup: the context may be a
-					// fixup's own, which comes before, not later.
-					if (tainted && k >= earlier) || isFoldAt[k] {
-						uncertain = true
-						break
+					atRiskFiles[c.Path] = true
+					atRiskHunks++
+					needs := k
+					switch {
+					case tainted && k >= earlier:
+						// At or after an earlier fixup of the same target
+						// that conflicted: the context may be its own,
+						// which comes before, not later.
+						if why == "" {
+							why = fmt.Sprintf("the earlier fixup %s conflicts there too", git.ShortID(all[earlier].sha, 7))
+						}
+					case isFoldAt[k]:
+						// A fixup of a later commit folds into that commit,
+						// so what it adds is that commit's. Any other
+						// fixup's share of it cannot be told.
+						if t, ok := foldTarget(dir, all[:k], later.subject, index); ok && t > j && cleanFold[k] {
+							needs = t
+						} else if why == "" {
+							why = fmt.Sprintf("the context is in the fixup %s, whose own fold is not modelled here", git.ShortID(later.sha, 7))
+						}
 					}
+					atRiskLater[needs] = true
 					mine = append(mine, ContextGap{Fixup: e.sha, FixupSubject: e.subject, Target: all[j].sha, TargetSubject: all[j].subject,
-						Path: c.Path, Lines: h.lines(), Needs: later.sha, NeedsSubject: later.subject})
+						Path: c.Path, Lines: h.lines(), Needs: all[needs].sha, NeedsSubject: all[needs].subject})
 					break
 				}
 			}
 		}
-		if uncertain {
-			why := "another fixup's"
-			if tainted {
-				why = fmt.Sprintf("the earlier fixup %s's, which conflicts there too", git.ShortID(all[earlier].sha, 7))
-			}
-			unchecked = append(unchecked, fmt.Sprintf("%s %q: not analysed: what it lacks behind %s may be %s",
-				git.ShortID(e.sha, 7), oneLinePlan(e.subject), git.ShortID(all[j].sha, 7), why))
+		if why != "" {
+			unchecked = append(unchecked, fmt.Sprintf("%s %q: not analysed: %s (%s) lack context behind %s that %s %s; %s",
+				git.ShortID(e.sha, 7), oneLinePlan(e.subject), plural(len(atRiskFiles), "file"), plural(atRiskHunks, "hunk"),
+				git.ShortID(all[j].sha, 7), plural(len(atRiskLater), "later commit"), addVerb(len(atRiskLater)), why))
 			continue
 		}
 		gaps = append(gaps, mine...)
@@ -884,4 +904,12 @@ func indexRun(file, lines []string) int {
 		}
 	}
 	return -1
+}
+
+// addVerb is "adds" for one commit, "add" for more.
+func addVerb(n int) string {
+	if n == 1 {
+		return "adds"
+	}
+	return "add"
 }
