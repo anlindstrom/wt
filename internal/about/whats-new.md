@@ -4,6 +4,17 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-24 13:00 — Unchanged layers are not checked again
+
+`wt sync rebase --stack` no longer runs the `each_commit` checks and the per-layer
+steps at layers it leaves as they were: a fold in place skips every layer below its
+lowest target, and says so once (`layers 1-14 unchanged: their checks and steps
+skipped`). A step the last run left owed still runs there. `wt sync steps` keeps
+the `--each-commit` of the run that owed its steps and takes the flag, and says
+which mode it runs under. The closing line now reads `15 branches left unpushed`
+and says how many were already unpushed before this run. `sync-run` 1.26.0:
+`layerSteps[].result` can be `untouched`.
+
 ## 2026-11-23 12:30 — Unpushed runs of a line add up
 
 Two `--no-push` runs of one `--stack` line before a push no longer replace each

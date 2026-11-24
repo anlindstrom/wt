@@ -257,6 +257,24 @@ anything moves, for a run that is not an in-place fold (no `--autosquash`,
 of the run before it, so its rechecks after a per-layer fold cover every
 commit the fold rewrote, and it says so.
 
+### A layer the run leaves as it was
+
+A `--stack` run skips the checks and the per-layer steps at a layer whose tip
+the run leaves as the very commit it was, in every `--each-commit` mode, in
+place or with `--onto`, and so does its resume. Nothing in such a layer can
+differ: its tip, and everything below, is what it was. In practice these are
+the layers wholly below the first commit the rebase rewrites, such as every
+layer under the lowest fold target of a `--autosquash`. The run says so once,
+at its end, for every layer it skipped (`layers 1-14 unchanged: their checks and
+steps skipped`, or `layers 1-4, 6-9 unchanged: …` when they are not adjacent), and the commit is
+judged when the sequencer reaches it: a layer with any commit, or a base under
+it, that differs is checked as before, and when wt cannot tell it runs the
+check. A step the last run left owed, or failed, at the layer still runs there,
+so its record is settled; one that merely passed the layer does not. In
+`--json` the skipped step's `layerSteps` row has `result: untouched` and
+`ran: false`, and the checks that did not run are not counted in `checked`.
+`wt sync steps` replays the line onto itself and runs at every layer.
+
 A resume takes no `--each-commit`: it goes on with the mode its run was
 given, which the handover records. `--each-commit=tips` with `--edit` is
 refused, since an edit run's checks sit at the commits above the edit; with
@@ -592,7 +610,13 @@ come out the same outside the per-layer steps' `paths`.
 `wt sync steps <work>` runs what the last run left owed, without rebasing
 onto trunk: each run records what it owes for the branch, and this clears
 what it settles. `--all` runs every declared step, `--stack` at every layer
-tip of the line. The JSON says, per layer and step, whether it ran and why,
+tip of the line. Its `each_commit` checks run under the mode of the run that
+owed the steps, which the record keeps, and the first lines name it
+(`each_commit: tips, as the run that owed these steps`); `--each-commit`
+overrides it. `targets` reads as `tips` there, since steps folds no fixup and
+says so. A record an older wt wrote names no mode, so it runs under `all`,
+and the line says that. `--all` runs every step and keeps the recorded mode
+too; only with no record to take one from does it run under `all`. The JSON says, per layer and step, whether it ran and why,
 the commit it folded into, its commit, what is owed, and the proof
 (`layerSteps`, docs/json.md).
 

@@ -407,7 +407,7 @@ In the repository's common git dir (the main checkout's `.git`):
 | `wt-sync-logs/` (a log and its `.end` per invocation) | `runlog` | `wt sync wait` |
 | `wt-sync-stack/<epoch>.json`, `<epoch>.alone` | a stack run: the record of its layer moves, and the mark of an `--alone` run that moves no layer (`syncrun.MarkAlone`) | `FinishStack`, resume, undo |
 | `wt-sync-push/<branch>.json` | a stack run left unpushed (`syncrun.KeepStackPush`): the line's recorded leases and tips for a later push, keyed by the line's branch (escaped) | `wt sync push --stack` only; removed by it (also `--forget`) and by undo, and added to by the next run of the line: one contribution per unpushed run |
-| `wt-sync-owed/<branch>.json` | a run whose steps failed or were owed | the next run, `wt sync steps`, resume |
+| `wt-sync-owed/<branch>.json` | a run whose steps failed or were owed, with the run's `--each-commit` mode | the next run (an owed layer step still runs at an unchanged layer), `wt sync steps` (keeps the mode), resume |
 | `wt-sync-keep.json`, `.log`, `.lock`, `.err` | `wt sync keep` (`keepstate`, launchd) | the overview, `wt sync keep status`, doctor |
 | `wt-pr-cache.json` | `kit` | `wt list`, `wt sweep` |
 
