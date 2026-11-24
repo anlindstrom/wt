@@ -91,6 +91,9 @@ type StepsOptions struct {
 	// All runs every declared step; otherwise only what the last run left
 	// owed.
 	All bool
+	// EachCommit is --each-commit: where the each_commit checks run. Empty
+	// keeps the mode of the run that owed the steps.
+	EachCommit string
 }
 
 // StackOptions is a run of a stack held on one line (--stack).
