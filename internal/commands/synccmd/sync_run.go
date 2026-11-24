@@ -280,12 +280,17 @@ func (r *RunPlan) run(works []string) error {
 	defer syncrun.WatchSignals(w, r.tracker)()
 	defer r.flushFoldHeader()
 
-	mode, err := wtsync.EachCommitMode(opts.EachCommit)
+	given := opts.EachCommit
+	if opts.Steps != nil {
+		// wt sync steps settles its mode once it has read what was owed.
+		given = opts.Steps.EachCommit
+	}
+	mode, err := wtsync.EachCommitMode(given)
 	if err != nil {
 		return err
 	}
 	r.eachCommit = mode
-	if mode == wtsync.EachTargets && (opts.Stack == nil || !opts.Stack.Autosquash || opts.Stack.Edit != "" || opts.Onto != "" || opts.Steps != nil) {
+	if mode == wtsync.EachTargets && opts.Steps == nil && (opts.Stack == nil || !opts.Stack.Autosquash || opts.Stack.Edit != "" || opts.Onto != "") {
 		return errors.New(wtsync.TargetsRefusal(opts.Stack != nil && opts.Stack.Edit != ""))
 	}
 	if mode == wtsync.EachTips && opts.Stack != nil && opts.Stack.Edit != "" {
@@ -1209,25 +1214,64 @@ func (r *RunPlan) rebaseOne(b string) {
 // named left owed. Nothing owed is a refusal, unless --all asks for every
 // step.
 func (r *RunPlan) readOwed() error {
-	if r.opts.Steps == nil || len(r.branches) != 1 {
+	if r.opts.Steps == nil {
+		return nil
+	}
+	if len(r.branches) != 1 {
+		r.settleStepsMode(nil)
 		return nil
 	}
 	b := r.branches[0]
 	if len(r.cfg.Defer) == 0 {
 		return fmt.Errorf("%s declares no deferred step: nothing for wt sync steps to run", wtsync.ConfigFile)
 	}
-	if r.opts.Steps.All {
-		return nil
-	}
 	owed, err := wtsync.ReadOwed(r.ctx.Repo.MainRoot, b)
 	if err != nil {
 		return fmt.Errorf("what the last run left owed could not be read: %w", err)
+	}
+	if r.opts.Steps.All {
+		// Every step runs, but the mode is still the owing run's.
+		r.settleStepsMode(owed)
+		return nil
 	}
 	if owed == nil {
 		return fmt.Errorf("nothing is owed for %s: the last run ran every step it had to; --all runs every step declared", r.parts[b].work)
 	}
 	r.stepSet = owed.StepSet()
+	r.settleStepsMode(owed)
 	return nil
+}
+
+// settleStepsMode is the --each-commit mode wt sync steps runs under, and
+// says which and why in one line: the flag's, else the mode of the run that
+// owed the steps, as the record kept it, else all. A run under targets folded
+// fixups, which steps does not: its tips are what steps checks.
+func (r *RunPlan) settleStepsMode(owed *wtsync.Owed) {
+	mode, why := r.eachCommit, ""
+	switch recorded := ""; {
+	case r.opts.Steps.EachCommit != "":
+		why = "as --each-commit says"
+	case owed != nil && owed.EachCommit != "":
+		recorded = owed.EachCommit
+		if m, err := wtsync.EachCommitMode(recorded); err == nil {
+			mode, why = m, "as the run that owed these steps"
+			break
+		}
+		why = fmt.Sprintf("the default: the record of what was owed names %q, which is not a mode", recorded)
+	case owed != nil:
+		why = "the default: the record of what was owed names no mode (an older wt wrote it)"
+	default:
+		why = "the default"
+	}
+	if mode == wtsync.EachTargets {
+		mode, why = wtsync.EachTips, why+"; it is targets, and wt sync steps folds no fixup, so each layer's tip is the target"
+	}
+	r.eachCommit = mode
+	r.opts.Journal.SetEachCommit(mode)
+	for _, b := range r.branches {
+		r.opts.Journal.SetSync(b, func(p *syncrun.SyncParticipant) { p.EachCommit = mode })
+	}
+	fmt.Fprintf(r.w, "each_commit: %s, %s\n", mode, why)
 }
 
 // passOver settles a worktree the run does not rebase, refused or skipped,

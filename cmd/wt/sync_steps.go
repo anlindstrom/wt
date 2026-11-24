@@ -9,6 +9,7 @@ import (
 
 func newSyncStepsCmd() *cobra.Command {
 	var yes, all, allowOwed, asJSON, stack bool
+	var eachCommit string
 	var layers []string
 	var push func() syncrun.PushMode
 	steps := &cobra.Command{
@@ -32,16 +33,27 @@ func newSyncStepsCmd() *cobra.Command {
 			"steps run at every layer tip, bottom first, the line's content must come\n" +
 			"out the same outside the steps' paths, and the layers move after. Without\n" +
 			"--stack it covers the one branch, whatever stack of worktrees it is in.\n\n" +
+			"The each_commit checks run where the run that owed the steps ran them: the\n" +
+			"record of what is owed keeps its --each-commit, and the first lines say so.\n" +
+			"--each-commit all|tips|targets|off overrides it. targets means tips here:\n" +
+			"steps folds no fixup, so each layer's tip is the only target. A record an\n" +
+			"older wt wrote names no mode: it runs under all. --all runs every step\n" +
+			"and keeps the recorded mode too; with no record to take one from it runs\n" +
+			"under all.\n\n" +
 			"The push and the questions are as for wt sync rebase (--push, --no-push,\n" +
 			"--yes); a step still owed keeps the branch from being pushed. --json\n" +
 			"prints one result object on stdout, as wt sync rebase --json does, with\n" +
 			"command sync steps.",
 		Example: "  wt sync steps tmp/stack --stack    # what the last run owed, at every layer\n" +
+			"  wt sync steps tmp/stack --stack --each-commit tips  # check each layer's tip only\n" +
 			"  wt sync steps login-crash --all    # every declared step, on one branch\n" +
 			"  wt sync steps tmp/stack --stack --json --no-push  # a tool, nothing pushed",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if eachCommit != "" && !validEachCommit(eachCommit) {
+				return usagef("--each-commit takes all, tips, targets or off, not %q", eachCommit)
+			}
 			f := runFlags{yes: yes, noFetch: true, allowOwed: allowOwed, push: push(), json: asJSON,
 				stack: stack, layers: layers}
 			if err := f.check(false); err != nil {
@@ -50,7 +62,7 @@ func newSyncStepsCmd() *cobra.Command {
 			return withVerbContext(cmd, args, "sync steps", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				opts, _ := runOptions(cmd, f, false)
 				opts.Journal, opts.Stack = j, f.stackOptions()
-				opts.Steps = &synccmd.StepsOptions{All: all}
+				opts.Steps = &synccmd.StepsOptions{All: all, EachCommit: eachCommit}
 				return synccmd.SyncRebase(ctx, args, opts, cmd.OutOrStdout())
 			})
 		},
@@ -60,6 +72,7 @@ func newSyncStepsCmd() *cobra.Command {
 	steps.Flags().BoolVar(&all, "all", false, "run every declared step, not only what the last run left owed")
 	steps.Flags().BoolVar(&stack, "stack", false, "run them at every layer tip of the line of <work>, and move the layers")
 	steps.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer, or every branch a pattern with * or ? matches (quote it); repeatable; none takes every branch on the line but those listed as skipped (backup names, and a branch with no commits of its own that has uncommitted changes in another worktree)")
+	steps.Flags().StringVar(&eachCommit, "each-commit", "", "where the each_commit checks run: all, tips, targets (as tips: steps folds no fixup) or off; the default is the mode of the run that owed the steps")
 	steps.Flags().BoolVar(&allowOwed, "allow-owed", false, "run even when a step's need does not answer; that step stays owed")
 	steps.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
 	return steps
