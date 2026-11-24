@@ -45,7 +45,7 @@ func TestAWatchedPlanHidesOnlyTheFoldsItSawRun(t *testing.T) {
 	if got := report(&ReplayPlan{Folds: res.Replay.Folds, Observed: true, Folded: res.Replay.Folds}); got != "hidden" {
 		t.Errorf("a watched fold wt saw run: %s, want hidden", got)
 	}
-	if got := report(&ReplayPlan{Folds: res.Replay.Folds}); got != "hidden" {
-		t.Errorf("an unwatched plan with the change in the result: %s, want hidden as before", got)
+	if got := report(&ReplayPlan{Folds: res.Replay.Folds}); got != "unmatched" {
+		t.Errorf("a plan without evidence, the change in the result: %s, want unmatched", got)
 	}
 }
