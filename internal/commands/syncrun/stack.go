@@ -147,8 +147,10 @@ type Stack struct {
 	// carries its context; empty for any other.
 	ContextGaps []StackContextGap `json:"contextGaps"`
 	// ContextUnchecked is, for a fold, what of its fixups could not be
-	// analysed: a fixup over an earlier one that conflicts, or the whole
-	// analysis failing. Empty when every fixup was analysed.
+	// analysed, each with the files and hunks at risk and the later commits
+	// that add their context: a fixup over an earlier one that conflicts or
+	// over a fixup that does not fold clean, or the whole analysis failing.
+	// Empty when every fixup was analysed.
 	ContextUnchecked []string `json:"contextUnchecked"`
 	// Restored says an edit run's line was put back at the tip the run
 	// found, its layers refused: the participant is restored, not rebased.

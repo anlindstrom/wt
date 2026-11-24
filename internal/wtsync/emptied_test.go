@@ -420,9 +420,17 @@ func TestAPlannedFoldIsHiddenOnlyWhenItsChangeIsInTheResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := named(got); n != "hidden" {
-		t.Errorf("a fold whose change is in the result: %s, want hidden", n)
+	if n := named(got); n != "unmatched=true" {
+		t.Errorf("an unconfirmed fold whose change is in the result: %s, want unmatched", n)
 	}
+	in.Plan = res.Replay
+	if got, err = ReportReplay(tmp, in); err != nil {
+		t.Fatal(err)
+	}
+	if n := named(got); n != "hidden" {
+		t.Errorf("a confirmed fold: %s, want hidden", n)
+	}
+	in.Plan = &ReplayPlan{Folds: res.Replay.Folds}
 	// The same plan against a result that lacks the change: the fixup was
 	// skipped.
 	// The commit before b1's replay has no b1.txt, so not the fixup's change.

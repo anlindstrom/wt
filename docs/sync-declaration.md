@@ -777,7 +777,8 @@ result has, or that a fixup or `amend!` in the range could have changed, is name
 as `not found after the rebase`, `unmatched` in `--json`, not as dropped. So are
 commits that share all of author, date and subject when fewer of them came out
 than went in, any commit left without a partner while more commits came out
-under some key than went in, and a fixup the plan lists as folded when a person
-went on by hand and its change is not in the result, or it changes no file (a
-message-only `amend!`): it may have been skipped. A commit that shares its key with another and comes out is never
+under some key than went in, and a fixup the plan lists as folded when wt did not
+see the rebase run that fold into its target (a person went on by hand, or the
+record is older than the watch): it may have been skipped, even where its change is
+in the result. It is named `not confirmed folded` in the output. A commit that shares its key with another and comes out is never
 named as `testsOnly`.

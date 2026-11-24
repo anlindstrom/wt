@@ -15,6 +15,14 @@ which mode it runs under. The closing line now reads `15 branches left unpushed`
 and says how many were already unpushed before this run. `sync-run` 1.26.0:
 `layerSteps[].result` can be `untouched`.
 
+## 2026-11-24 11:40 — The fold preview analyses more fixups, and folded fixups stay quiet
+
+`wt sync rebase --stack --autosquash` now says, for a fixup whose context a fixup of a
+later commit adds, which commit it needs, instead of skipping it. A fixup it still
+cannot analyse says how many files and hunks lack context and how many later commits
+add it. After a stop and `wt sync resume`, a fixup the rebase folded is no longer
+reported as missing; a fold wt did not see run into its target is named `not confirmed folded`.
+
 ## 2026-11-23 12:30 — Unpushed runs of a line add up
 
 Two `--no-push` runs of one `--stack` line before a push no longer replace each
