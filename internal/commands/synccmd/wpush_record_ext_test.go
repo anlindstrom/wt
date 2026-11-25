@@ -2,6 +2,7 @@ package synccmd_test
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -111,4 +112,84 @@ func TestPushLaterAfterAPartialPushSendsOnlyWhatIsLeft(t *testing.T) {
 	if _, ok, _ := wtsync.ReadPushRecord(m.ctx.Repo.MainRoot, mappedTop); ok {
 		t.Errorf("the record is still there after everything was pushed")
 	}
+}
+
+// pushLaterRefused holds a push that must refuse: it errs, says want, and
+// leaves origin and the record as they were.
+func (m *mappedLine) pushLaterRefused(t *testing.T, want string) {
+	t.Helper()
+	before := m.refs(t)
+	rec, _, _ := wtsync.ReadPushRecord(m.ctx.Repo.MainRoot, mappedTop)
+	human, err := m.pushLater(t, false, true)
+	if err == nil {
+		t.Fatalf("the push went through:\n%s", human)
+	}
+	if !strings.Contains(human, want) {
+		t.Errorf("missing %q in\n%s", want, human)
+	}
+	if got := m.refs(t); got != before {
+		t.Errorf("origin changed:\nbefore %s\nafter %s", before, got)
+	}
+	if after, ok, _ := wtsync.ReadPushRecord(m.ctx.Repo.MainRoot, mappedTop); !ok || after.Rev != rec.Rev {
+		t.Errorf("the record was not kept as it was")
+	}
+}
+
+// Run A holds tmp/layer/a, run B moves it, and a push sends the layers and
+// leaves the line out. Run A's word that it held a is older than run B's
+// move: once a moves again locally, the push of the line refuses for it.
+func TestPushLaterHoldsALayerAnOlderRunHeldToItsNewestTip(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and a bare remote")
+	}
+	m := newMappedLine(t)
+	main := m.ctx.Repo.MainRoot
+	wtA := filepath.Join(t.TempDir(), "a")
+	testkit.GitIn(t, main, "worktree", "add", "-q", wtA, "tmp/layer/a")
+	testkit.WriteFile(t, wtA, "a.txt", "work in progress\n")
+	run := func(epoch int64) string {
+		opts := synccmdtest.At(synccmdtest.NoAgents(), epoch)
+		opts.Push = syncrun.PushNever
+		opts.Stack = &synccmd.StackOptions{Layers: []string{"tmp/layer/*"}}
+		_, human, _ := synccmdtest.StackRun(t, m.ctx, mappedTop, opts)
+		return human
+	}
+	if human := run(epochA); !strings.Contains(human, "tmp/layer/a held") {
+		t.Fatalf("run A did not hold a:\n%s", human)
+	}
+	// a is moved by hand to where run A would have put it, under b.
+	testkit.GitIn(t, wtA, "checkout", "--", "a.txt")
+	testkit.GitIn(t, wtA, "reset", "-q", "--hard", "tmp/layer/b^")
+	commitOnRemote(t, main, m.bare, "main", "trunk moved on", false)
+	testkit.GitIn(t, main, "fetch", "-q", "origin")
+	if human := run(epochB); strings.Contains(human, "held") || !strings.Contains(human, "✓ tmp/layer/a ") {
+		t.Fatalf("run B did not move a:\n%s", human)
+	}
+	if human, err := m.pushLater(t, false, false); err != nil || strings.Contains(human, "tmp/layer/a left out") {
+		t.Fatalf("first push: %v\n%s", err, human)
+	}
+	testkit.WriteFile(t, wtA, "later.txt", "later\n")
+	testkit.GitIn(t, wtA, "add", "later.txt")
+	testkit.GitIn(t, wtA, "commit", "-q", "--no-verify", "-m", "feat(a): later")
+	m.pushLaterRefused(t, "tmp/layer/a is no longer at ")
+}
+
+// A layer that pushes under another name is sent, the line left out, and
+// then a teammate pushes to its remote branch: origin/feat_wt/a is ahead of
+// the layer, a push to it is no longer safe, and the push of the line refuses
+// for it rather than taking it as a layer with no remote branch.
+func TestPushLaterComparesARenamedLayerItCannotPushTo(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and a bare remote")
+	}
+	m := newMappedLine(t)
+	m.noPushRun(t)
+	if human, err := m.pushLater(t, false, false); err != nil {
+		t.Fatalf("first push: %v\n%s", err, human)
+	}
+	commitOnRemote(t, m.ctx.Repo.MainRoot, m.bare, "feat_wt/a", "feat: teammate", false)
+	testkit.GitIn(t, m.ctx.Repo.MainRoot, "fetch", "-q", "origin")
+	m.pushLaterRefused(t, "tmp/layer/a differs from origin/feat_wt/a")
 }
