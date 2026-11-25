@@ -189,6 +189,19 @@ type StackFold struct {
 	// Guard is the tree guard's comparison; null when none ran (the run has
 	// not finished, or it was an edit).
 	Guard *FoldGuard `json:"guard"`
+	// Moves is the move! commits the fold folds, oldest first.
+	Moves []FoldMove `json:"moves,omitempty"`
+}
+
+// FoldMove is one move! commit of a fold.
+type FoldMove struct {
+	Commit        string   `json:"commit"`
+	Target        string   `json:"target"`
+	TargetSubject string   `json:"targetSubject"`
+	Source        string   `json:"source"`
+	SourceSubject string   `json:"sourceSubject"`
+	Paths         []string `json:"paths"`
+	Kept          string   `json:"kept"`
 }
 
 // FoldGuard is what the guard compared and how it came out.
