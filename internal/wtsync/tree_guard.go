@@ -163,15 +163,19 @@ func TreeGuard(main string, in GuardInput) (res GuardResult) {
 }
 
 // StampStops gives what a resume found at its stop its place among the run's
-// stops: after every record st already holds. Both lists are from the one
-// stop.
+// stops: after every record st already holds of another stop. Both lists are
+// from the one stop.
 func StampStops(st State, resolved []StopResolution, fixed []CheckFix) {
 	order := 1
 	for _, r := range st.Resolutions {
-		order = max(order, r.Order+1)
+		if !st.resolvedHere(r) {
+			order = max(order, r.Order+1)
+		}
 	}
 	for _, f := range st.Fixes {
-		order = max(order, f.Order+1)
+		if !st.fixedHere(f) {
+			order = max(order, f.Order+1)
+		}
 	}
 	for i := range resolved {
 		resolved[i].Order = order
@@ -179,6 +183,34 @@ func StampStops(st State, resolved []StopResolution, fixed []CheckFix) {
 	for i := range fixed {
 		fixed[i].Order = order
 	}
+}
+
+// SettledAt is st's records of the run's stops, with what a resume found at
+// the stop st hands over in place of every record st holds of that stop. A
+// resume cut after it kept them, before the rebase went on, leaves such
+// records, and the stop is the same one: what is found there now, a fix
+// amended since included, is what counts, once. A resume that finds nothing
+// there now, the rebase gone on by hand, keeps what was kept.
+func (st State) SettledAt(resolved []StopResolution, fixed []CheckFix) ([]StopResolution, []CheckFix) {
+	rs, fs := slices.Clone(st.Resolutions), slices.Clone(st.Fixes)
+	if len(resolved)+len(fixed) == 0 {
+		return rs, fs
+	}
+	rs = slices.DeleteFunc(rs, st.resolvedHere)
+	fs = slices.DeleteFunc(fs, st.fixedHere)
+	return append(rs, resolved...), append(fs, fixed...)
+}
+
+// resolvedHere says whether r was recorded at the conflict stop st hands
+// over: a pick stops on a conflict once in a rebase.
+func (st State) resolvedHere(r StopResolution) bool {
+	return st.Check == nil && st.StoppedCommit != "" && r.Commit == st.StoppedCommit
+}
+
+// fixedHere says whether f was recorded at the check stop st hands over: a
+// later stop is at a HEAD the rebase made after it.
+func (st State) fixedHere(f CheckFix) bool {
+	return st.Check != nil && f.Stop == st.Head
 }
 
 // FixAtCheckStop is what a person changed at the check stop st handed over,

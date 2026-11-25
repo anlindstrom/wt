@@ -1148,15 +1148,18 @@ func noteNotRechecked(w io.Writer, where string, st wtsync.State) {
 // resolutions is what a person resolved at every stop of the run up to this
 // resume's: the earlier handovers' and the one this resume goes on from.
 func (r *resume) resolutions() []wtsync.StopResolution {
-	return append(slices.Clone(r.st.Resolutions), r.resolved...)
+	resolutions, _ := r.st.SettledAt(r.resolved, r.fixed)
+	return resolutions
 }
 
 // keepStop writes what was resolved and fixed at the stop this resume goes
 // on from into the handover, before the rebase goes on: a finish that then
 // fails leaves the handover for a retry, which no longer sees the stop and
-// would hold the fold to the line without them.
+// would hold the fold to the line without them. It replaces what an earlier
+// resume of the same stop kept, so a retry counts the stop once.
 func (r *resume) keepStop() error {
-	if len(r.resolved) == 0 && len(r.fixed) == 0 {
+	resolutions, fixes := r.st.SettledAt(r.resolved, r.fixed)
+	if slices.Equal(resolutions, r.st.Resolutions) && slices.Equal(fixes, r.st.Fixes) {
 		return nil
 	}
 	cur, ok, err := wtsync.ReadState(r.gitDir)
@@ -1166,13 +1169,11 @@ func (r *resume) keepStop() error {
 	if !ok || cur.Epoch != r.st.Epoch {
 		return fmt.Errorf("the handover in %s changed while resume was checking it; nothing is resumed", r.name)
 	}
-	cur.Resolutions = append(cur.Resolutions, r.resolved...)
-	cur.Fixes = append(cur.Fixes, r.fixed...)
+	cur.Resolutions, cur.Fixes = cur.SettledAt(r.resolved, r.fixed)
 	if err := wtsync.WriteState(r.gitDir, cur); err != nil {
 		return fmt.Errorf("%s: what was settled at the stop could not be kept with the handover (%w); nothing is resumed", r.name, err)
 	}
 	r.st.Resolutions, r.st.Fixes = cur.Resolutions, cur.Fixes
-	r.resolved, r.fixed = nil, nil
 	return nil
 }
 
@@ -1200,5 +1201,6 @@ func (r *resume) keepStopped(stopped []string) error {
 // fixes is what a person changed at every check stop of the run up to this
 // resume's.
 func (r *resume) fixes() []wtsync.CheckFix {
-	return append(slices.Clone(r.st.Fixes), r.fixed...)
+	_, fixes := r.st.SettledAt(r.resolved, r.fixed)
+	return fixes
 }

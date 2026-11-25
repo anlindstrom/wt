@@ -2,6 +2,7 @@ package wtsync
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,5 +49,25 @@ func TestUndoRefusesALayerCutAfterItsFilesWithChangesOnTop(t *testing.T) {
 	}
 	if st := gitIn(t, s.Paths["s1"], "status", "--porcelain", "--untracked-files=no"); !strings.Contains(st, "a1.txt") {
 		t.Errorf("the change in s1 is gone: %q", st)
+	}
+}
+
+// What a resume finds at a conflict stop replaces what an earlier resume of
+// the same stop kept, leaves the records of other stops as they are, and
+// finding nothing there keeps what was kept.
+func TestSettledAtReplacesOnlyTheSameStopsRecords(t *testing.T) {
+	t.Parallel()
+	earlier := StopResolution{Commit: "aaa", Path: "x.txt", Blob: "1", Order: 1}
+	kept := StopResolution{Commit: "bbb", Path: "y.txt", Blob: "2", Order: 2}
+	st := State{StoppedCommit: "bbb", Resolutions: []StopResolution{earlier, kept}}
+	now := []StopResolution{{Commit: "bbb", Path: "y.txt", Blob: "3"}}
+	StampStops(st, now, nil)
+	got, _ := st.SettledAt(now, nil)
+	want := []StopResolution{earlier, {Commit: "bbb", Path: "y.txt", Blob: "3", Order: 2}}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("settled %+v, want %+v", got, want)
+	}
+	if got, _ := st.SettledAt(nil, nil); fmt.Sprint(got) != fmt.Sprint(st.Resolutions) {
+		t.Errorf("nothing found replaced the kept records: %+v", got)
 	}
 }
