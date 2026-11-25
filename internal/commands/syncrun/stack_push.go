@@ -177,6 +177,17 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	if !leftOut {
 		items = append(items, stackItem{BranchPush: *s.top, New: head, Top: true})
 	}
+	own := wtsync.ReadOwnOrUnknown(ctx.Repo.MainRoot, ctx.Config.MainBranch)
+	for _, l := range s.Layers {
+		if l.Result == nil || *l.Result != wtsync.MoveUnchanged {
+			continue
+		}
+		pl := wtsync.PushLayer{Branch: l.Branch, Result: wtsync.MoveUnchanged, Tip: l.OldTip}
+		way := "push " + l.Branch + " first, then wt sync push " + s.work + " --stack"
+		if why := unsentLayer(ctx, own, pl, "this run", "the run left it unchanged, so it was already off its remote branch before it", way); why != "" {
+			return refuse(why)
+		}
+	}
 	remotes := byRemote(items)
 	if err := checkEndpoints(ctx.Repo.MainRoot, remotes); err != nil {
 		return refuse(err.Error())

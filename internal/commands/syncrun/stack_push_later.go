@@ -377,38 +377,48 @@ func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.Merg
 			if l.Branch == rec.Branch || leftNow || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == l.Branch }) {
 				continue
 			}
-			local, err := git.Run(main, "rev-parse", "--verify", "refs/heads/"+l.Branch)
-			run := "the run of " + runLabel(runs[i].Written)
-			if err != nil || local != l.Tip {
-				reasons = append(reasons, fmt.Sprintf("%s is no longer at %s, where %s left it", l.Branch, git.ShortID(l.Tip, 7), run))
-				continue
+			way := "push " + l.Branch + " first, then push again, or wt sync push " + rec.Work + " --stack --forget drops the record"
+			if why := unsentLayer(ctx, own, l, "the run of "+runLabel(runs[i].Written),
+				"the runs left it unchanged, so it was already off its remote branch before them", way); why != "" {
+				reasons = append(reasons, why)
 			}
-			tracking, none, why := own.Destination(l.Branch)
-			switch {
-			case none:
-				continue
-			case why != "":
-				reasons = append(reasons, fmt.Sprintf("%s cannot be compared with its remote branch (%s), so the push cannot show the stack stays whole on the remote", l.Branch, why))
-				continue
-			}
-			remote, ok, rerr := ctx.Repo.ResolveRef(tracking)
-			if rerr != nil {
-				reasons = append(reasons, fmt.Sprintf("%s cannot be compared with %s: %v", l.Branch, strings.TrimPrefix(tracking, "refs/remotes/"), rerr))
-				continue
-			}
-			if !ok || remote == local {
-				// No remote branch yet: nothing on the remote to split.
-				continue
-			}
-			what := "a run moved it and the record holds no push for it"
-			if l.Result == wtsync.MoveUnchanged {
-				what = "the runs left it unchanged, so it was already off its remote branch before them"
-			}
-			reasons = append(reasons, fmt.Sprintf("%s differs from %s, and the push does not send it (%s): pushing the layers above it would leave the stack split on the remote; push %s first, then push again, or wt sync push %s --stack --forget drops the record",
-				l.Branch, strings.TrimPrefix(tracking, "refs/remotes/"), what, l.Branch, rec.Work))
 		}
 	}
 	return reasons
+}
+
+// unsentLayer is why layer l, which a push of the layers above it does not
+// send, stops that push, "" when it does not: it is no longer at the tip
+// run left it at, or it differs from its remote branch, so the push would
+// leave the stack split on the remote. A layer with nowhere to push, or no
+// remote branch yet, has nothing on the remote to split; one whose remote
+// branch cannot be read is refused. unchanged says why an unchanged layer is
+// off its remote, and way how to go on.
+func unsentLayer(ctx *kit.Context, own *wtsync.Own, l wtsync.PushLayer, run, unchanged, way string) string {
+	local, err := git.Run(ctx.Repo.MainRoot, "rev-parse", "--verify", "refs/heads/"+l.Branch)
+	if err != nil || local != l.Tip {
+		return fmt.Sprintf("%s is no longer at %s, where %s left it", l.Branch, git.ShortID(l.Tip, 7), run)
+	}
+	tracking, none, why := own.Destination(l.Branch)
+	switch {
+	case none:
+		return ""
+	case why != "":
+		return fmt.Sprintf("%s cannot be compared with its remote branch (%s), so the push cannot show the stack stays whole on the remote", l.Branch, why)
+	}
+	remote, ok, rerr := ctx.Repo.ResolveRef(tracking)
+	if rerr != nil {
+		return fmt.Sprintf("%s cannot be compared with %s: %v", l.Branch, strings.TrimPrefix(tracking, "refs/remotes/"), rerr)
+	}
+	if !ok || remote == local {
+		return ""
+	}
+	what := "a run moved it and the record holds no push for it"
+	if l.Result == wtsync.MoveUnchanged {
+		what = unchanged
+	}
+	return fmt.Sprintf("%s differs from %s, and the push does not send it (%s): pushing the layers above it would leave the stack split on the remote; %s",
+		l.Branch, strings.TrimPrefix(tracking, "refs/remotes/"), what, way)
 }
 
 // runsWithoutLayers is the runs of the record, by label, that did not keep

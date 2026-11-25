@@ -253,7 +253,9 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    `OfferPush` as before; with `--no-push` or nobody to ask it does nothing. It
    refuses the whole push, printing the per-branch commands, when the line was
    not left pushable, the record has no leases, the line's branch has no safe
-   push, or a remote's push URL is no longer the one recorded. After a
+   push, a layer the run left unchanged is not level with its remote branch
+   (`unsentLayer`, as the later push checks it), or a remote's push URL is no
+   longer the one recorded. After a
    transport failure it reads the pushed refs back (`wtsync.RemoteRefs`)
    before saying where each branch is. The push and the read-back go to the
    endpoint URL the record holds, not the remote's name, and wt moves the
