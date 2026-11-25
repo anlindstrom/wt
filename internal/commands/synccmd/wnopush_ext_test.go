@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/anlindstrom/wt/internal/agents"
+	"github.com/anlindstrom/wt/internal/commands/synccmd"
 	"github.com/anlindstrom/wt/internal/commands/synccmd/synccmdtest"
 	"github.com/anlindstrom/wt/internal/commands/syncfix"
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
@@ -179,5 +180,69 @@ func TestResumeOfANoPushRunNeverPushes(t *testing.T) {
 	}
 	if !strings.Contains(human, "wt sync push tmp/stack --stack pushes them later") {
 		t.Errorf("the resume does not say what is left for a later push:\n%s", human)
+	}
+}
+
+// wt#223: run A, with --no-push, moves s1, s2 and s4 and keeps them for a
+// later push; run B, a fold of a fixup of s5, moves only the line and leaves
+// s1 to s4 as A put them. B's --push sends what A left too, over A's leases,
+// so origin holds the whole stack as it stands, and the record is gone.
+func TestRunPushSendsTheLayersAnEarlierRunLeftUnpushed(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories, a worktree each and a bare remote")
+	}
+	p := newPushedLine(t)
+	main := p.ctx.Repo.MainRoot
+	a := synccmdtest.At(synccmdtest.NoAgents(), 100)
+	a.Push = syncrun.PushNever
+	if _, human, err := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, a); err == nil || !strings.Contains(err.Error(), "2 layers held") {
+		t.Fatalf("run A: err %v\n%s", err, human)
+	}
+	movedByA := map[string]string{}
+	for _, b := range []string{"s1", "s2", "s4"} {
+		movedByA[b] = testkit.GitOut(t, main, "rev-parse", b)
+		if movedByA[b] == p.s.Tips[b] {
+			t.Fatalf("run A did not move %s", b)
+		}
+	}
+	fixup(t, p.s.Paths[gittest.StackTmp], "e1.txt", "feat(s5): e1.txt")
+	b := synccmdtest.At(synccmdtest.PushAlways(), 200)
+	b.Stack = &synccmd.StackOptions{Autosquash: true}
+	res, human, err := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, b)
+	if err != nil && !strings.Contains(err.Error(), "held") {
+		t.Fatalf("run B: %v\n%s", err, human)
+	}
+	for br, tip := range movedByA {
+		if got := testkit.GitOut(t, main, "rev-parse", br); got != tip {
+			t.Fatalf("run B moved %s to %s, want it left where A put it\n%s", br, got, human)
+		}
+		if got := refIn(t, p.bare, br); got != tip {
+			t.Errorf("origin %s is at %s, want A's tip %s\n%s", br, got, tip, human)
+		}
+	}
+	if got, want := refIn(t, p.bare, gittest.StackTmp), testkit.GitOut(t, main, "rev-parse", gittest.StackTmp); got != want {
+		t.Errorf("origin %s is at %s, want B's tip %s\n%s", gittest.StackTmp, got, want, human)
+	}
+	for _, br := range []string{"s3", "s5"} {
+		if got := refIn(t, p.bare, br); got != p.s.Tips[br] {
+			t.Errorf("origin %s moved to %s, though no run moved it", br, got)
+		}
+	}
+	line := synccmdtest.Participant(t, res, gittest.StackTmp)
+	if !line.Pushed || line.Stack == nil || line.Stack.Push == nil {
+		t.Fatalf("the JSON does not hold the push: pushed %v\n%s", line.Pushed, human)
+	}
+	var sent []string
+	for _, pb := range line.Stack.Push.Branches {
+		if pb.Outcome == syncrun.PushedOK {
+			sent = append(sent, pb.Branch)
+		}
+	}
+	if got, want := strings.Join(sent, ","), "s1,s2,s4,"+gittest.StackTmp; got != want {
+		t.Errorf("the JSON says %s were pushed, want %s", got, want)
+	}
+	if _, ok, _ := wtsync.ReadPushRecord(main, gittest.StackTmp); ok {
+		t.Errorf("the record is still there after everything was pushed\n%s", human)
 	}
 }
