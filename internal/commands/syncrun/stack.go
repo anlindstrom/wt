@@ -915,7 +915,9 @@ func (f *stackFinisher) reportLayers(tips []wtsync.LayerTip) (held, moved int) {
 func (f *stackFinisher) moveSides(forks []wtsync.LayerPlan, merr error, held, moved int) (*Stack, string, error) {
 	w, s, rec, main := f.w, f.s, f.rec, f.main
 	if merr != nil {
-		// The record stays: it says what moved, and undo reads it.
+		// The record stays: it says what moved, and undo reads it. What did
+		// move is not pushed without the rest.
+		s.declined = "the layer moves stopped before every layer moved, and a push of the ones that did would leave the stack split on the remote; wt sync undo " + rec.Work + " puts back the line and every layer moved"
 		sidesNotMoved(w, s, "the layer moves stopped before it")
 		return s, "", merr
 	}
