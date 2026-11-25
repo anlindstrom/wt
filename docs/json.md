@@ -156,7 +156,7 @@ generating types from it:
 | `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | 1.12.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
-| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.14.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.15.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
 | `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.26.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
@@ -1726,6 +1726,13 @@ except with `--stack`: `wt sync <work> --stack --json` is the overview with
 `wt sync <work> --onto <ref> --json` is the overview of that one worktree
 against the ref, which `onto`, `target` and `token` name.
 
+`wt sync <work> --stack --autosquash --json` with no `--onto` (since 1.15.0)
+also fills `fold`: the fold `wt sync rebase` makes in place on the line's own
+base, which fixup folds into which commit and layer and which layers change.
+That run never rebases onto trunk, so the worktrees' `class`, `behind`, `stops`
+and `verdict` there still describe a rebase onto trunk it does not make; `fold`
+is what it does. With `--onto`, and without `--autosquash`, `fold` is null.
+
 With `--all`, `--roots` or `--profile` stdout is an **array** of these objects,
 one per repository, in the selection's order; `wt status --json` takes none of
 those, so there is nothing to mirror. A repository that could not be read is an
@@ -1904,6 +1911,21 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `stack.push.branches[].new` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit pushed: the branch's new tip. |
 | `stack.push.branches[].outcome` | `"pushed"` \| `"leaseFailed"` \| `"notSent"` \| `"unknown"` | yes | pushed: the remote branch is at new. leaseFailed: git rejected it as stale: the remote branch was not at old any more, somebody pushed to it since; this is the branch that moved under the push. Any other refusal (a hook, a policy) is notSent, with git's own reason in why. notSent: nothing on its remote moved: another branch of the same push failed its lease, or the remote refused the push as a whole (a remote that does not accept --atomic is refused, never pushed branch by branch). unknown: the push ended in a transport failure (a timeout, a dropped connection) and the remote's own refs, read back, show the branch at neither old nor new, or could not be read: whether it moved is not known. A transport failure whose read-back shows the branch at new is pushed, and at old notSent. |
 | `stack.push.branches[].why` | string \| null | yes | For an outcome other than pushed, what git said. Null for pushed. |
+| `fold` | object \| null | yes | Since 1.15.0: for --stack --autosquash with no --onto, the fold a run makes in place on the line's own base: which fixup folds into which commit and layer, and which layers change. The worktrees' class, behind, stops and verdict still describe a rebase onto trunk, which that run does not make. Null for any other look, and with --onto. |
+| `fold.base` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's own base, which the fold stays on: stack.base. |
+| `fold.refusal` | string \| null | yes | Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, or a declaration the line cannot take. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty. |
+| `fold.folds` | array of object | yes | Every fixup!, squash! or amend! commit of the line with the commit it folds into, oldest fixup first. A fixup whose name finds no commit, or more than one, is left out: the run refuses it. |
+| `fold.folds[].fixup` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `fold.folds[].fixupSubject` | string | yes |  |
+| `fold.folds[].fixupLayer` | string | yes | The layer branch the fixup is a commit of, or the line's own branch above the top layer. |
+| `fold.folds[].target` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `fold.folds[].targetSubject` | string | yes |  |
+| `fold.folds[].targetLayer` | string | yes | The layer branch the target is a commit of, or the line's own branch above the top layer. |
+| `fold.unchanged` | array of string | yes | The layers whose commits all lie below every fold target: the fold leaves them as they are. All layers when there is no fold, none with --alone. |
+| `fold.repointed` | array of string | yes | The layers that get new commits, bottom first: not those in held. |
+| `fold.held` | array of object | yes | The layers the fold would change that the run leaves on their old commits: one a worktree holds (dirty, a process, a rebase), or every layer with --alone. |
+| `fold.held[].branch` | string | yes |  |
+| `fold.held[].why` | string | yes |  |
 <!-- json-docs:end -->
 
 A worktree its own remote refuses (`ownRemote.blocks` set, or its fetch failed)

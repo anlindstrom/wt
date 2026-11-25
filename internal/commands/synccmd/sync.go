@@ -207,7 +207,21 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		tgt, base = target.Target(onto), target.cutoff()
 	}
 	a := wtsync.AssessTo(ctx.Repo.MainRoot, tgt, cfg, wt, listed, syncrun.OwnStateOf(own, wt.Branch))
-	printDetail(w, work, a)
+	var look *StackLook
+	if opts.Stack != nil {
+		look = &StackLook{Work: arg, Layers: opts.Stack.Layers, Autosquash: opts.Stack.Autosquash,
+			NoSideBranches: opts.Stack.NoSideBranches, Alone: opts.Alone || opts.Stack.Alone}
+	}
+	var stack *syncrun.Stack
+	var fold *FoldLook
+	if foldsInPlace(look, target) {
+		if stack, fold, err = foldLookAt(ctx, base, onto, cfg, look, listed); err != nil {
+			return err
+		}
+		printFoldDetail(w, work, a, fold)
+	} else {
+		printDetail(w, work, a)
+	}
 	if opts.Alone && target != nil {
 		return errors.New("--alone and --onto: --onto already moves exactly the worktrees named and none of their stack; leave --alone out")
 	}
@@ -223,12 +237,12 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		printAloneLook(w, leftAloneOf(ctx, all, strandedBy(stacked, ambiguous, wt.Branch)))
 	}
 	if opts.Stack != nil {
-		s, err := stackLookAt(ctx, base, onto, target, &StackLook{Work: arg, Layers: opts.Stack.Layers, Autosquash: opts.Stack.Autosquash,
-			NoSideBranches: opts.Stack.NoSideBranches, Alone: opts.Alone || opts.Stack.Alone}, listed)
-		if err != nil {
-			return err
+		if stack == nil {
+			if stack, err = stackLookAt(ctx, base, onto, target, look, listed); err != nil {
+				return err
+			}
 		}
-		syncrun.PrintLayers(w, s)
+		syncrun.PrintLayers(w, stack)
 		if opts.Alone {
 			fmt.Fprintln(w, "  --alone  a run folds and rebases the line and moves no layer: each stays on its old commits, its worktree untouched")
 		}
@@ -709,11 +723,8 @@ func fileNote(f wtsync.FileOutcome) string {
 	return f.Note
 }
 
-// printDetail is wt sync <work>: the row, where the worktree is and what a run
-// would do with it, then each kind of finding under its own heading.
-func printDetail(w io.Writer, work string, a wtsync.Assessment) {
-	e := syncEntry{work: work, a: a}
-	fmt.Fprintf(w, "\n%s\n", measureRows([]syncEntry{e}).row(e))
+// printFacts is the worktree's branch, path and where its own remote stands.
+func printFacts(w io.Writer, a wtsync.Assessment) {
 	branch := a.Branch
 	if branch == "" {
 		branch = "(detached)"
@@ -729,33 +740,20 @@ func printDetail(w io.Writer, work string, a wtsync.Assessment) {
 	if line := syncrun.OwnStray(a.Own); line != "" {
 		fmt.Fprintf(w, "  also    %s\n", line)
 	}
+}
+
+// printDetail is wt sync <work>: the row, where the worktree is and what a run
+// would do with it, then each kind of finding under its own heading.
+func printDetail(w io.Writer, work string, a wtsync.Assessment) {
+	e := syncEntry{work: work, a: a}
+	fmt.Fprintf(w, "\n%s\n", measureRows([]syncEntry{e}).row(e))
+	printFacts(w, a)
 	fmt.Fprintf(w, "  run     %s\n", runVerdict(work, a))
 	if a.PlanFile != "" {
 		fmt.Fprintf(w, "  plan    %s\n", a.PlanFile)
 	}
 
-	if a.Err != nil {
-		fmt.Fprintln(w, "\nerror")
-		printLines(w, 1, a.Err.Error())
-	}
-	if st := a.Handover; st != nil && a.Rebasing {
-		// The stop the run handed over, as the plan file lists it: what is
-		// the person's, and what the strategies already staged. Once the
-		// rebase is finished or aborted by hand the stop is not live, and
-		// the run line says what is.
-		head := fmt.Sprintf("handed over at %d/%d", st.Stop, st.Total)
-		if a.Replaying != "" {
-			head += "  " + kit.OneLine(a.Replaying)
-		}
-		fmt.Fprintf(w, "\n%s\n", head)
-		for _, f := range handoverFiles(st) {
-			verdict := "yours"
-			if f.Resolved {
-				verdict = fileVerdict(f)
-			}
-			fmt.Fprintf(w, "    %s %s  %s\n", fileMark(f.Resolved), f.Path, verdict)
-		}
-	}
+	printErrorAndHandover(w, a)
 	if len(a.Divergent) > 0 {
 		fmt.Fprintln(w, "\ndivergent: the openapi strategy refuses these at the endpoint")
 		for _, c := range a.Divergent {
@@ -785,6 +783,33 @@ func printDetail(w io.Writer, work string, a wtsync.Assessment) {
 		fmt.Fprintln(w, "\nnotes")
 		for _, n := range a.Notes {
 			printLines(w, 1, n)
+		}
+	}
+}
+
+// printErrorAndHandover is the assessment's error, and the stop a run handed
+// over while its rebase is still waiting.
+func printErrorAndHandover(w io.Writer, a wtsync.Assessment) {
+	if a.Err != nil {
+		fmt.Fprintln(w, "\nerror")
+		printLines(w, 1, a.Err.Error())
+	}
+	if st := a.Handover; st != nil && a.Rebasing {
+		// The stop the run handed over, as the plan file lists it: what is
+		// the person's, and what the strategies already staged. Once the
+		// rebase is finished or aborted by hand the stop is not live, and
+		// the run line says what is.
+		head := fmt.Sprintf("handed over at %d/%d", st.Stop, st.Total)
+		if a.Replaying != "" {
+			head += "  " + kit.OneLine(a.Replaying)
+		}
+		fmt.Fprintf(w, "\n%s\n", head)
+		for _, f := range handoverFiles(st) {
+			verdict := "yours"
+			if f.Resolved {
+				verdict = fileVerdict(f)
+			}
+			fmt.Fprintf(w, "    %s %s  %s\n", fileMark(f.Resolved), f.Path, verdict)
 		}
 	}
 }
