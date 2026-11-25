@@ -539,3 +539,28 @@ func MoveMessage(into, from string, paths []string) string {
 	}
 	return msg
 }
+
+// WriteMove commits msg as an empty move! commit on line's tip, checks the
+// line with it as a fold would take it (PlanMoves), and only then moves
+// line's branch to it, over the tip it read. why is set, and the branch left
+// where it was, when the fold would refuse the commit; the returned move is
+// the one the commit makes.
+func WriteMove(mainRoot string, line Line, msg string) (PartMove, string, error) {
+	commit, err := gitEnv(mainRoot, nil, strings.NewReader(msg), "commit-tree", line.Head+"^{tree}", "-p", line.Head, "-F", "-")
+	if err != nil {
+		return PartMove{}, "", err
+	}
+	moves, why, err := PlanMoves(mainRoot, append(append([]string{}, line.Commits...), commit))
+	if err != nil || why != "" {
+		return PartMove{}, why, err
+	}
+	if _, err := gitEnv(mainRoot, nil, nil, "update-ref", "-m", "wt sync move", "refs/heads/"+line.Branch, commit, line.Head); err != nil {
+		return PartMove{}, "", fmt.Errorf("%s moved while the move! commit was written: %w", line.Branch, err)
+	}
+	for _, m := range moves {
+		if m.Commit == commit {
+			return m, "", nil
+		}
+	}
+	return PartMove{}, "", errors.New("the move! commit written is not among the line's moves")
+}

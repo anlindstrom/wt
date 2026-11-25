@@ -65,6 +65,9 @@ func newSyncCmd() *cobra.Command {
 			"          wt sync undo <work>       put back every ref that run moved\n" +
 			"          wt sync steps <work>      run the steps a run left owed, in\n" +
 			"                                    place, without rebasing onto trunk\n" +
+			"          wt sync move <work> <path>... --from <c> --into <c>\n" +
+			"                                    write a move! commit, which the\n" +
+			"                                    next fold makes\n" +
 			"          wt sync doctor            what a run needs, and --fix / --prune\n" +
 			"  keep    wt sync keep start        a launchd job that runs wt sync keep\n" +
 			"                                    once every 30m: every ready worktree\n" +
@@ -219,7 +222,7 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave out the branches that fork from the line or sit above its top; a run then never moves them")
 	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk")
 	sel.add(sync, true)
-	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncPushCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
+	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncPushCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncMoveCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
 	return sync
 }
 
