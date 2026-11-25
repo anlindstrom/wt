@@ -358,7 +358,8 @@ func mergeEntries(main string, ours, base, theirs treeEntry) (treeEntry, error) 
 	if _, err := git.Run(main, "merge-file", files[0], files[1], files[2]); err != nil {
 		return treeEntry{}, fmt.Errorf("the later changes do not merge onto it cleanly: %w", err)
 	}
-	id, err := git.Run(main, "hash-object", "--", files[0])
+	// Written, since a later fix may merge onto it and read it back.
+	id, err := git.Run(main, "hash-object", "-w", "--", files[0])
 	if err != nil {
 		return treeEntry{}, err
 	}
