@@ -142,6 +142,9 @@ type State struct {
 	// not yet: written before the first and after each, so a drop cut short
 	// is known, and only a --drop goes on from it.
 	DropLeft []string `json:"drop_left,omitempty"`
+	// NoPush says the run was started with --no-push, or a resume of it
+	// was: no resume of the run pushes unless --push is given on it.
+	NoPush bool `json:"no_push,omitempty"`
 }
 
 // StopResolution is one path a person resolved at a conflict stop: the commit

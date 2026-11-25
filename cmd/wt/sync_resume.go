@@ -26,7 +26,9 @@ func newSyncResumeCmd() *cobra.Command {
 			"in it, and a file a strategy owns is never yours to merge: that refusal\n" +
 			"points at wt sync undo. Then it drives the rest of the rebase, runs the\n" +
 			"deferred steps, pins the result ref and ends with the push, asked or not\n" +
-			"as for wt sync rebase (--push, --no-push). A later conflict that is yours is\n" +
+			"as for wt sync rebase (--push, --no-push). A run started or resumed with\n" +
+			"--no-push keeps it: no later resume of it pushes, even with --yes or a yes to the push\n" +
+			"question, unless --push is given on the resume. A later conflict that is yours is\n" +
 			"handed over again with a fresh plan file. An agent session idle in the\n" +
 			"worktree is named first and you are asked (with no terminal it goes\n" +
 			"ahead) before anything is verified, and the finish ends with a wt: line\n" +
@@ -131,16 +133,22 @@ func newSyncResumeCmd() *cobra.Command {
 func syncResume(cmd *cobra.Command, work string, ctx *kit.Context, yes, allowOwed, adopt, allowDropped bool, drop string, push syncrun.PushMode, j *syncrun.RunJournal) error {
 	opts := syncfix.ResumeOptions{Journal: j, Adopt: adopt, AllowDropped: allowDropped, Drop: drop}
 	opts.AllowOwed = allowOwed
-	opts.Push = push
-	// --yes answers yes to every question, the push included, unless
-	// --no-push says otherwise.
-	if yes {
-		opts.Push = yesPush(push)
-	}
+	opts.Push, opts.PushByYes = resumePush(push, yes)
 	if canAsk(cmd) && !yes {
 		p := newPrompter(cmd.InOrStdin(), cmd.OutOrStdout())
 		opts.Confirm = confirmAsk(p, "resume")
 		opts.ConfirmPush, opts.ChoosePush = confirmPush(p), choosePush(p)
 	}
 	return syncfix.SyncResume(ctx, work, opts, cmd.OutOrStdout())
+}
+
+// resumePush is the push a resume makes of --push, --no-push and --yes, and
+// whether the push is --yes's answer to the push question rather than
+// --push: --yes answers yes unless --no-push says otherwise, and only --push
+// pushes a run started with --no-push.
+func resumePush(push syncrun.PushMode, yes bool) (mode syncrun.PushMode, byYes bool) {
+	if !yes {
+		return push, false
+	}
+	return yesPush(push), push == syncrun.PushAsk
 }

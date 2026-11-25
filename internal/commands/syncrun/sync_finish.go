@@ -71,6 +71,8 @@ type HandoverInput struct {
 	// Tracker is the verb's, still set to the rebase being handed over; it
 	// is cleared once the handover is written or has failed.
 	Tracker *RebaseTracker
+	// NoPush is the run's --no-push, kept for every resume of it.
+	NoPush bool
 }
 
 // PrintFollowUps prints the commands that move the worktrees stacked on
@@ -160,6 +162,7 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 		EachCommit:  in.Res.EachCommit,
 		Context:     in.Res.Left.Context,
 		TrunkCopy:   in.Res.Left.TrunkCopy,
+		NoPush:      in.NoPush,
 	}
 	if in.Found != "" && in.Found != in.Res.OldTip {
 		st.Found = in.Found
