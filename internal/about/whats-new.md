@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-25 09:00 — The fold preview names context that comes from an earlier fold
+
+A fixup whose context only appears once a fixup of a later commit is folded in,
+together with the commits between the two targets, used to be reported as "not
+analysed". `wt sync rebase --stack --autosquash` now replays that fold and those
+commits, and names the commit the context first appears at, so the stop is
+known before the run. A replay that conflicts is still "not analysed".
+
 ## 2026-11-24 13:00 — Unchanged layers are not checked again
 
 `wt sync rebase --stack` no longer runs the `each_commit` checks and the per-layer

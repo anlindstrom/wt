@@ -112,7 +112,8 @@ func TestContextGapsCountMatchesTheFilesTheStopHas(t *testing.T) {
 // A clean fixup of a later commit is credited with context only when its
 // folded tree has it. C changes line 6, the fixup of B changes line 4, and the
 // fixup of A changes line 5 with both in its context: B's fold lacks C's line,
-// so the fixup is not named as needing B, and is counted as not analysed.
+// so the fixup is not named as needing B; replaying the fold and C shows the
+// context first at C, and the gap names that.
 func TestContextGapsDoNotCreditAFoldWithWhatOnlyALaterCommitAdds(t *testing.T) {
 	t.Parallel()
 	lines := func(l4, l5, l6 string) string {
@@ -135,7 +136,8 @@ func TestContextGapsDoNotCreditAFoldWithWhatOnlyALaterCommitAdds(t *testing.T) {
 			t.Errorf("gap %+v names feat: b, whose fold lacks the line feat: c adds", g)
 		}
 	}
-	if len(unchecked) != 1 || !strings.Contains(unchecked[0], "fixup! feat: a") || !strings.Contains(unchecked[0], "not analysed") {
-		t.Errorf("gaps %+v, unchecked %q; want the fixup of feat: a counted as not analysed", gaps, unchecked)
+	fixup := commits[len(commits)-1]
+	if len(unchecked) != 0 || len(gaps) != 1 || gaps[0].Fixup != fixup || gaps[0].Needs != sha["feat: c"] {
+		t.Errorf("gaps %+v, unchecked %q; want the fixup of feat: a needing feat: c, nothing unchecked", gaps, unchecked)
 	}
 }
