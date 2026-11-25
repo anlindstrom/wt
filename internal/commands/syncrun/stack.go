@@ -703,23 +703,33 @@ func (f *stackFinisher) guardFold() string {
 	return ""
 }
 
-// followDrops is a set of plans as they are once the rebase dropped what
-// it dropped: an edit's emptied commits, or the drops wt is certain of. Plans
-// that cannot be followed come back nil.
+// followDrops is a set of plans as they are once the rebase dropped and
+// added what it did (follow); plans that cannot be followed come back nil.
+// The fork plans follow it as the layers' do, for the commands --alone
+// prints as much as for the carry.
 func (f *stackFinisher) followDrops(plans []wtsync.LayerPlan) []wtsync.LayerPlan {
-	rec, main, in := f.rec, f.main, f.in
-	// The fork plans follow what the rebase dropped, as the layers' do below,
-	// for the commands --alone prints as much as for the carry.
-	if rec.Edit != nil {
-		if got, rerr := wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit); rerr == nil {
-			return got
-		}
+	got, err := f.follow(plans)
+	if err != nil {
 		return nil
 	}
-	if got, rerr := wtsync.ApplyDrops(main, in.Onto, plans, in.Dropped, in.Confirmed); rerr == nil {
-		return got
+	return got
+}
+
+// follow is plans as they are once the rebase finished: an edit's emptied
+// commits dropped, or the drops wt is certain of taken out (git empties the
+// picks the target already has, above an upstream, and the ones a conflict
+// rule resolved to trunk's side) and the commits a person added at a check
+// stop counted.
+func (f *stackFinisher) follow(plans []wtsync.LayerPlan) ([]wtsync.LayerPlan, error) {
+	rec, main, in := f.rec, f.main, f.in
+	if rec.Edit != nil {
+		return wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit)
 	}
-	return nil
+	got, err := wtsync.ApplyDrops(main, in.Onto, plans, in.Dropped, in.Confirmed)
+	if err != nil {
+		return nil, err
+	}
+	return wtsync.ApplyAdded(main, got, in.Fixed)
 }
 
 // alone ends the finish of an --alone run: the line is rebased, and no layer
@@ -738,27 +748,12 @@ func (f *stackFinisher) alone(forks []wtsync.LayerPlan) (*Stack, string, error) 
 	return s, "", nil
 }
 
-// followPlans is the layers' plans as they are once the rebase dropped what
-// it dropped; the reason they cannot be followed otherwise.
+// followPlans is the layers' plans as they are once the rebase finished
+// (follow); the reason they cannot be followed otherwise.
 func (f *stackFinisher) followPlans() ([]wtsync.LayerPlan, string) {
-	rec, main, in := f.rec, f.main, f.in
-	if rec.Edit != nil {
-		// The commits the amend emptied were dropped: the plan follows.
-		plans, rerr := wtsync.ReconcileEdit(main, in.Onto, rec.Plans, *rec.Edit)
-		if rerr != nil {
-			return nil, rerr.Error()
-		}
-		return plans, ""
-	}
-	// git empties the picks the target already has (above an upstream)
-	// and the ones a conflict rule resolved to trunk's side: the plan
-	// follows the drops wt is certain of.
-	plans, rerr := wtsync.ApplyDrops(main, in.Onto, rec.Plans, in.Dropped, in.Confirmed)
-	if rerr != nil {
-		return nil, rerr.Error()
-	}
-	if plans, rerr = wtsync.ApplyAdded(main, plans, in.Fixed); rerr != nil {
-		return nil, rerr.Error()
+	plans, err := f.follow(f.rec.Plans)
+	if err != nil {
+		return nil, err.Error()
 	}
 	return plans, ""
 }
