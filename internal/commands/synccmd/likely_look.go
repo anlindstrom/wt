@@ -39,10 +39,10 @@ func printLikely(w io.Writer, indent string, likely []wtsync.LikelyStop) {
 
 // printReworked names each replayed commit that trunk carries under the same
 // subject and author. A name match does not prove trunk holds the changes,
-// so wt keeps the commit and replays it.
+// so wt keeps the commit and replays it; a stop there offers the drop.
 func printReworked(w io.Writer, indent string, reworked []wtsync.ReworkedCommit) {
 	for _, r := range reworked {
-		fmt.Fprintf(w, "%s⚠ %d/%d %q may already be on trunk as %s (same subject and author); wt keeps it and replays it, and it may stop where trunk reworked it\n",
+		fmt.Fprintf(w, "%s⚠ %d/%d %q may already be on trunk as %s (same subject and author); wt keeps it and replays it; if it stops where trunk reworked it, the stop offers to drop it\n",
 			indent, r.Index, r.Total, kit.Truncate(kit.OneLine(r.Subject), 48), git.ShortID(r.TrunkCommit, 7))
 	}
 }

@@ -131,6 +131,10 @@ type State struct {
 	// the hunks of it that lack their context there: resume checks that
 	// the resolution drops none of the fixup's lines.
 	Context []ContextGap `json:"context,omitempty"`
+	// TrunkCopy is, at a conflict stop at a commit the target carries
+	// reworked, that copy and what a drop takes and keeps: resume --drop
+	// acts on it and on nothing else.
+	TrunkCopy *TrunkCopy `json:"trunk_copy,omitempty"`
 }
 
 // StopResolution is one path a person resolved at a conflict stop: the commit
@@ -445,6 +449,9 @@ func RenderPlan(in PlanInput) (string, error) {
 		fmt.Fprintf(&b, ", replaying %q", oneLinePlan(in.Handover.Subject))
 	}
 	b.WriteString("\n")
+	if c := in.Handover.TrunkCopy; c != nil {
+		fmt.Fprintf(&b, "\n## maybe already on trunk, reworked\n%s\n", c.Offer(in.Work, in.Handover.Commit))
+	}
 
 	conflicts := map[string]Conflict{}
 	for _, c := range in.Handover.Conflicts {
