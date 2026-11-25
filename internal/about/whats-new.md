@@ -13,7 +13,9 @@ and recorded no push, or the runs left it unchanged but it was already off its
 remote), and pushes nothing; `--push` on the run itself does the same for a layer
 it left unchanged. A resumed run keeps every layer it moved, before and after a
 stop. A run or resume whose layer moves stop part way pushes nothing and
-keeps no record; `wt sync undo` puts it back. A record from an older wt is refused.
+keeps no record; `wt sync undo` puts it back, and a retry refuses on the cut move,
+ref-only moves included, instead of moving it again. A record from an older wt is
+refused.
 
 ## 2026-11-25 13:00 — A fix made at a check stop passes the fold's content check
 
@@ -22,7 +24,9 @@ check failed, a fix you amend into that commit, or commit on top of it, no longe
 fails the content check at the end of the fold: it is merged into the line the
 result is compared to, across repeated stops and earlier conflict resolutions, and
 its paths are named. Anything else that differs, in the fixed file or another,
-still refuses. A fold in place still takes no change.
+still refuses. The fix is kept with the handover, so a retry after a failed finish
+still takes it; a fix commit is still counted after a fold step rewrites it, and in
+the plans of side branches above it. A fold in place still takes no change.
 
 ## 2026-11-25 12:00 — The unpushed line counts what the push sends
 
