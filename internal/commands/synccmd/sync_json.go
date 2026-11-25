@@ -107,7 +107,13 @@ type OverviewWorktree struct {
 	Sessions   []PlanSession     `json:"sessions"`
 	Stack      []PlanStackMember `json:"stack"`
 	Stops      []OverviewStop    `json:"stops"`
-	Strategies []string          `json:"strategies"`
+	// LikelyStops are the commits after the first stop that is yours that
+	// change a file trunk changed: guessed from the overlap, not simulated.
+	LikelyStops []OverviewLikelyStop `json:"likelyStops"`
+	// ReworkedOnTrunk are the replayed commits trunk carries under the same
+	// subject and author.
+	ReworkedOnTrunk []OverviewReworked `json:"reworkedOnTrunk"`
+	Strategies      []string           `json:"strategies"`
 	// DeferredDeclared is the repository's, the same on every worktree.
 	DeferredDeclared []DeclaredStep `json:"deferredDeclared"`
 	// Checks is how many commits a run would check, CheckCommits which.
@@ -151,6 +157,27 @@ type OverviewStop struct {
 	Resolved bool           `json:"resolved"`
 	Yours    bool           `json:"yours"`
 	Files    []OverviewFile `json:"files"`
+}
+
+// OverviewLikelyStop is a commit the replay did not reach that changes a file
+// trunk changed.
+type OverviewLikelyStop struct {
+	Index   int      `json:"index"`
+	Total   int      `json:"total"`
+	Commit  string   `json:"commit"`
+	Subject string   `json:"subject"`
+	Paths   []string `json:"paths"`
+}
+
+// OverviewReworked is a replayed commit with the subject and author of a
+// commit on trunk.
+type OverviewReworked struct {
+	Index        int    `json:"index"`
+	Total        int    `json:"total"`
+	Commit       string `json:"commit"`
+	Subject      string `json:"subject"`
+	TrunkCommit  string `json:"trunkCommit"`
+	TrunkSubject string `json:"trunkSubject"`
 }
 
 // OverviewFile is one conflicted file at a stop.
@@ -431,7 +458,7 @@ func (r *RunPlan) overviewRow(wt repo.Worktree, a wtsync.Assessment, byBranch ma
 		Work: kit.WorktreeName(ctx, wt.Branch, wt.Path), Branch: jsonout.Strp(wt.Branch), Path: wt.Path,
 		Class: a.Class.String(), Verified: !a.Unverified,
 		Behind: a.Behind, Ahead: a.Ahead, Dirty: a.Dirty, HandedOver: a.Paused, PlanFile: jsonout.Strp(a.PlanFile),
-		Sessions: []PlanSession{}, Stack: []PlanStackMember{}, Stops: []OverviewStop{},
+		Sessions: []PlanSession{}, Stack: []PlanStackMember{}, Stops: []OverviewStop{}, LikelyStops: []OverviewLikelyStop{}, ReworkedOnTrunk: []OverviewReworked{},
 		Strategies: []string{}, Notes: append([]string{}, a.Notes...), CheckCommits: []CheckCommit{},
 		OwnRemote: syncrun.OwnRemoteOf(a.Own),
 	}
@@ -485,6 +512,12 @@ func (r *RunPlan) overviewRow(wt repo.Worktree, a wtsync.Assessment, byBranch ma
 			}
 		}
 		row.Stops = append(row.Stops, st)
+	}
+	for _, l := range a.Replay.Likely {
+		row.LikelyStops = append(row.LikelyStops, OverviewLikelyStop{Index: l.Index, Total: l.Total, Commit: l.Commit, Subject: l.Subject, Paths: l.Paths})
+	}
+	for _, w := range a.Replay.Reworked {
+		row.ReworkedOnTrunk = append(row.ReworkedOnTrunk, OverviewReworked{Index: w.Index, Total: w.Total, Commit: w.Commit, Subject: w.Subject, TrunkCommit: w.TrunkCommit, TrunkSubject: w.TrunkSubject})
 	}
 	return row
 }
