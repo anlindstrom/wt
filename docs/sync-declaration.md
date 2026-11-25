@@ -411,6 +411,43 @@ the base it is replayed onto already carries or reaches (trunk with `--onto
 one that is ambiguous or names nothing is refused with the fixup and the name
 it gave. Every new layer tip must descend from the destination.
 
+#### Moving part of a commit into an earlier one
+
+A `move!` commit moves whole paths of one commit of the line (the source) into
+an earlier one (the target) in the same fold, where a `fixup!` can only move a
+whole commit. It is an empty commit at the top of the line, written by hand or by
+`wt sync move <work> <path>... --from <source> --into <target>`:
+
+```
+move! feat: refusals
+
+Move-From: feat: the door
+Move-Path: door/refuse.go
+```
+
+Each of target and source is a commit id or a whole subject that exactly one
+commit of the line has; a shared subject is refused, naming the commits. The
+fold, `wt sync rebase <work> --stack --autosquash --each-commit=targets`, applies
+the source's change to those paths at the target, after the target's own
+fixups, as a fixup of a commit it builds on the target and keeps under
+`refs/wt-sync-kept/<branch>/<epoch>-move-<n>`; the source's replay then no
+longer changes them, and the `move!` commit is dropped. The tip's tree stays the
+line's, so the content check holds as for any fold in place, and undo puts back
+every layer.
+
+Before anything moves the run replays the whole fold in the object store and
+refuses, naming the cause: a target or source that does not name one commit
+below the `move!` commit, a target not below the source, a `move!` commit that
+changes anything, a path the source does not change, every path of the source
+(make it a `fixup!` instead), a part that does not apply at the target (naming
+the first commit in between that carries its context), any commit of the fold
+that does not merge clean with the part moved, a source whose replay still
+changes the paths, and a fold that would end in another tree. It needs
+`--each-commit=targets`, so a part that builds only with code from a commit in
+between fails the check at the target's layer; `--onto` and `--edit` are
+refused for now, and so are parts of a file. `wt sync <work> --stack
+--autosquash` lists each move, or the refusal, and moves nothing.
+
 #### A fixup moved ahead of its context
 
 A fixup written against the top of the line and folded into a commit low on

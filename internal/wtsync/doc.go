@@ -44,10 +44,12 @@
 //   - landing.go, emptied.go: what landed on trunk, and the commits a rebase
 //     drops (Dropped, ReplayPlan, ReportReplay).
 //   - context.go: ContextGap, a fixup hunk whose context a later commit adds.
+//   - move.go: PlanMoves, a move! commit's part resolved, built and its fold
+//     replayed before the run; KeepMoves and KeptMoves, the part's kept ref.
 //
 // Used from outside: AssessOwn, AssessTo, Assessment, Target,
 // FileOutcome, KeyGroup, KeyCounts, LandingList, Dropped, ReplayPlan,
-// ContextGaps, GapsAt, BehindAhead.
+// ContextGaps, GapsAt, BehindAhead, PlanMoves, PartMove, MoveName.
 //
 // # 3. Rebase driver
 //
