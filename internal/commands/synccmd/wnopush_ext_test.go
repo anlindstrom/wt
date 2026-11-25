@@ -101,21 +101,29 @@ func resumeAs(t *testing.T, p *pushedLine, opts syncfix.ResumeOptions) (syncrun.
 	return synccmdtest.DecodeSyncRun(t, out.Bytes()), human.String(), err
 }
 
-// wt#223: a --stack run started with --no-push that stops twice is resumed,
-// each time with a yes to the push question. No resume pushes: origin's refs
-// are as they were after every leg, the final JSON says nothing was pushed
-// and holds no push, every moved layer keeps the push still owed, and the
-// record keeps all of them for wt sync push --stack.
-func TestResumeOfANoPushRunNeverPushes(t *testing.T) {
-	t.Parallel()
-	if testing.Short() {
-		t.Skip("integration: a stack over real repositories, a worktree each and a bare remote")
-	}
-	p := newTwoStopLine(t)
-	main := p.ctx.Repo.MainRoot
+// yesToPush is a yes to the push question, as a person at the terminal
+// gives it.
+func yesToPush() syncfix.ResumeOptions {
+	var o syncfix.ResumeOptions
+	o.Push = syncrun.PushAsk
+	o.ConfirmPush = func([]string) bool { return true }
+	return o
+}
+
+// yesFlag is what --yes makes of the push on a resume.
+func yesFlag() syncfix.ResumeOptions {
+	var o syncfix.ResumeOptions
+	o.Push, o.PushByYes = syncrun.PushAlways, true
+	return o
+}
+
+// noPushRunResumed is a --stack --no-push run of the line stopped at a1.txt,
+// resumed with a yes to the push question to its second stop at v.txt, and
+// resumed again with last. Origin must not change before the last resume.
+func (p *pushedLine) noPushRunResumed(t *testing.T, last syncfix.ResumeOptions) (syncrun.RunResult, string, error) {
+	t.Helper()
 	remoteBefore := bareRefs(t, p.bare)
 	tmp := p.s.Paths[gittest.StackTmp]
-
 	opts := synccmdtest.NoAgents()
 	opts.Push = syncrun.PushNever
 	if _, human, err := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, opts); err == nil || !strings.Contains(err.Error(), "needs you") {
@@ -124,24 +132,44 @@ func TestResumeOfANoPushRunNeverPushes(t *testing.T) {
 	if got := bareRefs(t, p.bare); got != remoteBefore {
 		t.Fatalf("the --no-push run changed origin:\n%s\nwas\n%s", got, remoteBefore)
 	}
-
-	// A yes to the push question, as a person at the terminal gives it.
-	yes := syncfix.ResumeOptions{}
-	yes.Push = syncrun.PushAsk
-	yes.ConfirmPush = func([]string) bool { return true }
-
 	testkit.WriteFile(t, tmp, "a1.txt", "s1 a1.txt\n")
 	testkit.GitIn(t, tmp, "add", "a1.txt")
-	if _, human, err := resumeAs(t, p, yes); err == nil || !strings.Contains(err.Error(), "needs you") {
+	if _, human, err := resumeAs(t, p, yesToPush()); err == nil || !strings.Contains(err.Error(), "needs you") {
 		t.Fatalf("first resume: err %v, want a second handover at v.txt\n%s", err, human)
 	}
 	if got := bareRefs(t, p.bare); got != remoteBefore {
 		t.Fatalf("the first resume changed origin:\n%s\nwas\n%s", got, remoteBefore)
 	}
-
 	testkit.WriteFile(t, tmp, "v.txt", "1.0.6\n")
 	testkit.GitIn(t, tmp, "add", "v.txt")
-	res, human, err := resumeAs(t, p, yes)
+	return resumeAs(t, p, last)
+}
+
+// wt#223: a --stack run started with --no-push that stops twice is resumed,
+// each time with a yes to the push question: a person's, or --yes's. No
+// resume pushes: origin's refs are as they were after every leg, the final
+// JSON says nothing was pushed and holds no push, every moved layer keeps the
+// push still owed, and the record keeps all of them for wt sync push --stack.
+func TestResumeOfANoPushRunNeverPushes(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories, a worktree each and a bare remote")
+	}
+	for name, last := range map[string]syncfix.ResumeOptions{"asked": yesToPush(), "--yes": yesFlag()} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			resumedWithoutPush(t, last)
+		})
+	}
+}
+
+// resumedWithoutPush is TestResumeOfANoPushRunNeverPushes with last as the
+// last resume's push.
+func resumedWithoutPush(t *testing.T, last syncfix.ResumeOptions) {
+	p := newTwoStopLine(t)
+	main := p.ctx.Repo.MainRoot
+	remoteBefore := bareRefs(t, p.bare)
+	res, human, err := p.noPushRunResumed(t, last)
 	if err == nil || !strings.Contains(err.Error(), "2 layers held") {
 		t.Fatalf("last resume: err %v, want the two layers a worktree holds named as held\n%s", err, human)
 	}
@@ -150,6 +178,9 @@ func TestResumeOfANoPushRunNeverPushes(t *testing.T) {
 	}
 	if strings.Contains(human, "✓ pushed") || strings.Contains(human, "atomic push") {
 		t.Errorf("the last resume says it pushed:\n%s", human)
+	}
+	if !strings.Contains(human, "  = not pushed: the run was told --no-push\n") {
+		t.Errorf("the last resume does not say why it did not push:\n%s", human)
 	}
 	line := synccmdtest.Participant(t, res, gittest.StackTmp)
 	if line.Pushed {
@@ -244,5 +275,52 @@ func TestRunPushSendsTheLayersAnEarlierRunLeftUnpushed(t *testing.T) {
 	}
 	if _, ok, _ := wtsync.ReadPushRecord(main, gittest.StackTmp); ok {
 		t.Errorf("the record is still there after everything was pushed\n%s", human)
+	}
+}
+
+// wt#223: --push on the last resume of the same run is the explicit way to
+// push it: every layer the run moved is sent and carries no push command any
+// more; the line's own branch, new on origin, is left out and still owed.
+func TestExplicitPushOnAResumeOfANoPushRunPushesEveryMovedLayer(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories, a worktree each and a bare remote")
+	}
+	p := newTwoStopLine(t)
+	main := p.ctx.Repo.MainRoot
+	var push syncfix.ResumeOptions
+	push.Push = syncrun.PushAlways
+	res, human, err := p.noPushRunResumed(t, push)
+	if err == nil || !strings.Contains(err.Error(), "2 layers held") {
+		t.Fatalf("last resume: err %v, want the two held layers named\n%s", err, human)
+	}
+	for _, b := range []string{"s1", "s2", "s4"} {
+		if got, want := refIn(t, p.bare, b), testkit.GitOut(t, main, "rev-parse", b); got != want || got == p.s.Tips[b] {
+			t.Errorf("origin %s is at %s, want the moved tip %s\n%s", b, got, want, human)
+		}
+	}
+	for _, b := range []string{"s3", "s5"} {
+		if got := refIn(t, p.bare, b); got != p.s.Tips[b] {
+			t.Errorf("origin %s moved to %s, though the run held it", b, got)
+		}
+	}
+	line := synccmdtest.Participant(t, res, gittest.StackTmp)
+	if line.Pushed || line.PushCommand == nil {
+		t.Errorf("the line, left out of the push, says pushed %v with push command %v", line.Pushed, line.PushCommand)
+	}
+	if line.Stack == nil || line.Stack.Push == nil {
+		t.Fatalf("no stack push in the JSON\n%s", human)
+	}
+	for _, l := range line.Stack.Layers {
+		if l.Result != nil && *l.Result == wtsync.MoveMoved && l.PushCommand != nil {
+			t.Errorf("pushed layer %s still carries the push command %v", l.Branch, l.PushCommand)
+		}
+	}
+	rec, ok, rerr := wtsync.ReadPushRecord(main, gittest.StackTmp)
+	if rerr != nil || !ok {
+		t.Fatalf("the line's entry was not kept: %v", rerr)
+	}
+	if got := strings.Join(rec.Branches(), ","); got != gittest.StackTmp {
+		t.Errorf("the record holds %s after the push, want only %s", got, gittest.StackTmp)
 	}
 }
