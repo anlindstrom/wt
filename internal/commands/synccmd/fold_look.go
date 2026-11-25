@@ -41,14 +41,32 @@ type FoldLookHeld struct {
 	Why    string `json:"why"`
 }
 
-// FoldLookPair is one fixup of a FoldLook.
+// FoldLookPair is one fixup or move! commit of a FoldLook.
 type FoldLookPair struct {
-	Fixup         string `json:"fixup"`
-	FixupSubject  string `json:"fixupSubject"`
-	FixupLayer    string `json:"fixupLayer"`
-	Target        string `json:"target"`
-	TargetSubject string `json:"targetSubject"`
-	TargetLayer   string `json:"targetLayer"`
+	// Kind is fold for a fixup!, squash! or amend! commit, move for a move!
+	// commit, whose Move says what it moves.
+	Kind          string        `json:"kind"`
+	Fixup         string        `json:"fixup"`
+	FixupSubject  string        `json:"fixupSubject"`
+	FixupLayer    string        `json:"fixupLayer"`
+	Target        string        `json:"target"`
+	TargetSubject string        `json:"targetSubject"`
+	TargetLayer   string        `json:"targetLayer"`
+	Move          *FoldLookMove `json:"move"`
+}
+
+// The kinds of a FoldLookPair.
+const (
+	foldKindFold = "fold"
+	foldKindMove = "move"
+)
+
+// FoldLookMove is what a move! commit moves: whole paths of Source.
+type FoldLookMove struct {
+	Source        string   `json:"source"`
+	SourceSubject string   `json:"sourceSubject"`
+	SourceLayer   string   `json:"sourceLayer"`
+	Paths         []string `json:"paths"`
 }
 
 // foldsInPlace is whether a look with these options and target describes a
@@ -110,7 +128,7 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, alone bool) (
 	}
 	lowest := len(commits)
 	for _, p := range pairs {
-		fl.Folds = append(fl.Folds, FoldLookPair{Fixup: p.Fixup, FixupSubject: p.FixupSubject, FixupLayer: layerAt(p.FixupAt),
+		fl.Folds = append(fl.Folds, FoldLookPair{Kind: foldKindFold, Fixup: p.Fixup, FixupSubject: p.FixupSubject, FixupLayer: layerAt(p.FixupAt),
 			Target: p.Target, TargetSubject: p.TargetSubject, TargetLayer: layerAt(p.TargetAt)})
 		lowest = min(lowest, p.TargetAt)
 	}
