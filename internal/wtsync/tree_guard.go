@@ -300,7 +300,13 @@ func checkResolved(main, oldTip, newTip string, r StopResolution, fixes []CheckF
 		if err := errors.Join(err1, err2); err != nil {
 			return "what was changed at the check stop at " + git.ShortID(f.Stop, 7) + " could not be read: " + err.Error()
 		}
-		if before == after {
+		switch {
+		case before == after || want == after:
+			continue
+		case want == before:
+			// The resolution is exactly what the fix started from: the fix
+			// is applied whole, a deletion or a mode change included.
+			want = after
 			continue
 		}
 		merged, err := mergeEntries(main, want, before, after)

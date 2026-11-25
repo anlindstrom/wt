@@ -55,7 +55,7 @@ func TestResumeWithHeldLayersKeepsEveryMovedLayerInThePushRecord(t *testing.T) {
 	if want, got := "s1,s2,s4,"+gittest.StackTmp, strings.Join(rec.Branches(), ","); got != want {
 		t.Errorf("the record holds %s, want %s", got, want)
 	}
-	if !strings.Contains(resumed.String(), "↪ 3 branches left unpushed, with their leases: wt sync push tmp/stack --stack pushes them later") {
+	if !strings.Contains(resumed.String(), "↪ 4 branches left unpushed, with their leases: wt sync push tmp/stack --stack pushes them later") {
 		t.Errorf("the resume does not say what is left for a later push:\n%s", resumed.String())
 	}
 

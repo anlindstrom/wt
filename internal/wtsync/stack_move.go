@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -354,11 +355,22 @@ const (
 // that moves it by hand. An error is the record that could not be written,
 // or the moves stopped by AfterMove; rec says what moved.
 func MoveLayers(mainRoot string, rec *StackRecord, tips []LayerTip, opts MoveOptions) error {
+	prior := rec.Moves
+	for _, m := range prior {
+		if m.Result == MoveMoving || m.Result == MoveRecovery {
+			// What undo needs to put the layer back is in this entry: it stays
+			// as it is, and nothing is moved over it.
+			return fmt.Errorf("layer %s has a move that was cut short and is not finished (its branch may stand at the new tip over its old files); nothing is moved again: wt sync undo %s puts back the line and every layer moved", m.Branch, rec.Work)
+		}
+	}
 	rec.Moves = nil
 	for _, t := range tips {
 		m := LayerMove{Branch: t.Branch, Old: t.Old, New: t.New, Result: MovePlanned}
 		if t.New == t.Old {
 			m.Result = MoveUnchanged
+		}
+		if done, ok := movedBefore(mainRoot, prior, t); ok {
+			m = done
 		}
 		rec.Moves = append(rec.Moves, m)
 	}
@@ -390,6 +402,24 @@ func MoveLayers(mainRoot string, rec *StackRecord, tips []LayerTip, opts MoveOpt
 		}
 	}
 	return nil
+}
+
+// movedBefore is the move an earlier pass of the same run recorded as made
+// for the layer of t, when it still holds: the same old and new tips, and the
+// branch standing at the new tip. Such a layer stays moved, with its pins; a
+// layer whose branch is anywhere else is moved or held as the rest are.
+func movedBefore(mainRoot string, prior []LayerMove, t LayerTip) (LayerMove, bool) {
+	i := slices.IndexFunc(prior, func(m LayerMove) bool {
+		return m.Branch == t.Branch && m.Result == MoveMoved && m.Old == t.Old && m.New == t.New
+	})
+	if i < 0 {
+		return LayerMove{}, false
+	}
+	tip, err := gitEnv(mainRoot, nil, nil, "rev-parse", "--verify", "refs/heads/"+t.Branch)
+	if err != nil || tip != t.New {
+		return LayerMove{}, false
+	}
+	return prior[i], true
 }
 
 // stopped is a test's Between stopping the moves where it stands.

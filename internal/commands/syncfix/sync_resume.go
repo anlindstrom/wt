@@ -658,6 +658,12 @@ func (r *resume) complete(res wtsync.Result) error {
 			r.held = failures
 			return nil
 		}
+		if stackFailure != "" && len(out.OwedFailures) == 0 {
+			// Layers held and nothing pushed: what the resume moved is still
+			// kept for wt sync push --stack, as a run keeps it.
+			syncrun.KeepStackPush(r.ctx, r.w, r.stack, []syncrun.PushTarget{{Work: name, Branch: st.Branch, Path: r.target.Path}}, "")
+			syncrun.SettleStackPush(r.ctx, r.w, r.stack)
+		}
 		return fmt.Errorf("not completed: %s", strings.Join(failures, ", "))
 	}
 	return nil

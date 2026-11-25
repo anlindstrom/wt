@@ -138,6 +138,10 @@ func keptPush(s *Stack, head string, targets []PushTarget) *wtsync.PushRecord {
 	if s.Top.Worktree != nil {
 		rec.Path = *s.Top.Worktree
 	}
+	rec.LayersRead = true
+	for _, l := range s.Layers {
+		rec.Layers = append(rec.Layers, l.Branch)
+	}
 	for _, it := range items {
 		rec.Items = append(rec.Items, wtsync.PushRecordItem{BranchPush: it.BranchPush, New: it.New, Top: it.Top})
 	}
@@ -196,7 +200,7 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 		fmt.Fprintf(w, "  ✗ not pushed: %s; nothing was pushed, and the record is kept\n", why)
 		return s, errors.New("not pushed: " + why)
 	}
-	items, merged, conflicts, why := recordedItems(main, rec)
+	items, merged, conflicts, why := recordedItems(ctx, rec)
 	for _, c := range conflicts {
 		conflicted = append(conflicted, StackConflicted{Branch: c.Branch, Why: c.Why})
 	}
@@ -206,9 +210,9 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 	pushing := slices.DeleteFunc(slices.Clone(items), isLeftOut)
 	runs := rec.Runs()
 	if len(runs) > 1 {
-		fmt.Fprintf(w, "  %s: the push %d unpushed runs left for later (%s to %s), %s\n", work, len(runs), runLabel(runs[0].Written), runLabel(rec.Written), kit.Count(len(pushing), "branch"))
+		fmt.Fprintf(w, "  %s: the push %d unpushed runs left for later (%s to %s), %s\n", work, len(runs), runLabel(runs[0].Written), runLabel(rec.Written), kit.Count(len(pushing), "branch", "branches"))
 	} else {
-		fmt.Fprintf(w, "  %s: the push the run of %s left for later, %s\n", work, rec.Written.Local().Format("2006-01-02 15:04"), kit.Count(len(pushing), "branch"))
+		fmt.Fprintf(w, "  %s: the push the run of %s left for later, %s\n", work, rec.Written.Local().Format("2006-01-02 15:04"), kit.Count(len(pushing), "branch", "branches"))
 	}
 	for _, l := range rec.LeftOut() {
 		fmt.Fprintf(w, "  = %s left out by the run: %s\n", l.Branch, l.Why)
@@ -260,7 +264,7 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 		if !ok || now.Rev != rec.Rev || now.Epoch != rec.Epoch || !now.Written.Equal(rec.Written) {
 			return refuse("the record changed while the question waited")
 		}
-		if items, merged, _, why = recordedItems(main, rec); why != "" {
+		if items, merged, _, why = recordedItems(ctx, rec); why != "" {
 			return refuse(why)
 		}
 		pushing = slices.DeleteFunc(slices.Clone(items), isLeftOut)
@@ -299,7 +303,8 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 // the runs disagree on, and why not when the push is refused: a branch that is
 // no longer at the tip the newest run left it at, a conflicted branch, or a
 // remote that no longer pushes where the leases were taken.
-func recordedItems(main string, rec *wtsync.PushRecord) ([]stackItem, []wtsync.MergedItem, []wtsync.PushConflict, string) {
+func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) ([]stackItem, []wtsync.MergedItem, []wtsync.PushConflict, string) {
+	main := ctx.Repo.MainRoot
 	merged, conflicts := rec.Merged()
 	var moved, names, reasons []string
 	for _, it := range merged {
@@ -316,6 +321,12 @@ func recordedItems(main string, rec *wtsync.PushRecord) ([]stackItem, []wtsync.M
 	}
 	if len(moved) > 0 {
 		reasons = append(reasons, strings.Join(names, ", ")+" moved since the run: "+strings.Join(moved, "; "))
+	}
+	if missing := missingLayers(ctx, rec, merged); len(missing) > 0 {
+		reasons = append(reasons, strings.Join(missing, ", ")+" moved but is not in the record: the record holds no push for it, so a push would leave it behind on its old commits; wt sync push "+rec.Work+" --stack --forget drops the record, and a fresh --no-push run records the line again")
+	}
+	if unread := runsWithoutLayers(rec); len(unread) > 0 {
+		reasons = append(reasons, "the record of "+strings.Join(unread, ", ")+" was written by a wt that did not keep the line's layers, so it cannot show that every moved layer is in it; push the layers it names by hand over the leases it recorded, or wt sync push "+rec.Work+" --stack --forget drops the record, and a fresh --no-push run records the line again")
 	}
 	if len(conflicts) > 0 {
 		var parts, cn []string
@@ -337,6 +348,48 @@ func recordedItems(main string, rec *wtsync.PushRecord) ([]stackItem, []wtsync.M
 		return nil, merged, conflicts, err.Error()
 	}
 	return items, merged, conflicts, ""
+}
+
+// missingLayers is the layers a run read that are in no item of the record
+// and that differ from the remote branch they push to: moved, and left out of
+// the push by nothing the run said. A layer the runs left out on purpose, and
+// one with nowhere to push or no remote branch yet, is not missing.
+func missingLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.MergedItem) []string {
+	own := wtsync.ReadOwnOrUnknown(ctx.Repo.MainRoot, ctx.Config.MainBranch)
+	left := rec.LeftOut()
+	var missing []string
+	seen := map[string]bool{}
+	for _, run := range rec.Runs() {
+		for _, b := range run.Layers {
+			if seen[b] || b == rec.Branch || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == b }) ||
+				slices.ContainsFunc(left, func(l wtsync.PushLeft) bool { return l.Branch == b }) {
+				continue
+			}
+			seen[b] = true
+			to := own.Push(b)
+			if to.Tracking == "" {
+				continue
+			}
+			remote, rerr := git.Run(ctx.Repo.MainRoot, "rev-parse", "--verify", to.Tracking)
+			local, lerr := git.Run(ctx.Repo.MainRoot, "rev-parse", "--verify", "refs/heads/"+b)
+			if rerr == nil && lerr == nil && remote != local {
+				missing = append(missing, b)
+			}
+		}
+	}
+	return missing
+}
+
+// runsWithoutLayers is the runs of the record, by label, that did not keep
+// the line's layers.
+func runsWithoutLayers(rec *wtsync.PushRecord) []string {
+	var out []string
+	for _, run := range rec.Runs() {
+		if !run.LayersRead {
+			out = append(out, "the run of "+runLabel(run.Written))
+		}
+	}
+	return out
 }
 
 func mergedBy(merged []wtsync.MergedItem, branch string) (wtsync.MergedItem, bool) {

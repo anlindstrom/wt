@@ -4,15 +4,31 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
-## 2026-11-25 09:00 — A fix made at a check stop passes the fold's content check
+## 2026-11-25 14:00 — The push of a stack's record covers every layer
 
-When `wt sync rebase --stack --autosquash --onto` stops at a layer tip because an
-`each_commit` check failed, a fix you amend into that commit no longer fails the
-content check at the end of the fold: it is merged into the line the result is
-compared to, and its paths are named (`fix.txt taken as resolved at a stop`). Anything
-else that differs, in the fixed file or another, still refuses. The closing line of
-a `--no-push` run now counts only the branches `wt sync push --stack` sends and names
-the line's own branch when it goes with `--push-line`.
+`wt sync push --stack` checks every layer of the line before it pushes. A layer it
+does not send must stand where the run left it and level with its remote branch;
+otherwise the push refuses, names the layer and what is true of it (a run moved it
+and recorded no push, or the runs left it unchanged but it was already off its
+remote), and pushes nothing; `--push` on the run itself does the same for a layer
+it left unchanged. A resumed run keeps every layer it moved, before and after a
+stop. A run or resume whose layer moves stop part way pushes nothing and
+keeps no record; `wt sync undo` puts it back. A record from an older wt is refused.
+
+## 2026-11-25 13:00 — A fix made at a check stop passes the fold's content check
+
+When `wt sync rebase --stack --autosquash --onto` stops because an `each_commit`
+check failed, a fix you amend into that commit, or commit on top of it, no longer
+fails the content check at the end of the fold: it is merged into the line the
+result is compared to, across repeated stops and earlier conflict resolutions, and
+its paths are named. Anything else that differs, in the fixed file or another,
+still refuses. A fold in place still takes no change.
+
+## 2026-11-25 12:00 — The unpushed line counts what the push sends
+
+The closing line of a `--stack --no-push` run counts the branches
+`wt sync push --stack` will send, says "them" for more than one, and names the
+line's own branch when it goes only with `--push-line`.
 
 ## 2026-11-25 10:30 — The restack look lists every likely stop
 
