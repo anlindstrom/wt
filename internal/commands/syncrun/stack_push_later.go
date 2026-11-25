@@ -76,7 +76,7 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 		left = next.Branches()
 	}
 	if len(left) == len(all) && len(left) > 0 {
-		fmt.Fprintf(w, "  ↪ %s: wt sync push %s --stack pushes it later\n", s.unpushedLine(left), s.work)
+		fmt.Fprintf(w, "  ↪ %s\n", s.laterLine(next, left))
 		return
 	}
 	err := wtsync.ReplacePushRecord(ctx.Repo.MainRoot, s.kept, next)
@@ -84,19 +84,38 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 	case errors.Is(err, wtsync.ErrPushRecordReplaced):
 	case err != nil:
 		fmt.Fprintf(w, "  note: the record of what is left for a later push could not be updated (%v)\n", err)
-	case next != nil && len(left) == 1 && left[0] == next.Branch && lineCreates(next):
-		// The line's own branch, left out on purpose and named by the push.
-		fmt.Fprintf(w, "  ↪ %s kept for wt sync push %s --stack --push-line\n", left[0], s.work)
 	case next != nil:
-		fmt.Fprintf(w, "  ↪ %s: wt sync push %s --stack pushes it later\n", s.unpushedLine(left), s.work)
+		fmt.Fprintf(w, "  ↪ %s\n", s.laterLine(next, left))
 	}
 }
 
-// lineCreates is whether the record's one branch is the line's own, which a
-// push would create on its remote.
+// laterLine is what is left for wt sync push --stack, counting the branches
+// that push sends: the line's own branch, left out when it would create its
+// remote branch, is named with the flag that includes it.
+func (s *Stack) laterLine(next *wtsync.PushRecord, left []string) string {
+	sends := left
+	if lineCreates(next) {
+		sends = slices.DeleteFunc(slices.Clone(left), func(b string) bool { return b == next.Branch })
+	}
+	if len(sends) == 0 {
+		return fmt.Sprintf("%s kept for wt sync push %s --stack --push-line", next.Branch, s.work)
+	}
+	pronoun := "it"
+	if len(sends) > 1 {
+		pronoun = "them"
+	}
+	line := fmt.Sprintf("%s: wt sync push %s --stack pushes %s later", s.unpushedLine(sends), s.work, pronoun)
+	if len(sends) < len(left) {
+		line += fmt.Sprintf("; the line's own branch, %s, goes with --push-line", next.Branch)
+	}
+	return line
+}
+
+// lineCreates is whether the record holds the line's own branch and a push
+// would create it on its remote.
 func lineCreates(rec *wtsync.PushRecord) bool {
 	items, _ := rec.Merged()
-	return len(items) == 1 && items[0].Top && items[0].Creates()
+	return slices.ContainsFunc(items, func(it wtsync.MergedItem) bool { return it.Top && it.Creates() })
 }
 
 // movedSomething is whether the run moved a layer or the line.

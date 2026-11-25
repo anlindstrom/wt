@@ -30,7 +30,7 @@ func TestNoPushLineSaysBranchesAndHowManyAreFromEarlierRuns(t *testing.T) {
 		_, human, _ := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, opts)
 		return human
 	}
-	const tail = ": wt sync push tmp/stack --stack pushes it later\n"
+	const tail = ": wt sync push tmp/stack --stack pushes them later\n"
 	if human := run(epochA); !strings.Contains(human, "↪ 4 branches left unpushed, with their leases"+tail) {
 		t.Errorf("run A:\n%s", human)
 	}
