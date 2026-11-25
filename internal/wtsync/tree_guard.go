@@ -25,6 +25,9 @@ type GuardInput struct {
 	OldTip, NewTip string
 	Folds, Stopped []string
 	Resolved       []StopResolution
+	// Fixes is what a person changed at check stops, merged into the line the
+	// result is compared to.
+	Fixes []CheckFix
 }
 
 // GuardResult is what TreeGuard found and what it let through to find it:
