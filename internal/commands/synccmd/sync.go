@@ -774,6 +774,11 @@ func printDetail(w io.Writer, work string, a wtsync.Assessment) {
 			}
 		}
 	}
+	if len(a.Replay.Likely) > 0 {
+		fmt.Fprintln(w)
+		printLikely(w, "", a.Replay.Likely)
+	}
+	printReworked(w, "", a.Replay.Reworked)
 	if g := a.Graph; g != nil {
 		fmt.Fprintln(w, "\ndependency graph: both sides changed it")
 		printList(w, 1, "on the branch", g.Branch)
