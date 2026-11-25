@@ -38,6 +38,10 @@ type ResumeOptions struct {
 	// stand. Nil in a real resume.
 	AfterMove func(wtsync.LayerMove) error
 	Between   func(stage string, m wtsync.LayerMove) error
+	// AfterKeepStop is a test's hook once what was settled at the stop is
+	// kept with the handover, before the rebase goes on: an error ends the
+	// resume there, as an interrupt would. Nil in a real resume.
+	AfterKeepStop func() error
 	syncrun.VerbOptions
 	syncrun.PushOptions
 	syncrun.StepOptions
@@ -99,6 +103,11 @@ func syncResume(ctx *kit.Context, work string, opts ResumeOptions, w io.Writer) 
 	}
 	if err := r.keepStop(); err != nil {
 		return err
+	}
+	if r.opts.AfterKeepStop != nil {
+		if err := r.opts.AfterKeepStop(); err != nil {
+			return err
+		}
 	}
 	// Before the error is looked at: a resume that is refused after it ran
 	// checks has still timed them.
