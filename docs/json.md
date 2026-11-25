@@ -1742,8 +1742,9 @@ declared rule claims is listed too, since the rule may refuse the conflict there
 the run stops at the first stop that is yours whatever the list says.
 `reworkedOnTrunk` names each replayed commit that trunk carries under the same
 subject and author, with the trunk commit: a name match, not proof that trunk holds
-the changes, so wt keeps and replays the commit. Both are empty when there is
-nothing to say.
+the changes, so wt keeps and replays the commit; a conflict stop at one offers
+`wt sync resume --drop`, which drops it only when you choose that. Both are empty
+when there is nothing to say.
 
 With `--all`, `--roots` or `--profile` stdout is an **array** of these objects,
 one per repository, in the selection's order; `wt status --json` takes none of
@@ -1823,7 +1824,7 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `worktrees[].likelyStops[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
 | `worktrees[].likelyStops[].subject` | string | yes |  |
 | `worktrees[].likelyStops[].paths` | array of string | yes | The files it changes that trunk changed too. |
-| `worktrees[].reworkedOnTrunk` | array of object | yes | Since 1.16.0. The replayed commits that trunk carries under the same subject and author since the range began, a patch of its own that git does not drop. A name match does not prove trunk holds the changes: wt keeps and replays each of these, and drops one only as git does, when its changes are already there. |
+| `worktrees[].reworkedOnTrunk` | array of object | yes | Since 1.16.0. The replayed commits that trunk carries under the same subject and author since the range began, a patch of its own that git does not drop. A name match does not prove trunk holds the changes: wt keeps and replays each of these, and drops one only as git does, when its changes are already there, or when you choose it at the stop it causes (wt sync resume --drop). |
 | `worktrees[].reworkedOnTrunk[].index` | integer, at least 1 | yes |  |
 | `worktrees[].reworkedOnTrunk[].total` | integer, at least 1 | yes |  |
 | `worktrees[].reworkedOnTrunk[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit on the branch. |

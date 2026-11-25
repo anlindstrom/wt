@@ -181,6 +181,7 @@ func TestSyncVerbsTakeTheirFlagsAndReachTheVerb(t *testing.T) {
 		{"sync", "resume", "a", "--no-push"},
 		{"sync", "resume", "a", "-y"},
 		{"sync", "resume", "a", "--push", "--allow-owed", "--adopt", "--allow-dropped"},
+		{"sync", "resume", "a", "--drop", "abc1234"},
 		{"sync", "undo", "a", "--force"},
 		{"sync", "undo", "a", "-y"},
 	} {

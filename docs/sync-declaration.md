@@ -485,6 +485,35 @@ each_commit:
     paths: ["**/*.java"]
 ```
 
+### `wt sync resume --drop` — a commit trunk already carries, reworked
+
+A stack commit that was lifted into a pull request and reworked a little before
+it merged is on trunk as another patch: git does not drop the stack's copy, and
+the replay can stop on it. The look names such a commit (same subject and author
+as a commit trunk added since the range began, with that commit), and the stop
+it causes says so too, with the files both commits change. wt keeps and replays
+the commit unless you choose otherwise; subject and author alone never drop it.
+
+At that stop, `wt sync resume <work> --drop <commit>`, naming the commit the
+rebase stopped at, takes trunk's side of every file both commits change and
+keeps the commit's changes to its other files; a commit left with nothing is
+dropped. Before it replaces anything, every file it replaces that you or the
+stop changed is kept in a commit under `refs/wt-sync-kept/<branch>/<epoch>-drop`
+(a second drop of the same stop that has more to keep adds `-drop-2`), recorded
+with the handover and named with the command that shows it; undo leaves that ref.
+A file a strategy resolved stays as it resolved it. The drop refuses, changing
+nothing, a symlink or a submodule among the files it would replace, a file
+staged one way and changed another in the worktree, and a conflict in a file
+trunk's commit does not touch: that one is still yours, so resolve it and
+`git add` it first. A staged file counts as staged one way and changed another
+when its content or its executable bit differs. What is kept is the bytes and
+the mode in the worktree, with no clean filter applied. The handover records
+which files the drop has still to replace: while any are left a plain
+`wt sync resume` refuses and says to run `--drop` again, which finishes them. The taken files are the stop's resolution, as if you
+had resolved them, so the layers count what is left and the fold's content check
+holds the rest of the line; `wt sync undo` puts the commit back with the rest of
+the run.
+
 ### `wt sync resume --adopt` — a rebase finished by hand
 
 A rebase you finished yourself with `git rebase --continue` and then committed

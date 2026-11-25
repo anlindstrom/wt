@@ -190,13 +190,21 @@ func StampStops(st State, resolved []StopResolution, fixed []CheckFix) {
 // resume cut after it kept them, before the rebase went on, leaves such
 // records, and the stop is the same one: what is found there now, a fix
 // amended since included, is what counts, once. A resume that finds nothing
-// there now, the rebase gone on by hand, keeps what was kept.
+// there now, the rebase gone on by hand, keeps what was kept. A file a drop
+// took is kept unless what is found now names that file: a retry finds only
+// the conflicts again, never the files the drop took that merged cleanly.
 func (st State) SettledAt(resolved []StopResolution, fixed []CheckFix) ([]StopResolution, []CheckFix) {
 	rs, fs := slices.Clone(st.Resolutions), slices.Clone(st.Fixes)
 	if len(resolved)+len(fixed) == 0 {
 		return rs, fs
 	}
-	rs = slices.DeleteFunc(rs, st.resolvedHere)
+	rs = slices.DeleteFunc(rs, func(r StopResolution) bool {
+		if !st.resolvedHere(r) {
+			return false
+		}
+		// A file a drop took stays taken unless what is found now names it.
+		return !r.Drop || slices.ContainsFunc(resolved, func(n StopResolution) bool { return n.Path == r.Path })
+	})
 	fs = slices.DeleteFunc(fs, st.fixedHere)
 	return append(rs, resolved...), append(fs, fixed...)
 }

@@ -135,6 +135,13 @@ type State struct {
 	// reworked, that copy and what a drop takes and keeps: resume --drop
 	// acts on it and on nothing else.
 	TrunkCopy *TrunkCopy `json:"trunk_copy,omitempty"`
+	// DropKept is the ref a --drop at this stop kept the person's files
+	// under, written before it replaced any.
+	DropKept string `json:"drop_kept,omitempty"`
+	// DropLeft is the files a --drop at this stop set out to replace and has
+	// not yet: written before the first and after each, so a drop cut short
+	// is known, and only a --drop goes on from it.
+	DropLeft []string `json:"drop_left,omitempty"`
 }
 
 // StopResolution is one path a person resolved at a conflict stop: the commit
@@ -150,6 +157,9 @@ type StopResolution struct {
 	// record, oldest first; a check fix applies only to a resolution made
 	// before it.
 	Order int `json:"order,omitempty"`
+	// Drop marks a file --drop set to the target's side at the stop: kept
+	// across a retry of the stop, which finds only the conflicts again.
+	Drop bool `json:"drop,omitempty"`
 }
 
 // CheckFix is what a person changed at a check stop wt handed over: HEAD was
