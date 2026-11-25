@@ -213,6 +213,7 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	for _, it := range items {
 		s.Push.Branches = append(s.Push.Branches, results[it.Branch])
 	}
+	s.settleLayerPushes()
 	if results[s.Branch].Outcome == PushedOK {
 		pushed = append(pushed, top.Work)
 	}
@@ -220,6 +221,16 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 		failed = append(failed, s.work+" (stack push failed)")
 	}
 	return rest, restMode, pushed, failed
+}
+
+// settleLayerPushes takes the push command off each layer the push sent: a
+// layer carries one only while its push is still owed.
+func (s *Stack) settleLayerPushes() {
+	for i, l := range s.Layers {
+		if slices.ContainsFunc(s.Push.Branches, func(b StackPushed) bool { return b.Branch == l.Branch && b.Outcome == PushedOK }) {
+			s.Layers[i].PushCommand = nil
+		}
+	}
 }
 
 // pushItems is what the push of a run sends, whether the line's own branch
