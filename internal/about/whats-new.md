@@ -4,6 +4,16 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-25 09:00 — A fix made at a check stop passes the fold's content check
+
+When `wt sync rebase --stack --autosquash --onto` stops at a layer tip because an
+`each_commit` check failed, a fix you amend into that commit no longer fails the
+content check at the end of the fold: it is merged into the line the result is
+compared to, and its paths are named (`fix.txt taken as resolved at a stop`). Anything
+else that differs, in the fixed file or another, still refuses. The closing line of
+a `--no-push` run now counts only the branches `wt sync push --stack` sends and names
+the line's own branch when it goes with `--push-line`.
+
 ## 2026-11-25 10:30 — The restack look lists every likely stop
 
 `wt sync <work>` and the look before `wt sync rebase` now list the commits after

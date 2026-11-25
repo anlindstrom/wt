@@ -987,6 +987,51 @@ func ApplyDrops(dir, onto string, plans []LayerPlan, dropped []Dropped, confirme
 	return got, nil
 }
 
+// ApplyAdded brings plans in line with the commits a person added at check
+// stops, across every stop of the run: a commit added at a stop is one more
+// commit of every layer whose marker has it behind it, and a layer that ends
+// at one ends with its subject. A commit that a later stop amended is the
+// amend. A plan with no marker is left as it is, and CheckLayers refuses it.
+func ApplyAdded(dir string, plans []LayerPlan, fixes []CheckFix) ([]LayerPlan, error) {
+	var added []string
+	for _, f := range fixes {
+		switch i := slices.Index(added, f.Stop); {
+		case f.Added != "":
+			added = append(added, f.Added)
+		case i >= 0 && f.Head != "":
+			added[i] = f.Head
+		}
+	}
+	if len(added) == 0 {
+		return plans, nil
+	}
+	got := slices.Clone(plans)
+	for i, p := range got {
+		tip, ok, err := refTip(dir, p.Ref)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		for _, a := range added {
+			if tip == a {
+				subject, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%s", a)
+				if err != nil {
+					return nil, err
+				}
+				got[i].Subject = subject
+			}
+			if _, code, err := gitEnvAllow(dir, nil, nil, 1, "merge-base", "--is-ancestor", a, tip); err != nil {
+				return nil, err
+			} else if code == 0 {
+				got[i].Expect++
+			}
+		}
+	}
+	return got, nil
+}
+
 // UnclearDrops is the commits of plans' picks that a rebase dropped but
 // ReportReplay could not tell from another commit (Dropped.Unmatched): a layer
 // that counts them as left is refused, and this says why.

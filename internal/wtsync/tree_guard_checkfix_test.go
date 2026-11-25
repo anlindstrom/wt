@@ -60,10 +60,11 @@ func TestTreeGuardMergesAFixMadeAtACheckStopIntoWhatItComparesTo(t *testing.T) {
 			t.Fatalf("a stray file passed: %+v", res)
 		}
 	})
-	t.Run("a fix that does not merge onto the old line is refused", func(t *testing.T) {
-		clash := g.rewritten(t, stopped, map[string]string{"t.txt": strings.Replace(tText("trunk", "feature"), "feature", "clash", 1)})
-		res := TreeGuard(g.dir, in(clash, g.fixAt(t, stopped, clash)))
-		if res.Why == "" {
+	t.Run("a fix that does not merge into the old line is refused", func(t *testing.T) {
+		early := g.rewritten(t, g.onto, map[string]string{"t.txt": tText("trunk", "feature0")})
+		clash := g.rewritten(t, early, map[string]string{"t.txt": tText("trunk", "fixed")})
+		res := TreeGuard(g.dir, in(clash, g.fixAt(t, early, clash)))
+		if !strings.Contains(res.Why, "does not merge cleanly into the old line") {
 			t.Fatalf("a fix over the line's own change passed: %+v", res)
 		}
 	})

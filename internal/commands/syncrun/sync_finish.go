@@ -66,6 +66,8 @@ type HandoverInput struct {
 	Earlier []string
 	// EarlierResolved is what a person resolved at the run's earlier stops.
 	EarlierResolved []wtsync.StopResolution
+	// EarlierFixed is what a person changed at the run's earlier check stops.
+	EarlierFixed []wtsync.CheckFix
 	// Tracker is the verb's, still set to the rebase being handed over; it
 	// is cleared once the handover is written or has failed.
 	Tracker *RebaseTracker
@@ -148,6 +150,7 @@ func HandOver(ctx *kit.Context, w io.Writer, in HandoverInput) error {
 		Deleted: in.Res.Left.Deleted, Left: in.Res.Left.Left,
 		Stopped:     PathsOnce(in.Earlier, wtsync.StopPaths(in.Res.Stops), in.Res.ByHand),
 		Resolutions: in.EarlierResolved,
+		Fixes:       in.EarlierFixed,
 		Unmerged:    conflictPaths(in.Res.Left.Conflicts),
 		Check:       wtsync.CheckStopOf(in.Res.Left.Check),
 		Layers:      in.Res.LayerState,

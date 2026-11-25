@@ -206,9 +206,10 @@ type FoldGuard struct {
 	// merged and were resolved at a stop: only the lines of the merge outside
 	// the conflicting regions must still be in them, in order.
 	ConflictAllowed []string `json:"conflictAllowed"`
-	// ResolvedAtStop is, for a moving fold, the paths taken as a person
-	// resolved them at a stop wt handed over, where the merge would have
-	// given other content; left out when there are none.
+	// ResolvedAtStop is the paths taken as a person left them at a stop wt
+	// handed over (resolved at a conflict stop, changed at a check stop),
+	// where the merge would have given other content; left out when there
+	// are none.
 	ResolvedAtStop []string `json:"resolvedAtStop,omitempty"`
 	// Outcome is passed or failed; Reason is why it failed, null when it
 	// passed.
@@ -523,6 +524,9 @@ type StackFinish struct {
 	// Resolved is what a person resolved at the conflict stops wt handed
 	// over, which the content check of a fold takes as intended.
 	Resolved []wtsync.StopResolution
+	// Fixed is what a person changed at the check stops wt handed over,
+	// which the content check takes as intended the same way.
+	Fixed []wtsync.CheckFix
 	// Dropped is the commits the finished rebase dropped as empty, as
 	// ReportReplay names them, and Confirmed says wt drove that rebase from
 	// start to end: only then are the drops it is certain of taken out of
@@ -551,6 +555,7 @@ type StackFinishCaller struct {
 	Own       *wtsync.Own
 	Stopped   []string
 	Resolved  []wtsync.StopResolution
+	Fixed     []wtsync.CheckFix
 	Confirmed bool
 	Gaps      []wtsync.ContextGap
 	Unchecked []string
@@ -565,7 +570,7 @@ type StackFinishCaller struct {
 func StackFinishFor(rec *wtsync.StackRecord, res wtsync.Result, cfg *wtsync.Config, now time.Time, listed []agents.Agent, listErr error, c StackFinishCaller) StackFinish {
 	return StackFinish{Record: rec, OldTip: c.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: c.Own, Listed: listed, ListErr: listErr, Force: rec.Force, Now: now, AfterMove: c.AfterMove, Between: c.Between,
-		Folds: FoldPaths(cfg), Stopped: c.Stopped, Resolved: c.Resolved, Dropped: res.Emptied, Confirmed: c.Confirmed, Gaps: c.Gaps, Unchecked: c.Unchecked}
+		Folds: FoldPaths(cfg), Stopped: c.Stopped, Resolved: c.Resolved, Fixed: c.Fixed, Dropped: res.Emptied, Confirmed: c.Confirmed, Gaps: c.Gaps, Unchecked: c.Unchecked}
 }
 
 // FinishStack checks every layer's new tip and moves the layers, once the
@@ -676,7 +681,7 @@ func (f *stackFinisher) guardFold() string {
 		return ""
 	}
 	res := wtsync.TreeGuard(main, wtsync.GuardInput{Base: rec.Line.Base, Onto: in.Onto, OldTip: in.OldTip, NewTip: in.NewTip,
-		Folds: in.Folds, Stopped: in.Stopped, Resolved: in.Resolved})
+		Folds: in.Folds, Stopped: in.Stopped, Resolved: in.Resolved, Fixes: in.Fixed})
 	g := &FoldGuard{OldTip: in.OldTip, NewTip: in.NewTip, ExcludedGlobs: nonNil(res.Excluded),
 		ConflictAllowed: nonNil(res.ConflictAllowed), ResolvedAtStop: res.AtStop, Outcome: "passed"}
 	if !s.Fold.InPlace {
@@ -743,6 +748,9 @@ func (f *stackFinisher) followPlans() ([]wtsync.LayerPlan, string) {
 	// follows the drops wt is certain of.
 	plans, rerr := wtsync.ApplyDrops(main, in.Onto, rec.Plans, in.Dropped, in.Confirmed)
 	if rerr != nil {
+		return nil, rerr.Error()
+	}
+	if plans, rerr = wtsync.ApplyAdded(main, plans, in.Fixed); rerr != nil {
 		return nil, rerr.Error()
 	}
 	return plans, ""

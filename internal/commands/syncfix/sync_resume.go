@@ -148,6 +148,9 @@ type resume struct {
 	// resolved is what a person resolved at the stop this resume goes on
 	// from, as the index held it.
 	resolved []wtsync.StopResolution
+	// fixed is what a person changed at the check stop this resume goes on
+	// from.
+	fixed []wtsync.CheckFix
 	// lock is the handover's lock, taken over; nil once a fresh handover
 	// keeps it.
 	lock *wtsync.Lock
@@ -341,6 +344,8 @@ func (r *resume) verify() error {
 			return err
 		}
 		r.resolved = wtsync.ResolutionsAtStop(r.target.Path, st)
+		r.fixed = wtsync.FixAtCheckStop(r.target.Path, st)
+		wtsync.StampStops(st, r.resolved, r.fixed)
 		return nil
 	}
 	if a := r.adopt; a != nil {
@@ -529,7 +534,7 @@ func (r *resume) handOverAgain(res wtsync.Result) error {
 	herr := syncrun.HandOver(r.ctx, w, syncrun.HandoverInput{
 		Work: name, Branch: st.Branch, Path: r.target.Path, TrunkRef: st.TrunkRef, TrunkSHA: st.Trunk, OntoRef: st.OntoRef,
 		Onto: st.Onto, Upstream: st.Upstream, Epoch: st.Epoch, Cfg: r.cfg, Res: res, Lock: r.lock,
-		Found: st.Found, Earlier: st.Stopped, EarlierResolved: r.resolutions(), Tracker: r.tracker, FollowUps: st.FollowUps, ByHand: st.ByHand || !r.confirmed,
+		Found: st.Found, Earlier: st.Stopped, EarlierResolved: r.resolutions(), EarlierFixed: r.fixes(), Tracker: r.tracker, FollowUps: st.FollowUps, ByHand: st.ByHand || !r.confirmed,
 	})
 	if herr != nil {
 		fmt.Fprintf(w, "  ✗ failed: %v\n", herr)
@@ -895,6 +900,7 @@ func (r *resume) finishStack(res wtsync.Result) string {
 		OldTip: r.st.OldTip, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch),
 		Stopped:   append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...),
 		Resolved:  r.resolutions(),
+		Fixed:     r.fixes(),
 		Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked}))
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s; syncrun.SetFold(p, s) })
 	r.restored = s != nil && s.Restored
@@ -1114,4 +1120,10 @@ func noteNotRechecked(w io.Writer, where string, st wtsync.State) {
 // resume's: the earlier handovers' and the one this resume goes on from.
 func (r *resume) resolutions() []wtsync.StopResolution {
 	return append(slices.Clone(r.st.Resolutions), r.resolved...)
+}
+
+// fixes is what a person changed at every check stop of the run up to this
+// resume's.
+func (r *resume) fixes() []wtsync.CheckFix {
+	return append(slices.Clone(r.st.Fixes), r.fixed...)
 }
