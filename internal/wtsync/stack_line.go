@@ -991,12 +991,11 @@ func ApplyDrops(dir, onto string, plans []LayerPlan, dropped []Dropped, confirme
 // stops, across every stop of the run: a commit added at a stop is one more
 // commit of every layer whose marker has it behind it, and a layer that ends
 // at one ends with its subject. A commit that a later stop amended is the
-// amend. A commit a later step rewrote (a fold into its owner replays the
-// commits above it) is found by who made it, when, and its subject, among the
-// commits from onto to the marker; two such commits there cannot be told
-// apart, and are an error. A plan with no marker is left as it is, and
-// CheckLayers refuses it.
-func ApplyAdded(dir, onto string, plans []LayerPlan, fixes []CheckFix) ([]LayerPlan, error) {
+// amend. Each added commit is first found once on the line from onto to tip
+// (addedOnLine), and only then counted, by ancestry, in the plans whose
+// marker has it. A plan with no marker is left as it is, and CheckLayers
+// refuses it.
+func ApplyAdded(dir, onto, tip string, plans []LayerPlan, fixes []CheckFix) ([]LayerPlan, error) {
 	var added []string
 	for _, f := range fixes {
 		switch i := slices.Index(added, f.Stop); {
@@ -1009,48 +1008,34 @@ func ApplyAdded(dir, onto string, plans []LayerPlan, fixes []CheckFix) ([]LayerP
 	if len(added) == 0 {
 		return plans, nil
 	}
-	keys := make([]string, len(added))
-	for i, a := range added {
-		k, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%ae %at %s", a)
+	var on []string
+	for _, a := range added {
+		c, err := addedOnLine(dir, onto, tip, a)
 		if err != nil {
 			return nil, err
 		}
-		keys[i] = k
+		if c != "" {
+			on = append(on, c)
+		}
 	}
 	got := slices.Clone(plans)
 	for i, p := range got {
-		tip, ok, err := refTip(dir, p.Ref)
+		marker, ok, err := refTip(dir, p.Ref)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
 			continue
 		}
-		out, err := gitEnv(dir, nil, nil, "log", "--format=%H %ae %at %s", onto+".."+tip, "--")
-		if err != nil {
-			return nil, err
-		}
-		var lines []string
-		if out != "" {
-			lines = strings.Split(out, "\n")
-		}
-		for j, a := range added {
-			var at []string
-			for _, l := range lines {
-				sha, key, _ := strings.Cut(l, " ")
-				if sha == a || key == keys[j] {
-					at = append(at, sha)
-				}
-			}
-			switch {
-			case len(at) > 1 && !slices.Contains(at, a):
-				return nil, fmt.Errorf("the commit %s added at a check stop cannot be told from another of %s with the same author, time and subject", git.ShortID(a, 7), p.Branch)
-			case len(at) == 0:
+		for _, c := range on {
+			if _, code, err := gitEnvAllow(dir, nil, nil, 1, "merge-base", "--is-ancestor", c, marker); err != nil {
+				return nil, err
+			} else if code != 0 {
 				continue
 			}
 			got[i].Expect++
-			if slices.Contains(at, tip) {
-				subject, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%s", tip)
+			if c == marker {
+				subject, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%s", marker)
 				if err != nil {
 					return nil, err
 				}
@@ -1059,6 +1044,53 @@ func ApplyAdded(dir, onto string, plans []LayerPlan, fixes []CheckFix) ([]LayerP
 		}
 	}
 	return got, nil
+}
+
+// addedOnLine is the commit of the line from onto to tip that the commit a,
+// added at a check stop, is now: a itself when the line has it, otherwise
+// the one commit a later step rewrote it to (a fold into its owner replays
+// the commits above it), proven by the same author, time and subject and the
+// same change by git's stable patch-id. "" is a commit the line does not
+// carry; two that could be it are an error.
+func addedOnLine(dir, onto, tip, a string) (string, error) {
+	out, err := gitEnv(dir, nil, nil, "log", "--format=%H %ae %at %s", onto+".."+tip, "--")
+	if err != nil {
+		return "", err
+	}
+	if out == "" {
+		return "", nil
+	}
+	lines := strings.Split(out, "\n")
+	for _, l := range lines {
+		if sha, _, _ := strings.Cut(l, " "); sha == a {
+			return a, nil
+		}
+	}
+	key, err := gitEnv(dir, nil, nil, "log", "-1", "--format=%ae %at %s", a)
+	if err != nil {
+		return "", err
+	}
+	var at []string
+	for _, l := range lines {
+		sha, k, _ := strings.Cut(l, " ")
+		if k != key {
+			continue
+		}
+		same, err := SamePatch(dir, a+"^", a, sha+"^", sha)
+		if err != nil {
+			return "", err
+		}
+		if same {
+			at = append(at, sha)
+		}
+	}
+	switch len(at) {
+	case 0:
+		return "", nil
+	case 1:
+		return at[0], nil
+	}
+	return "", fmt.Errorf("the commit %s added at a check stop cannot be told from another commit of the line with the same author, time, subject and change", git.ShortID(a, 7))
 }
 
 // UnclearDrops is the commits of plans' picks that a rebase dropped but
