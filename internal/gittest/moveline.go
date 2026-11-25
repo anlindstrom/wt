@@ -77,6 +77,12 @@ type MoveShape struct {
 	// "fixup! feat(l0): base" at the top, below the move! commit, changing
 	// line 9 of door/refuse.go: a fold target below the move's.
 	Below bool
+	// LiftAtSource gives the base a version file, v.txt, that the source
+	// bumps, and puts "fixup! feat(l1): door" at the top, below the move!
+	// commit, adding a second version line at its end: the fold's side of
+	// v.txt then has more owned lines than the source's, and an owned-line
+	// lift refuses at the source's own stop.
+	LiftAtSource bool
 }
 
 // NewMoveLine builds a MoveLine in dir, a repository on main with at least
@@ -117,6 +123,10 @@ func NewMoveLineShaped(t testing.TB, dir, wtDir, yaml string, shape MoveShape) *
 		write(MovePath, refuseGo(lines))
 	}
 	write(MovePath, refuseGo(nil))
+	notes := strings.Repeat("notes\n", 6)
+	if shape.LiftAtSource {
+		write("v.txt", "1.0.0\n"+notes)
+	}
 	s.Base = commit("base")
 	Git(t, dir, "checkout", "-q", "-b", MoveTmp)
 	branch := func(name string) {
@@ -143,6 +153,9 @@ func NewMoveLineShaped(t testing.TB, dir, wtDir, yaml string, shape MoveShape) *
 	branch("l2")
 	write("feature.txt", "feature\n")
 	refuse(2, "line 2, refused at the door")
+	if shape.LiftAtSource {
+		write("v.txt", "1.0.1\n"+notes)
+	}
 	commit(MoveSource)
 	if shape.Interior {
 		write("after.txt", "after\n")
@@ -156,6 +169,10 @@ func NewMoveLineShaped(t testing.TB, dir, wtDir, yaml string, shape MoveShape) *
 	if shape.Below {
 		refuse(9, "line 9, from below")
 		commit("fixup! " + MoveBelow)
+	}
+	if shape.LiftAtSource {
+		write("v.txt", "1.0.1\n"+notes+"2.0.0\n")
+		commit("fixup! " + MoveTarget)
 	}
 	if shape.Move {
 		commit("move! "+MoveTarget, MoveBody(MoveSource, MovePath))

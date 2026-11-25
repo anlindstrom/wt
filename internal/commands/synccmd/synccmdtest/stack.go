@@ -188,6 +188,9 @@ func MoveLineShaped(t *testing.T, shape gittest.MoveShape, paths string, failOnc
 	t.Helper()
 	logPath = filepath.Join(t.TempDir(), "checked.log")
 	yaml := "each_commit:\n  - run: |\n      git log -1 --format=%s >> '" + logPath + "'\n"
+	if shape.LiftAtSource {
+		yaml = StackYAML + yaml
+	}
 	if failOnce {
 		yaml += "      if [ ! -f '" + logPath + ".failed' ]; then touch '" + logPath + ".failed'; echo 'fails once'; exit 1; fi\n"
 	}

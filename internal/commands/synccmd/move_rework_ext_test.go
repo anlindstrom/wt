@@ -139,3 +139,57 @@ func TestMoveTakesAFixupOfTheSourceOnTheMovedPath(t *testing.T) {
 	}
 	movedAndUndone(t, ctx, s, b, logPath, human, part, []string{gittest.MovePath, "feature.txt"}, []string{gittest.MoveTarget, gittest.MoveSource})
 }
+
+// checkedBefore asserts that the checks ran at first, and later at then.
+func checkedBefore(t *testing.T, logPath, first, then, human string) {
+	t.Helper()
+	ran := synccmdtest.CheckedSubjects(t, logPath)
+	i, j := slices.Index(ran, first), slices.Index(ran, then)
+	if i < 0 || j < 0 || i > j {
+		t.Errorf("checked %q, want %q checked before %q\n%s", ran, first, then, human)
+	}
+}
+
+// A source that is not its layer's tip, with the check filtered to the
+// moved path, which the source no longer changes once the part is below
+// it: the check it called for still runs at the source, before the commit
+// above it, and at the target and the layer's tip.
+func TestMoveChecksAnInteriorSourceForTheMovedPath(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx, s, logPath := synccmdtest.MoveLineShaped(t, gittest.MoveShape{Move: true, Interior: true}, "["+gittest.MovePath+"]", false)
+	b := readMoveBefore(t, ctx, s)
+	_, human, err := synccmdtest.StackRun(t, ctx, gittest.MoveTmp, targetsFold())
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, human)
+	}
+	checkedBefore(t, logPath, gittest.MoveSource, gittest.MoveAfter, human)
+	movedAndUndone(t, ctx, s, b, logPath, human, b.tipBlob, []string{"feature.txt"}, []string{gittest.MoveTarget, gittest.MoveSource, gittest.MoveAfter})
+}
+
+// The run hands over at an interior source's own stop, where its version
+// lift refuses; the resume still checks the source there, before the
+// commit above it in its layer.
+func TestMoveResumedAtTheSourcesStopStillChecksIt(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx, s, logPath := synccmdtest.MoveLineShaped(t, gittest.MoveShape{Move: true, Interior: true, LiftAtSource: true}, "", false)
+	b := readMoveBefore(t, ctx, s)
+	_, human, err := synccmdtest.StackRun(t, ctx, gittest.MoveTmp, targetsFold())
+	if err == nil || !strings.Contains(err.Error(), "needs you") || !strings.Contains(human, "v.txt") {
+		t.Fatalf("err %v, want a handover at the source's lift\n%s", err, human)
+	}
+	if ran := synccmdtest.CheckedSubjects(t, logPath); slices.Contains(ran, gittest.MoveSource) {
+		t.Fatalf("checked %q before the handover, want the source not yet checked", ran)
+	}
+	testkit.GitIn(t, s.Path, "add", "v.txt")
+	var resumed bytes.Buffer
+	ropts := syncfix.ResumeOptions{VerbOptions: syncrun.VerbOptions{Agents: []agents.Agent{}, Now: func() time.Time { return time.Unix(5, 0) }}}
+	ropts.Push = syncrun.PushNever
+	if err := syncfix.SyncResume(ctx, gittest.MoveTmp, ropts, &resumed); err != nil {
+		t.Fatalf("resume: %v\n%s\n%s", err, human, resumed.String())
+	}
+	human += resumed.String()
+	checkedBefore(t, logPath, gittest.MoveSource, gittest.MoveAfter, human)
+	movedAndUndone(t, ctx, s, b, logPath, human, b.tipBlob, []string{"feature.txt", "v.txt"}, []string{gittest.MoveTarget, gittest.MoveSource, gittest.MoveAfter})
+}
