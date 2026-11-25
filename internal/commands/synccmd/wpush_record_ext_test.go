@@ -193,3 +193,35 @@ func TestPushLaterComparesARenamedLayerItCannotPushTo(t *testing.T) {
 	testkit.GitIn(t, m.ctx.Repo.MainRoot, "fetch", "-q", "origin")
 	m.pushLaterRefused(t, "tmp/layer/a differs from origin/feat_wt/a")
 }
+
+// The same fold with --push: the push on the run itself refuses for s1 as
+// the later push does, sends nothing, and keeps the record for later.
+func TestRunPushRefusesALayerTheRunLeftOffItsRemote(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories, a worktree each and a bare remote")
+	}
+	p := newPushedLine(t)
+	main := p.ctx.Repo.MainRoot
+	testkit.GitIn(t, p.bare, "update-ref", "refs/heads/s1", p.s.Base)
+	testkit.GitIn(t, main, "fetch", "-q", "origin")
+	fixup(t, p.s.Paths[gittest.StackTmp], "b1.txt", "feat(s2): b1.txt")
+	remote := bareRefs(t, p.bare)
+	opts := synccmdtest.PushAlways()
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	_, human, err := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, opts)
+	if err == nil || !strings.Contains(err.Error(), "stack not pushed") {
+		t.Fatalf("err %v, want the stack push refused\n%s", err, human)
+	}
+	const want = "✗ stack not pushed: s1 differs from origin/s1, and the push does not send it (the run left it unchanged, so it was already off its remote branch before it): " +
+		"pushing the layers above it would leave the stack split on the remote; push s1 first, then wt sync push tmp/stack --stack"
+	if !strings.Contains(human, want) {
+		t.Errorf("missing %q in\n%s", want, human)
+	}
+	if got := bareRefs(t, p.bare); got != remote {
+		t.Errorf("the remote changed:\nbefore %s\nafter %s", remote, got)
+	}
+	if _, ok, _ := wtsync.ReadPushRecord(main, gittest.StackTmp); !ok {
+		t.Errorf("no record was kept for the later push")
+	}
+}
