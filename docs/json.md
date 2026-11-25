@@ -156,8 +156,8 @@ generating types from it:
 | `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | 1.12.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
-| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.16.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
-| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.27.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.17.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.28.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
