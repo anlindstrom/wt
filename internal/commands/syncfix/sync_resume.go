@@ -33,6 +33,11 @@ type ResumeOptions struct {
 	// AllowDropped goes on past a resolution that drops lines of a fixup
 	// moved ahead of its context: --allow-dropped.
 	AllowDropped bool
+	// AfterMove and Between are a test's hooks into the layer moves, as
+	// synccmd.StackOptions has them: an error stops the moves where they
+	// stand. Nil in a real resume.
+	AfterMove func(wtsync.LayerMove) error
+	Between   func(stage string, m wtsync.LayerMove) error
 	syncrun.VerbOptions
 	syncrun.PushOptions
 	syncrun.StepOptions
@@ -901,7 +906,8 @@ func (r *resume) finishStack(res wtsync.Result) string {
 		Stopped:   append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...),
 		Resolved:  r.resolutions(),
 		Fixed:     r.fixes(),
-		Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked}))
+		Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked,
+		AfterMove: r.opts.AfterMove, Between: r.opts.Between}))
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s; syncrun.SetFold(p, s) })
 	r.restored = s != nil && s.Restored
 	r.stack = s

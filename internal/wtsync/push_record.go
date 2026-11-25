@@ -39,6 +39,13 @@ type PushRecord struct {
 	Items []PushRecordItem `json:"items"`
 	// Left are the layers the run left out, named again by the push.
 	Left []PushLeft `json:"left,omitempty"`
+	// Layers is every layer of the line the run read, bottom first: a push
+	// checks each against its remote branch, so a layer that moved and is in
+	// no item is found.
+	Layers []string `json:"layers,omitempty"`
+	// LayersRead says Layers is what the run read, which may be none: a
+	// record from a build that did not keep it cannot show it is complete.
+	LayersRead bool `json:"layersRead,omitempty"`
 	// Rev names this version of the record: every write of it gives it a new
 	// one, so a settle made from an older read, which still has the newest
 	// run's epoch and time, is told from the record it was made from. Empty
@@ -62,12 +69,15 @@ type PushRun struct {
 	Subject string           `json:"subject"`
 	Items   []PushRecordItem `json:"items"`
 	Left    []PushLeft       `json:"left,omitempty"`
+	Layers  []string         `json:"layers,omitempty"`
+	// LayersRead is as on PushRecord.
+	LayersRead bool `json:"layersRead,omitempty"`
 }
 
 // Run is the record's own (newest) run as a PushRun.
 func (r *PushRecord) Run() PushRun {
 	return PushRun{Path: r.Path, Epoch: r.Epoch, Written: r.Written, Head: r.Head, Base: r.Base,
-		Commits: r.Commits, Subject: r.Subject, Items: r.Items, Left: r.Left}
+		Commits: r.Commits, Subject: r.Subject, Items: r.Items, Left: r.Left, Layers: r.Layers, LayersRead: r.LayersRead}
 }
 
 // Runs is every run the record holds, oldest first.
@@ -83,7 +93,7 @@ func withRuns(branch, work string, runs []PushRun) *PushRecord {
 	}
 	n := runs[len(runs)-1]
 	return &PushRecord{Branch: branch, Work: work, Path: n.Path, Epoch: n.Epoch, Written: n.Written,
-		Head: n.Head, Base: n.Base, Commits: n.Commits, Subject: n.Subject, Items: n.Items, Left: n.Left,
+		Head: n.Head, Base: n.Base, Commits: n.Commits, Subject: n.Subject, Items: n.Items, Left: n.Left, Layers: n.Layers, LayersRead: n.LayersRead,
 		Earlier: slices.Clone(runs[:len(runs)-1])}
 }
 
