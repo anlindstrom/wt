@@ -4,6 +4,15 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-25 22:06 — Move part of a commit into an earlier one during a fold
+
+A `move!` commit moves whole paths of a later commit into an earlier one in the same
+`wt sync rebase <work> --stack --autosquash --each-commit=targets` fold: the earlier
+commit gets them, the later one no longer changes them, and the tip stays as it was.
+`wt sync move <work> <path>... --from <commit> --into <commit>` writes it for you.
+The run proves the move in the object store first and refuses, moving nothing, when
+the part does not apply at the target or a commit in between conflicts with it.
+
 ## 2026-11-25 15:35 — A resume never pushes a run started with --no-push
 
 `wt sync resume` keeps the run's `--no-push`, or a resume's, through every stop and retry: `--yes` or a yes

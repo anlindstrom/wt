@@ -233,7 +233,31 @@ func (d *driver) planTipChecks() error {
 			d.callSteps[c.SHA] = called
 		}
 	}
+	// A move's part, folded into its target, calls for what its paths do:
+	// the target is then checked with the part, as with any fixup.
+	d.moveSources = nil
+	for _, m := range d.moves {
+		if called := cfg.calledBy(m.Paths); len(called) > 0 {
+			d.checks = append(d.checks, m.Part)
+			d.callSteps[m.Part] = called
+			if d.req.EachCommit == EachTargets && !slices.Contains(d.moveSources, m.Source) {
+				d.moveSources = append(d.moveSources, m.Source)
+			}
+		}
+	}
 	return nil
+}
+
+// calledBy is the indexes of the each_commit steps a change to paths calls
+// for, in the order declared.
+func (c *Config) calledBy(paths []string) []int {
+	var called []int
+	for j, s := range c.EachCommit {
+		if len(s.Paths) == 0 || touchesAny(s.Paths, paths) {
+			called = append(called, j)
+		}
+	}
+	return called
 }
 
 // checkAt reports whether the break the sequencer stopped at is a check
@@ -292,8 +316,9 @@ func (d *driver) checkAt() (sha string, edited bool, err error) {
 	if (prev[0] != "pick" && prev[0] != "edit") || len(prev) < 2 {
 		return "", false, nil
 	}
-	if d.req.EachCommit == EachTargets && len(members) == 0 {
-		// A break after a pick nothing was folded into is not a target's.
+	if d.req.EachCommit == EachTargets && len(members) == 0 && !slices.ContainsFunc(d.moveSources, func(s string) bool { return strings.HasPrefix(s, prev[1]) }) {
+		// A break after a pick nothing was folded into is not a target's,
+		// unless the pick is a move's source.
 		return "", false, nil
 	}
 	for _, c := range d.checks {
@@ -371,6 +396,11 @@ func (d *driver) stoppedGroup() (open, due, folded bool, err error) {
 	// Under targets the break that closes the group is written when a fixup
 	// or squash has been folded into it, now or by the rest of the list.
 	folded = slices.ContainsFunc(cmds[i+1:], func(c []string) bool { return c[0] == "fixup" || c[0] == "squash" })
+	// A move's source is checked after its group as a fold target is, with
+	// a fixup or not: the break the handover took out is written again.
+	if slices.ContainsFunc(d.moveSources, func(s string) bool { return strings.HasPrefix(s, cmds[i][1]) }) {
+		folded = true
+	}
 	for _, id := range ids {
 		for _, c := range d.checks {
 			if strings.HasPrefix(c, id) {
@@ -683,6 +713,17 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 		}
 	}
 	steps := d.cfg.checksFor(changed)
+	if !d.tipStop && slices.Contains(d.moveSources, sha) {
+		// A move's source no longer changes the paths it moved, but is
+		// checked for them: the steps it called for as planned run too.
+		called := d.callSteps[sha]
+		steps = nil
+		for j, s := range d.cfg.EachCommit {
+			if slices.Contains(called, j) || len(s.Paths) == 0 || touchesAny(s.Paths, changed) {
+				steps = append(steps, s)
+			}
+		}
+	}
 	if d.tipStop {
 		// At a layer's end the steps due are those any commit of it called for.
 		// HEAD's own paths count too, as under all: a fix a person amended in

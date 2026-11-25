@@ -260,6 +260,15 @@ func newSyncRebaseCmd() *cobra.Command {
 			"and goes ahead; wt sync <work> --stack --autosquash says the same and\n" +
 			"moves nothing. A stop there says so and suggests undo and retargeting the\n" +
 			"hunk; wt sync resume refuses a resolution that drops it.\n\n" +
+			"A move! commit (wt sync move --help) moves whole paths of one commit\n" +
+			"into an earlier one in the same fold: the part is applied at the target\n" +
+			"after its own fixups, the later commit no longer changes those paths,\n" +
+			"and the move! commit is dropped. It needs a fold in place with\n" +
+			"--each-commit=targets, so the checks run at the target and the source.\n" +
+			"Before anything moves the fold is replayed in the object store, and the\n" +
+			"run is refused if the part does not apply at the target, a commit in\n" +
+			"between conflicts with it, or the tip's tree would change; the part is\n" +
+			"kept under refs/wt-sync-kept/<branch>/<epoch>-move-<n>.\n\n" +
 			"--stack --edit <rev> moves a change down the line to an earlier commit:\n" +
 			"the fix a review asks of a low commit that a later one already carries.\n" +
 			"The line is replayed in place, onto its own base, and stops at <rev>,\n" +

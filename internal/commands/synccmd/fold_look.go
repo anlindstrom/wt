@@ -3,6 +3,7 @@ package synccmd
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/anlindstrom/wt/internal/agents"
@@ -41,14 +42,32 @@ type FoldLookHeld struct {
 	Why    string `json:"why"`
 }
 
-// FoldLookPair is one fixup of a FoldLook.
+// FoldLookPair is one fixup or move! commit of a FoldLook.
 type FoldLookPair struct {
-	Fixup         string `json:"fixup"`
-	FixupSubject  string `json:"fixupSubject"`
-	FixupLayer    string `json:"fixupLayer"`
-	Target        string `json:"target"`
-	TargetSubject string `json:"targetSubject"`
-	TargetLayer   string `json:"targetLayer"`
+	// Kind is fold for a fixup!, squash! or amend! commit, move for a move!
+	// commit, whose Move says what it moves.
+	Kind          string        `json:"kind"`
+	Fixup         string        `json:"fixup"`
+	FixupSubject  string        `json:"fixupSubject"`
+	FixupLayer    string        `json:"fixupLayer"`
+	Target        string        `json:"target"`
+	TargetSubject string        `json:"targetSubject"`
+	TargetLayer   string        `json:"targetLayer"`
+	Move          *FoldLookMove `json:"move"`
+}
+
+// The kinds of a FoldLookPair.
+const (
+	foldKindFold = "fold"
+	foldKindMove = "move"
+)
+
+// FoldLookMove is what a move! commit moves: whole paths of Source.
+type FoldLookMove struct {
+	Source        string   `json:"source"`
+	SourceSubject string   `json:"sourceSubject"`
+	SourceLayer   string   `json:"sourceLayer"`
+	Paths         []string `json:"paths"`
 }
 
 // foldsInPlace is whether a look with these options and target describes a
@@ -92,6 +111,12 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, alone bool) (
 			return nil, err
 		}
 	}
+	var moves []wtsync.PartMove
+	if why == "" {
+		if moves, why, err = wtsync.PlanMoves(main, commits); err != nil {
+			return nil, err
+		}
+	}
 	if why != "" {
 		fl.Refusal = &why
 		return fl, nil
@@ -110,12 +135,23 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, alone bool) (
 	}
 	lowest := len(commits)
 	for _, p := range pairs {
-		fl.Folds = append(fl.Folds, FoldLookPair{Fixup: p.Fixup, FixupSubject: p.FixupSubject, FixupLayer: layerAt(p.FixupAt),
+		fl.Folds = append(fl.Folds, FoldLookPair{Kind: foldKindFold, Fixup: p.Fixup, FixupSubject: p.FixupSubject, FixupLayer: layerAt(p.FixupAt),
 			Target: p.Target, TargetSubject: p.TargetSubject, TargetLayer: layerAt(p.TargetAt)})
 		lowest = min(lowest, p.TargetAt)
 	}
+	at := map[string]int{}
+	for i, c := range commits {
+		at[c] = i
+	}
+	for _, m := range moves {
+		fl.Folds = append(fl.Folds, FoldLookPair{Kind: foldKindMove, Fixup: m.Commit, FixupSubject: m.Subject, FixupLayer: layerAt(at[m.Commit]),
+			Target: m.Target, TargetSubject: m.TargetSubject, TargetLayer: layerAt(at[m.Target]),
+			Move: &FoldLookMove{Source: m.Source, SourceSubject: m.SourceSubject, SourceLayer: layerAt(at[m.Source]), Paths: m.Paths}})
+		lowest = min(lowest, at[m.Target])
+	}
+	slices.SortStableFunc(fl.Folds, func(a, b FoldLookPair) int { return at[a.Fixup] - at[b.Fixup] })
 	for _, l := range s.Layers {
-		changes := len(pairs) > 0 && l.Commits > lowest
+		changes := len(fl.Folds) > 0 && l.Commits > lowest
 		switch {
 		case alone:
 			fl.Held = append(fl.Held, FoldLookHeld{Branch: l.Branch, Why: aloneHeld})
@@ -147,10 +183,18 @@ func printFoldLook(w io.Writer, fl *FoldLook) {
 		return
 	}
 	fmt.Fprintf(w, "  %s in place on the line's own base %s, nothing is rebased onto trunk:\n",
-		foldVerb(len(fl.Folds)), git.ShortID(fl.Base, 7))
+		foldVerb(fl.Folds), git.ShortID(fl.Base, 7))
+	moves := 0
 	for _, p := range fl.Folds {
 		fmt.Fprintf(w, "    %s %s  → %s %s  (layer %s)\n", git.ShortID(p.Fixup, 7), kit.OneLine(p.FixupSubject),
 			git.ShortID(p.Target, 7), kit.OneLine(p.TargetSubject), p.TargetLayer)
+		if m := p.Move; m != nil {
+			moves++
+			fmt.Fprintf(w, "      moves %s of %s %s  (layer %s)\n", strings.Join(m.Paths, ", "), git.ShortID(m.Source, 7), kit.OneLine(m.SourceSubject), m.SourceLayer)
+		}
+	}
+	if moves > 0 {
+		fmt.Fprintf(w, "  a move! commit needs the run's checks at its target and source: --each-commit=targets\n")
 	}
 	if len(fl.Held) > 0 && fl.Held[0].Why == aloneHeld {
 		fmt.Fprintf(w, "  --alone: no layer moves; each stays on its old commits\n")
@@ -173,12 +217,27 @@ func listOrNone(names []string) string {
 	return strings.Join(names, ", ")
 }
 
-// foldVerb is "1 fixup folds" or "2 fixups fold".
-func foldVerb(n int) string {
-	if n == 1 {
-		return "1 fixup folds"
+// foldVerb is "1 fixup folds", "2 fixups fold", or with move! commits
+// among them "1 fixup and 1 move fold".
+func foldVerb(folds []FoldLookPair) string {
+	moves := 0
+	for _, p := range folds {
+		if p.Move != nil {
+			moves++
+		}
 	}
-	return kit.Count(n, "fixup") + " fold"
+	fixups := len(folds) - moves
+	switch {
+	case moves == 0 && fixups == 1:
+		return "1 fixup folds"
+	case moves == 0:
+		return kit.Count(fixups, "fixup") + " fold"
+	case fixups == 0 && moves == 1:
+		return "1 move folds"
+	case fixups == 0:
+		return kit.Count(moves, "move") + " fold"
+	}
+	return kit.Count(fixups, "fixup") + " and " + kit.Count(moves, "move") + " fold"
 }
 
 // printFoldDetail is wt sync <work> --stack --autosquash with no --onto: the
@@ -209,7 +268,11 @@ func foldVerdict(work string, a wtsync.Assessment, fl *FoldLook) string {
 	case fl.Refusal != nil:
 		return "refused: the fold: " + kit.OneLine(*fl.Refusal)
 	}
-	verdict := fmt.Sprintf("wt sync rebase %s --stack --autosquash folds the line in place", work)
+	flags := "--stack --autosquash"
+	if slices.ContainsFunc(fl.Folds, func(p FoldLookPair) bool { return p.Move != nil }) {
+		flags += " --each-commit=targets"
+	}
+	verdict := fmt.Sprintf("wt sync rebase %s %s folds the line in place", work, flags)
 	if len(fl.Folds) == 0 {
 		verdict = fmt.Sprintf("wt sync rebase %s --stack --autosquash has no fixup to fold", work)
 	}

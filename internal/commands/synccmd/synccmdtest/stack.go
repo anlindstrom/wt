@@ -168,3 +168,35 @@ func ContextLine(t *testing.T, both bool) (*kit.Context, *gittest.ContextLine) {
 	ctx, _ := OpenLine(t, func(main, wtDir string) { s = gittest.NewContextLine(t, main, wtDir, ContextYAML, both) })
 	return ctx, s
 }
+
+// MoveLine is gittest's MoveLine in a repository wt opens, with an
+// each_commit step on trunk that appends the subject it ran at to the
+// returned log; between makes the commit between target and source change
+// the part's context, and move puts the move! commit at the top.
+func MoveLine(t *testing.T, between, move bool) (ctx *kit.Context, s *gittest.MoveLine, logPath string) {
+	t.Helper()
+	logPath = filepath.Join(t.TempDir(), "checked.log")
+	yaml := "each_commit:\n  - run: git log -1 --format=%s >> '" + logPath + "'\n"
+	ctx, _ = OpenLine(t, func(main, wtDir string) { s = gittest.NewMoveLine(t, main, wtDir, yaml, between, move) })
+	return ctx, s, logPath
+}
+
+// MoveLineShaped is MoveLine with gittest's shape. paths, when not empty, is
+// the check's paths list, as YAML; failOnce makes the check fail the first
+// time it runs and pass after.
+func MoveLineShaped(t *testing.T, shape gittest.MoveShape, paths string, failOnce bool) (ctx *kit.Context, s *gittest.MoveLine, logPath string) {
+	t.Helper()
+	logPath = filepath.Join(t.TempDir(), "checked.log")
+	yaml := "each_commit:\n  - run: |\n      git log -1 --format=%s >> '" + logPath + "'\n"
+	if shape.LiftAtSource {
+		yaml = StackYAML + yaml
+	}
+	if failOnce {
+		yaml += "      if [ ! -f '" + logPath + ".failed' ]; then touch '" + logPath + ".failed'; echo 'fails once'; exit 1; fi\n"
+	}
+	if paths != "" {
+		yaml += "    paths: " + paths + "\n"
+	}
+	ctx, _ = OpenLine(t, func(main, wtDir string) { s = gittest.NewMoveLineShaped(t, main, wtDir, yaml, shape) })
+	return ctx, s, logPath
+}

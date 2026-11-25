@@ -1167,6 +1167,9 @@ func (r *RunPlan) rebaseOne(b string) {
 	defer syncrun.ReportTimings(r.w, r.opts.Journal, b, timed, false)
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) {
 		jp.Checked, jp.CheckFailed, jp.Rechecked = res.Checked, syncrun.CheckFailedOf(res.CheckFailed), res.Rechecked
+		if jp.Fold != nil && res.Moves != nil {
+			jp.Fold.Moves = syncrun.FoldMoves(res.Moves)
+		}
 	})
 	if rec != nil {
 		if err := syncrun.StackAfterRebase(r.ctx, rec, res); err != nil {

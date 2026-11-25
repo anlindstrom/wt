@@ -156,8 +156,8 @@ generating types from it:
 | `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | 1.12.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
-| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.16.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
-| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.27.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.17.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.28.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
@@ -1732,6 +1732,10 @@ base, which fixup folds into which commit and layer and which layers change.
 That run never rebases onto trunk, so the worktrees' `class`, `behind`, `stops`
 and `verdict` there still describe a rebase onto trunk it does not make; `fold`
 is what it does. With `--onto`, and without `--autosquash`, `fold` is null.
+Since 1.17.0 each of `fold.folds` has a `kind`: `fold` for a `fixup!`, `squash!`
+or `amend!` commit, `move` for a `move!` commit, whose `move` names the source
+commit, its layer and the paths it moves into `target`; `move` is null for a
+fold. A `move!` commit the run would refuse is `fold.refusal`, in the run's words.
 
 Since 1.16.0 each worktree also carries `likelyStops` and `reworkedOnTrunk`, both
 advice that changes no class and no verdict. `likelyStops` lists the commits after
@@ -1939,14 +1943,20 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `stack.push.branches[].why` | string \| null | yes | For an outcome other than pushed, what git said. Null for pushed. |
 | `fold` | object \| null | yes | Since 1.15.0: for --stack --autosquash with no --onto, the fold a run makes in place on the line's own base: which fixup folds into which commit and layer, and which layers change. The worktrees' class, behind, stops and verdict still describe a rebase onto trunk, which that run does not make. Null for any other look, and with --onto. |
 | `fold.base` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's own base, which the fold stays on: stack.base. |
-| `fold.refusal` | string \| null | yes | Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, or a declaration the line cannot take. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty. |
-| `fold.folds` | array of object | yes | Every fixup!, squash! or amend! commit of the line with the commit it folds into, oldest fixup first. A fixup whose name finds no commit, or more than one, is left out: the run refuses it. |
-| `fold.folds[].fixup` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `fold.refusal` | string \| null | yes | Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, a declaration the line cannot take, or (since 1.17.0) a move! commit the fold cannot take: its target or source does not name one commit below it, a path the source does not change, the whole source, a part that does not apply at the target or a fold that does not merge clean or would end in another tree with it. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty. |
+| `fold.folds` | array of object | yes | Every fixup!, squash! or amend! commit of the line with the commit it folds into, and since 1.17.0 every move! commit with the commit its part goes into, oldest first. A fixup whose name finds no commit, or more than one, is left out: the run refuses it. |
+| `fold.folds[].kind` | `"fold"` \| `"move"` | yes | Since 1.17.0: fold for a fixup!, squash! or amend! commit; move for a move! commit, which folds part of a later commit (move) into target. |
+| `fold.folds[].fixup` | string, matching `^[0-9a-f]{40,64}$` | yes | The fixup!, squash!, amend! or move! commit. |
 | `fold.folds[].fixupSubject` | string | yes |  |
 | `fold.folds[].fixupLayer` | string | yes | The layer branch the fixup is a commit of, or the line's own branch above the top layer. |
 | `fold.folds[].target` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
 | `fold.folds[].targetSubject` | string | yes |  |
 | `fold.folds[].targetLayer` | string | yes | The layer branch the target is a commit of, or the line's own branch above the top layer. |
+| `fold.folds[].move` | object \| null | yes | Since 1.17.0: for kind move, what the move! commit moves into target: whole paths of source, which then no longer changes them. Null for kind fold. |
+| `fold.folds[].move.source` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit the part comes from. |
+| `fold.folds[].move.sourceSubject` | string | yes |  |
+| `fold.folds[].move.sourceLayer` | string | yes | The layer branch the source is a commit of, or the line's own branch above the top layer. |
+| `fold.folds[].move.paths` | array of string | yes | The part: whole paths of the source's change. |
 | `fold.unchanged` | array of string | yes | The layers whose commits all lie below every fold target: the fold leaves them as they are. All layers when there is no fold, none with --alone. |
 | `fold.repointed` | array of string | yes | The layers that get new commits, bottom first: not those in held. |
 | `fold.held` | array of object | yes | The layers the fold would change that the run leaves on their old commits: one a worktree holds (dirty, a process, a rebase), or every layer with --alone. |
@@ -2015,6 +2025,12 @@ The fields are `wt up --json`'s (above), with `command` one of `"sync rebase"`,
 deferred steps and rebases nothing onto trunk) (`"sync run"` is what the verb called itself
 before `sync-run` 1.3.0; no wt prints it since 1.4.1, and the schema keeps the
 value for results saved before that), and:
+
+Since 1.28.0 a fold's `fold.moves` lists every `move!` commit the run folds: the
+source's paths it moves into the target, with the ref the part is kept under
+(`refs/wt-sync-kept/<branch>/<epoch>-move-<n>`, which stays after the run and
+after undo). It is empty for a fold with none; a resume reads it from the run's
+record.
 
 <!-- json-docs:begin sync-run -->
 | Field | Type | Required | Description |
@@ -2193,6 +2209,14 @@ value for results saved before that), and:
 | `worktrees[].fold.guard.resolvedAtStop` | array of string | no | Since 1.24.0, present only when not empty: the paths a person settled at a stop wt handed over, taken as intended where the merge would have given other content. A path resolved at a conflict stop is held to what the stop resolved it to, with what the old line changed in it after that commit; a path changed at a check stop is held to the old line with that change merged in. |
 | `worktrees[].fold.guard.outcome` | `"passed"` \| `"failed"` | yes |  |
 | `worktrees[].fold.guard.reason` | string \| null | yes | Why it failed; null when it passed. |
+| `worktrees[].fold.moves` | array of object | yes | Since 1.28.0: every move! commit the fold folds, oldest first: the paths of a source commit moved into an earlier target. Empty for a fold with none, and in a resume or undo of a run whose record predates it. |
+| `worktrees[].fold.moves[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes | The move! commit, as the line had it. |
+| `worktrees[].fold.moves[].target` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit the part goes into, as the line had it. |
+| `worktrees[].fold.moves[].targetSubject` | string | yes |  |
+| `worktrees[].fold.moves[].source` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit the part comes from, as the line had it. |
+| `worktrees[].fold.moves[].sourceSubject` | string | yes |  |
+| `worktrees[].fold.moves[].paths` | array of string | yes | The part: whole paths of the source's change. |
+| `worktrees[].fold.moves[].kept` | string | yes | The ref the part is kept under, refs/wt-sync-kept/<branch>/<epoch>-move-<n>: a commit whose tree is the target's, with its fixups folded in, plus the part; its parent has that tree without the part, on the target. It stays after the run and after undo. |
 | `worktrees[].layerSteps` | array of object | yes | Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish. |
 | `worktrees[].layerSteps[].layer` | integer, at least 1 | yes | The layer, from 1 at the bottom. In a --stack run the line's own commits above its top layer are one more layer; a rebase of one branch is one layer. |
 | `worktrees[].layerSteps[].layers` | integer, at least 1 | yes | How many layers the run stopped at. |

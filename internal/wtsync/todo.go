@@ -42,6 +42,16 @@ type todoPlan struct {
 	// line's content before git finishes. Empty and false for any other.
 	edit  string
 	final bool
+	// moves is the move! commits a fold folds: the pick of each is taken
+	// out, and its part and then the move! commit itself are folded in as
+	// fixups at the end of its target's group, after the fixups git put
+	// there. Only a run's first list has them.
+	moves []PartMove
+	// sources is the commits a move's part comes from that are checked
+	// for it: under targets each gets a break of its own after its group,
+	// as a fold target does, so it is checked where it stands and not only
+	// at its layer's tip. Full ids.
+	sources []string
 }
 
 // stackMarks is where a run rebasing a stack held on one line puts each
@@ -67,7 +77,7 @@ type stackMarks struct {
 }
 
 func (p todoPlan) edits() bool {
-	return p.liftPlan.edits() || len(p.checks) > 0 || p.stack.top > 0 || p.stops || p.edit != "" || p.final
+	return p.liftPlan.edits() || len(p.checks) > 0 || p.stack.top > 0 || p.stops || p.edit != "" || p.final || len(p.moves) > 0 || len(p.sources) > 0
 }
 
 // todoEditor writes the script a run hands git as its sequence editor:
@@ -104,6 +114,11 @@ func todoEditor(w io.Writer, p todoPlan) {
 		}
 	}
 	sort.Strings(below)
+	var parts, moved []string
+	for _, m := range p.moves {
+		parts = append(parts, m.Target+"="+m.Part+":"+m.Commit)
+		moved = append(moved, m.Commit)
+	}
 	fmt.Fprintln(w, "#!/bin/sh")
 	fmt.Fprintln(w, "# wt sync: stop before and after the picks that may need a version lift,")
 	fmt.Fprintln(w, "# leave out the picks trunk already carries, stop after the picks to check,")
@@ -118,6 +133,9 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "forks=%d\n", p.stack.forks)
 	fmt.Fprintf(w, "forkref=%s\n", shellQuote(p.stack.forkPrefix))
 	fmt.Fprintf(w, "copy=%s\n", shellQuote(p.stack.copy))
+	fmt.Fprintf(w, "parts='%s'\n", strings.Join(parts, " "))
+	fmt.Fprintf(w, "moved='%s'\n", strings.Join(moved, " "))
+	fmt.Fprintf(w, "sources='%s'\n", strings.Join(p.sources, " "))
 	fmt.Fprintf(w, "stops=%s\n", map[bool]string{true: "1"}[p.stops])
 	fmt.Fprintf(w, "tail=%s\n", map[bool]string{true: "1"}[p.stops && p.tail])
 	fmt.Fprintf(w, "edit=%s\n", shellQuote(p.edit))
@@ -126,11 +144,13 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "targets=%s\n", map[bool]string{true: "1"}[p.tips && p.targets])
 	fmt.Fprintf(w, "due=%s\n", map[bool]string{true: "1"}[p.tips && p.carry])
 	grouped := p.open && p.due
-	fmt.Fprintf(w, "pend=%s; gc=%s; open=%s; marked=0; forked=0; brk=\n", map[bool]string{true: "1"}[grouped && (!p.targets || p.folded)], map[bool]string{true: "1"}[p.targets && grouped], map[bool]string{true: "1"}[p.open])
+	fmt.Fprintf(w, "pend=%s; gc=%s; open=%s; marked=0; forked=0; brk=; mv=\n", map[bool]string{true: "1"}[grouped && (!p.targets || p.folded)], map[bool]string{true: "1"}[p.targets && grouped], map[bool]string{true: "1"}[p.open])
 	fmt.Fprintf(w, "%s\n", `close_group() { if [ -n "$pend" ]; then if [ -n "$1" ] && [ -n "$tips" ] && [ -n "$due" ]; then pend=; else printf 'break\n'; pend=; brk=1; fi; fi; }`)
 	fmt.Fprintf(w, "%s\n", `tipbreak() { if [ -n "$tips" ] && [ -n "$due" ]; then printf 'break\n'; due=; brk=1; fi; }`)
 	fmt.Fprintf(w, "%s\n", `stop() { [ -z "$stops" ] || [ -n "$brk" ] || printf 'break\n'; brk=; }`)
 	fmt.Fprintf(w, "%s\n", `flush() { while [ "$marked" -lt "$1" ]; do marked=$((marked+1)); tipbreak; stop; printf 'update-ref %s%s\n' "$mapref" "$marked"; done; }`)
+	fmt.Fprintf(w, "%s\n", `fold_line() { fid=${1#* }; case "$fid" in -[Cc]\ *) fid=${fid#* } ;; esac; fid=${fid%% *}; for fm in $checks; do case "$fm" in "$fid"*) if [ -n "$open" ]; then if [ -n "$tips" ]; then due=1; [ -z "$targets" ] || gc=1; else pend=1; fi; fi; break ;; esac; done; [ -z "$targets" ] || [ -z "$gc" ] || [ -z "$open" ] || pend=1; printf '%s\n' "$1"; brk=; }`)
+	fmt.Fprintf(w, "%s\n", `end_moves() { for x in $mv; do fold_line "fixup ${x%%:*}"; fold_line "fixup ${x#*:}"; done; mv=; }`)
 	fmt.Fprintf(w, "%s\n", `fflush() { while [ "$forked" -lt "$1" ]; do forked=$((forked+1)); printf 'update-ref %s%s\n' "$forkref" "$forked"; brk=; done; }`)
 	fmt.Fprintln(w, `{`)
 	fmt.Fprintln(w, `while IFS= read -r line || [ -n "$line" ]; do`)
@@ -139,9 +159,10 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintln(w, `      rest=${line#* }; id=${rest%% *}; out=$line; check=; pre=`)
 	fmt.Fprintln(w, `      for m in $marks; do case "$m" in "$id"*) pre=1; out="edit $rest"; break ;; esac; done`)
 	fmt.Fprintln(w, `      case "$edit" in "$id"*) out="edit $rest" ;; esac`)
-	fmt.Fprintln(w, `      for m in $drops; do case "$m" in "$id"*) out=""; break ;; esac; done`)
+	fmt.Fprintln(w, `      for m in $drops $moved; do case "$m" in "$id"*) out=""; break ;; esac; done`)
 	fmt.Fprintln(w, `      for m in $checks; do case "$m" in "$id"*) check=1; break ;; esac; done`)
 	fmt.Fprintln(w, `      if [ -n "$out" ]; then`)
+	fmt.Fprintln(w, `        end_moves`)
 	fmt.Fprintln(w, `        layer=$((top+1))`)
 	fmt.Fprintln(w, `        for l in $layers; do case "${l%%=*}" in "$id"*) layer=${l#*=}; break ;; esac; done`)
 	fmt.Fprintln(w, `        fb=0; for l in $forkat; do case "${l%%=*}" in "$id"*) fb=${l#*=}; break ;; esac; done`)
@@ -149,19 +170,19 @@ func todoEditor(w io.Writer, p todoPlan) {
 	fmt.Fprintf(w, "%s\n", `        [ -z "$pre" ] || printf 'break\n'`)
 	fmt.Fprintln(w, `        [ -z "$tips" ] || { [ -z "$check" ] || due=1; gc=$check; check=; }`)
 	fmt.Fprintf(w, "%s\n", `        printf '%s\n' "$out"; pend=$check; open=1; brk=`)
+	fmt.Fprintln(w, `        for m in $parts; do case "${m%%=*}" in "$id"*) mv="$mv ${m#*=}" ;; esac; done`)
+	fmt.Fprintln(w, `        [ -z "$targets" ] || for m in $sources; do case "$m" in "$id"*) due=1; gc=1; pend=1; break ;; esac; done`)
 	fmt.Fprintln(w, `      fi ;;`)
 	fmt.Fprintln(w, `    "fixup "*|"squash "*)`)
-	fmt.Fprintln(w, `      id=${line#* }; case "$id" in -[Cc]\ *) id=${id#* } ;; esac; id=${id%% *}`)
-	fmt.Fprintln(w, `      for m in $checks; do case "$m" in "$id"*) if [ -n "$open" ]; then if [ -n "$tips" ]; then due=1; [ -z "$targets" ] || gc=1; else pend=1; fi; fi; break ;; esac; done; [ -z "$targets" ] || [ -z "$gc" ] || [ -z "$open" ] || pend=1`)
-	fmt.Fprintf(w, "%s\n", `      printf '%s\n' "$line"; brk= ;;`)
-	fmt.Fprintf(w, "%s\n", `    "update-ref `+ForkMapPrefix+`"*) close_group; printf '%s\n' "$line"; brk= ;;`)
-	fmt.Fprintf(w, "%s\n", `    "update-ref "*) close_group 1; tipbreak; stop; printf '%s\n' "$line" ;;`)
-	fmt.Fprintf(w, "%s\n", `    "break"|"break "*) close_group; printf '%s\n' "$line"; brk=1 ;;`)
-	fmt.Fprintf(w, "%s\n", `    ""|"#"*) printf '%s\n' "$line" ;;`)
-	fmt.Fprintf(w, "%s\n", `    *) printf '%s\n' "$line"; brk= ;;`)
+	fmt.Fprintf(w, "%s\n", `      fold_line "$line" ;;`)
+	fmt.Fprintf(w, "%s\n", `    "update-ref `+ForkMapPrefix+`"*) end_moves; close_group; printf '%s\n' "$line"; brk= ;;`)
+	fmt.Fprintf(w, "%s\n", `    "update-ref "*) end_moves; close_group 1; tipbreak; stop; printf '%s\n' "$line" ;;`)
+	fmt.Fprintf(w, "%s\n", `    "break"|"break "*) end_moves; close_group; printf '%s\n' "$line"; brk=1 ;;`)
+	fmt.Fprintf(w, "%s\n", `    ""|"#"*) end_moves; printf '%s\n' "$line" ;;`)
+	fmt.Fprintf(w, "%s\n", `    *) end_moves; printf '%s\n' "$line"; brk= ;;`)
 	fmt.Fprintln(w, `  esac`)
 	fmt.Fprintln(w, `done < "$1"`)
-	fmt.Fprintln(w, `close_group 1; flush "$top"; fflush "$forks"; tipbreak`)
+	fmt.Fprintln(w, `end_moves; close_group 1; flush "$top"; fflush "$forks"; tipbreak`)
 	fmt.Fprintln(w, `if { [ -n "$tail" ] || [ -n "$final" ]; } && [ -z "$brk" ]; then printf 'break\n'; fi`)
 	fmt.Fprintln(w, `} > "$1.wt" && mv "$1.wt" "$1" && { [ -z "$copy" ] || cp "$1" "$copy"; } &&`)
 	fmt.Fprintf(w, "%s\n", `{ [ -z "$edit" ] || printf '%s\n' "$edit" > "$(dirname "$1")/wt-sync-edit"; }`)

@@ -322,6 +322,9 @@ type Result struct {
 	// Edit is the request's edit as the rebase left it: Amended filled once
 	// it went on from the edit stop. Nil for any other run.
 	Edit *EditStop
+	// Moves is the move! commits the fold folds, each with the part it
+	// kept; nil for a run with none, and for a resume.
+	Moves []PartMove
 	// ByHand is, in an edit run's resume, the paths that really conflicted
 	// at the stop it went on from when that is not the stop the handover
 	// recorded: one a person reached with git alone and resolved, rebuilt
@@ -354,6 +357,12 @@ type driver struct {
 	before string
 	// checks is the commits the each_commit steps run after, full ids.
 	checks []string
+	// moves is the move! commits of the fold, each with its kept part: a
+	// run's from PlanMoves, a resume's from the refs the run kept.
+	// moveSources is their sources that are checked for them under targets
+	// (planTipChecks), full ids.
+	moves       []PartMove
+	moveSources []string
 	// callSteps is, under --each-commit=tips, the indexes of the steps each
 	// of them calls for. layerIDs is the commands of the layer a check stop
 	// ends, as the list names their commits, and layerEdit whether one was
@@ -556,6 +565,23 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 			}
 			return d.res, err
 		}
+		// So is a move! commit the fold cannot take, with the whole fold
+		// replayed in the object store to prove it.
+		moves, why, err := PlanMoves(req.Path, req.Stack.Line.Commits)
+		if err == nil && why == "" && len(moves) > 0 {
+			why = MoveRunRefusal(req.Onto == req.Stack.Line.Base && req.Upstream == "", req.Edit != nil, mode)
+		}
+		if err == nil && why != "" {
+			err = errors.New(why)
+		}
+		if err != nil {
+			if req.Safety.Ref != "" {
+				d.res.Safety = req.Safety
+				return d.fail(err)
+			}
+			return d.res, err
+		}
+		d.moves = moves
 	}
 	if req.Safety.Ref != "" {
 		d.res.Safety = req.Safety
@@ -572,6 +598,19 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 	}
 	if d.res.SignaturesDropped, err = signedCount(req.Path, req.base(), old); err != nil {
 		return early(err)
+	}
+	// Each move's part is kept before the rebase can fold it: the line's
+	// list names it, and a resume reads it back from there.
+	if len(d.moves) > 0 {
+		if err := KeepMoves(mainRoot, req.Branch, req.Epoch, d.moves); err != nil {
+			return early(err)
+		}
+		d.res.Moves = d.moves
+		if log != nil {
+			for _, m := range d.moves {
+				fmt.Fprintf(log, "  %s\n", m.Line())
+			}
+		}
 	}
 	// The picks that may need a version lift are the ones changing a file a
 	// lifting rule claims. Around each the sequencer's list gets a break
@@ -600,6 +639,7 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: atTips(req.EachCommit), targets: req.EachCommit == EachTargets}
 	plan.stops, plan.tail = d.layerStops()
 	plan.edit, plan.final = d.editMarks()
+	plan.moves, plan.sources = d.moves, d.moveSources
 	if req.Stack != nil {
 		if plan.stack, err = stackMarksFor(req); err != nil {
 			return early(err)
@@ -784,6 +824,13 @@ func Resume(mainRoot string, cfg *Config, req Request, old string, safety Safety
 		res: Result{Branch: req.Branch, OldTip: old, Safety: safety, Edit: req.Edit, EachCommit: mode, Timings: req.timings(), Layered: req.Stack != nil || req.ReportLine != nil}, stepFailed: map[string]int{}, made: map[string]bool{}}
 	d.restoreLayers(req.Resumed)
 	d.res.Unchecked = slices.Clone(req.UncheckedBefore)
+	if req.Epoch != 0 {
+		// The parts the run folds are in its list already; their checks
+		// are planned again from the refs it kept them under.
+		if d.moves, err = KeptMoves(mainRoot, req.Branch, req.Epoch); err != nil {
+			return d.res, err
+		}
+	}
 	if d.res.SignaturesDropped, err = signedCount(req.Path, req.base(), old); err != nil {
 		return d.res, err
 	}
@@ -979,7 +1026,7 @@ func (d *driver) markTodo() error {
 		return err
 	}
 	d.liftMarks = lift.marks
-	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: atTips(d.req.EachCommit), targets: d.req.EachCommit == EachTargets}
+	plan := todoPlan{liftPlan: lift, checks: d.checks, tips: atTips(d.req.EachCommit), targets: d.req.EachCommit == EachTargets, sources: d.moveSources}
 	plan.stops, plan.tail = d.layerStops()
 	plan.edit, plan.final = d.editMarks()
 	if plan.open, plan.due, plan.folded, err = d.stoppedGroup(); err != nil {
