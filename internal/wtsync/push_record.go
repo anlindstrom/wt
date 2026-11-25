@@ -39,6 +39,13 @@ type PushRecord struct {
 	Items []PushRecordItem `json:"items"`
 	// Left are the layers the run left out, named again by the push.
 	Left []PushLeft `json:"left,omitempty"`
+	// Layers is what the run did with every layer of the line, bottom first:
+	// a push holds each layer no item sends to the tip the run left it at and
+	// to its remote branch.
+	Layers []PushLayer `json:"layers,omitempty"`
+	// LayersRead says Layers is what the run read, which may be none: a
+	// record from a build that did not keep it cannot show it is complete.
+	LayersRead bool `json:"layersRead,omitempty"`
 	// Rev names this version of the record: every write of it gives it a new
 	// one, so a settle made from an older read, which still has the newest
 	// run's epoch and time, is told from the record it was made from. Empty
@@ -62,12 +69,15 @@ type PushRun struct {
 	Subject string           `json:"subject"`
 	Items   []PushRecordItem `json:"items"`
 	Left    []PushLeft       `json:"left,omitempty"`
+	Layers  []PushLayer      `json:"layers,omitempty"`
+	// LayersRead is as on PushRecord.
+	LayersRead bool `json:"layersRead,omitempty"`
 }
 
 // Run is the record's own (newest) run as a PushRun.
 func (r *PushRecord) Run() PushRun {
 	return PushRun{Path: r.Path, Epoch: r.Epoch, Written: r.Written, Head: r.Head, Base: r.Base,
-		Commits: r.Commits, Subject: r.Subject, Items: r.Items, Left: r.Left}
+		Commits: r.Commits, Subject: r.Subject, Items: r.Items, Left: r.Left, Layers: r.Layers, LayersRead: r.LayersRead}
 }
 
 // Runs is every run the record holds, oldest first.
@@ -83,7 +93,7 @@ func withRuns(branch, work string, runs []PushRun) *PushRecord {
 	}
 	n := runs[len(runs)-1]
 	return &PushRecord{Branch: branch, Work: work, Path: n.Path, Epoch: n.Epoch, Written: n.Written,
-		Head: n.Head, Base: n.Base, Commits: n.Commits, Subject: n.Subject, Items: n.Items, Left: n.Left,
+		Head: n.Head, Base: n.Base, Commits: n.Commits, Subject: n.Subject, Items: n.Items, Left: n.Left, Layers: n.Layers, LayersRead: n.LayersRead,
 		Earlier: slices.Clone(runs[:len(runs)-1])}
 }
 
@@ -128,17 +138,27 @@ func (r *PushRecord) Branches() []string {
 }
 
 // LeftOut is what the runs left out of the push, newest run first by
-// branch: a branch a run moved is not left out, whatever another run said.
+// branch: a branch a run moved is not left out, whatever another run said,
+// and an older run's word is past once a newer run moved the branch or found
+// it unchanged.
 func (r *PushRecord) LeftOut() []PushLeft {
 	moved := r.Branches()
 	var out []PushLeft
+	// decided is a branch a newer run moved or found unchanged: what an
+	// older run left out of it is past.
+	decided := map[string]bool{}
 	runs := r.Runs()
 	for i := len(runs) - 1; i >= 0; i-- {
 		for _, l := range runs[i].Left {
-			if slices.Contains(moved, l.Branch) || slices.ContainsFunc(out, func(o PushLeft) bool { return o.Branch == l.Branch }) {
+			if slices.Contains(moved, l.Branch) || decided[l.Branch] || slices.ContainsFunc(out, func(o PushLeft) bool { return o.Branch == l.Branch }) {
 				continue
 			}
 			out = append(out, l)
+		}
+		for _, l := range runs[i].Layers {
+			if l.Result != MoveHeld {
+				decided[l.Branch] = true
+			}
 		}
 	}
 	return out
@@ -242,6 +262,16 @@ type PushRecordItem struct {
 	BranchPush
 	New string `json:"new"`
 	Top bool   `json:"top,omitempty"`
+}
+
+// PushLayer is what a run did with one layer: Result is the layer's move as
+// the run ended it (MoveMoved, MoveUnchanged, MoveHeld), and Tip the commit
+// it left the branch at: the new tip of a moved layer, the one it found for
+// any other.
+type PushLayer struct {
+	Branch string `json:"branch"`
+	Result string `json:"result"`
+	Tip    string `json:"tip"`
 }
 
 // PushLeft is a layer the run left out of the push, and why.

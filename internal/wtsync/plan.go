@@ -105,7 +105,10 @@ type State struct {
 	// over, as resume found it staged: the fold's content check takes those
 	// paths as intended. Across every earlier handover of the same run.
 	Resolutions []StopResolution `json:"resolutions,omitempty"`
-	Lock        LeftLock         `json:"lock"`
+	// Fixes is what a person changed at each check stop of the run, as
+	// resume found it, across every earlier handover.
+	Fixes []CheckFix `json:"fixes,omitempty"`
+	Lock  LeftLock   `json:"lock"`
 	// Check is the each_commit check that failed at the stop, when that is
 	// what the handover is: nothing unmerged, HEAD the commit that failed,
 	// and resume runs the check again there before it goes on.
@@ -139,6 +142,29 @@ type StopResolution struct {
 	Path   string `json:"path"`
 	Mode   string `json:"mode,omitempty"`
 	Blob   string `json:"blob,omitempty"`
+	// Order is the stop this was made at among the run's stops that left a
+	// record, oldest first; a check fix applies only to a resolution made
+	// before it.
+	Order int `json:"order,omitempty"`
+}
+
+// CheckFix is what a person changed at a check stop wt handed over: HEAD was
+// the commit Stop with tree Before, and resume found it with tree After, an
+// amend of it or a commit added above it. The fold's content check takes the
+// change as intended, merged into the line it compares the result to.
+type CheckFix struct {
+	Stop   string `json:"stop"`
+	Before string `json:"before"`
+	After  string `json:"after"`
+	// Added is the commit a person added above Stop, when the fix is a
+	// commit of its own and not an amend: a layer that ends there, and every
+	// layer above it, counts one commit more.
+	Added string `json:"added,omitempty"`
+	// Head is HEAD as resume found it: the commit Added, or the amend of
+	// Stop.
+	Head string `json:"head,omitempty"`
+	// Order is as on StopResolution.
+	Order int `json:"order,omitempty"`
 }
 
 // CheckStop is a failed check as the handover records it.

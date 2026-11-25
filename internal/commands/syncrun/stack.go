@@ -206,9 +206,10 @@ type FoldGuard struct {
 	// merged and were resolved at a stop: only the lines of the merge outside
 	// the conflicting regions must still be in them, in order.
 	ConflictAllowed []string `json:"conflictAllowed"`
-	// ResolvedAtStop is, for a moving fold, the paths taken as a person
-	// resolved them at a stop wt handed over, where the merge would have
-	// given other content; left out when there are none.
+	// ResolvedAtStop is the paths taken as a person left them at a stop wt
+	// handed over (resolved at a conflict stop, changed at a check stop),
+	// where the merge would have given other content; left out when there
+	// are none.
 	ResolvedAtStop []string `json:"resolvedAtStop,omitempty"`
 	// Outcome is passed or failed; Reason is why it failed, null when it
 	// passed.
@@ -523,6 +524,9 @@ type StackFinish struct {
 	// Resolved is what a person resolved at the conflict stops wt handed
 	// over, which the content check of a fold takes as intended.
 	Resolved []wtsync.StopResolution
+	// Fixed is what a person changed at the check stops wt handed over,
+	// which the content check takes as intended the same way.
+	Fixed []wtsync.CheckFix
 	// Dropped is the commits the finished rebase dropped as empty, as
 	// ReportReplay names them, and Confirmed says wt drove that rebase from
 	// start to end: only then are the drops it is certain of taken out of
@@ -551,6 +555,7 @@ type StackFinishCaller struct {
 	Own       *wtsync.Own
 	Stopped   []string
 	Resolved  []wtsync.StopResolution
+	Fixed     []wtsync.CheckFix
 	Confirmed bool
 	Gaps      []wtsync.ContextGap
 	Unchecked []string
@@ -565,7 +570,7 @@ type StackFinishCaller struct {
 func StackFinishFor(rec *wtsync.StackRecord, res wtsync.Result, cfg *wtsync.Config, now time.Time, listed []agents.Agent, listErr error, c StackFinishCaller) StackFinish {
 	return StackFinish{Record: rec, OldTip: c.OldTip, NewTip: res.NewTip,
 		Onto: rec.Onto, Own: c.Own, Listed: listed, ListErr: listErr, Force: rec.Force, Now: now, AfterMove: c.AfterMove, Between: c.Between,
-		Folds: FoldPaths(cfg), Stopped: c.Stopped, Resolved: c.Resolved, Dropped: res.Emptied, Confirmed: c.Confirmed, Gaps: c.Gaps, Unchecked: c.Unchecked}
+		Folds: FoldPaths(cfg), Stopped: c.Stopped, Resolved: c.Resolved, Fixed: c.Fixed, Dropped: res.Emptied, Confirmed: c.Confirmed, Gaps: c.Gaps, Unchecked: c.Unchecked}
 }
 
 // FinishStack checks every layer's new tip and moves the layers, once the
@@ -591,6 +596,13 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		s.declined = "the run's record has no leases (an older wt wrote it), and a lease read now would be on whatever was fetched since"
 	}
 	f := &stackFinisher{w: w, main: main, rec: rec, in: in, s: s}
+	if ierr := wtsync.IncompleteMove(rec); ierr != nil {
+		// Before any check that could refuse and forget the record: undo
+		// needs it to put the cut move back.
+		s.declined = "the layer moves stopped before every layer moved, and a push of the ones that did would leave the stack split on the remote; wt sync undo " + rec.Work + " puts back the line and every layer moved"
+		sidesNotMoved(w, s, "the layer moves stopped before it")
+		return s, "", ierr
+	}
 	if why := f.guardEdit(); why != "" {
 		return f.refuse(why)
 	}
@@ -676,7 +688,7 @@ func (f *stackFinisher) guardFold() string {
 		return ""
 	}
 	res := wtsync.TreeGuard(main, wtsync.GuardInput{Base: rec.Line.Base, Onto: in.Onto, OldTip: in.OldTip, NewTip: in.NewTip,
-		Folds: in.Folds, Stopped: in.Stopped, Resolved: in.Resolved})
+		Folds: in.Folds, Stopped: in.Stopped, Resolved: in.Resolved, Fixes: in.Fixed})
 	g := &FoldGuard{OldTip: in.OldTip, NewTip: in.NewTip, ExcludedGlobs: nonNil(res.Excluded),
 		ConflictAllowed: nonNil(res.ConflictAllowed), ResolvedAtStop: res.AtStop, Outcome: "passed"}
 	if !s.Fold.InPlace {
@@ -691,23 +703,33 @@ func (f *stackFinisher) guardFold() string {
 	return ""
 }
 
-// followDrops is a set of plans as they are once the rebase dropped what
-// it dropped: an edit's emptied commits, or the drops wt is certain of. Plans
-// that cannot be followed come back nil.
+// followDrops is a set of plans as they are once the rebase dropped and
+// added what it did (follow); plans that cannot be followed come back nil.
+// The fork plans follow it as the layers' do, for the commands --alone
+// prints as much as for the carry.
 func (f *stackFinisher) followDrops(plans []wtsync.LayerPlan) []wtsync.LayerPlan {
-	rec, main, in := f.rec, f.main, f.in
-	// The fork plans follow what the rebase dropped, as the layers' do below,
-	// for the commands --alone prints as much as for the carry.
-	if rec.Edit != nil {
-		if got, rerr := wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit); rerr == nil {
-			return got
-		}
+	got, err := f.follow(plans)
+	if err != nil {
 		return nil
 	}
-	if got, rerr := wtsync.ApplyDrops(main, in.Onto, plans, in.Dropped, in.Confirmed); rerr == nil {
-		return got
+	return got
+}
+
+// follow is plans as they are once the rebase finished: an edit's emptied
+// commits dropped, or the drops wt is certain of taken out (git empties the
+// picks the target already has, above an upstream, and the ones a conflict
+// rule resolved to trunk's side) and the commits a person added at a check
+// stop counted.
+func (f *stackFinisher) follow(plans []wtsync.LayerPlan) ([]wtsync.LayerPlan, error) {
+	rec, main, in := f.rec, f.main, f.in
+	if rec.Edit != nil {
+		return wtsync.ReconcileEdit(main, in.Onto, plans, *rec.Edit)
 	}
-	return nil
+	got, err := wtsync.ApplyDrops(main, in.Onto, plans, in.Dropped, in.Confirmed)
+	if err != nil {
+		return nil, err
+	}
+	return wtsync.ApplyAdded(main, in.Onto, got, in.Fixed)
 }
 
 // alone ends the finish of an --alone run: the line is rebased, and no layer
@@ -726,24 +748,12 @@ func (f *stackFinisher) alone(forks []wtsync.LayerPlan) (*Stack, string, error) 
 	return s, "", nil
 }
 
-// followPlans is the layers' plans as they are once the rebase dropped what
-// it dropped; the reason they cannot be followed otherwise.
+// followPlans is the layers' plans as they are once the rebase finished
+// (follow); the reason they cannot be followed otherwise.
 func (f *stackFinisher) followPlans() ([]wtsync.LayerPlan, string) {
-	rec, main, in := f.rec, f.main, f.in
-	if rec.Edit != nil {
-		// The commits the amend emptied were dropped: the plan follows.
-		plans, rerr := wtsync.ReconcileEdit(main, in.Onto, rec.Plans, *rec.Edit)
-		if rerr != nil {
-			return nil, rerr.Error()
-		}
-		return plans, ""
-	}
-	// git empties the picks the target already has (above an upstream)
-	// and the ones a conflict rule resolved to trunk's side: the plan
-	// follows the drops wt is certain of.
-	plans, rerr := wtsync.ApplyDrops(main, in.Onto, rec.Plans, in.Dropped, in.Confirmed)
-	if rerr != nil {
-		return nil, rerr.Error()
+	plans, err := f.follow(f.rec.Plans)
+	if err != nil {
+		return nil, err.Error()
 	}
 	return plans, ""
 }
@@ -907,7 +917,9 @@ func (f *stackFinisher) reportLayers(tips []wtsync.LayerTip) (held, moved int) {
 func (f *stackFinisher) moveSides(forks []wtsync.LayerPlan, merr error, held, moved int) (*Stack, string, error) {
 	w, s, rec, main := f.w, f.s, f.rec, f.main
 	if merr != nil {
-		// The record stays: it says what moved, and undo reads it.
+		// The record stays: it says what moved, and undo reads it. What did
+		// move is not pushed without the rest.
+		s.declined = "the layer moves stopped before every layer moved, and a push of the ones that did would leave the stack split on the remote; wt sync undo " + rec.Work + " puts back the line and every layer moved"
 		sidesNotMoved(w, s, "the layer moves stopped before it")
 		return s, "", merr
 	}

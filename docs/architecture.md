@@ -253,7 +253,9 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    `OfferPush` as before; with `--no-push` or nobody to ask it does nothing. It
    refuses the whole push, printing the per-branch commands, when the line was
    not left pushable, the record has no leases, the line's branch has no safe
-   push, or a remote's push URL is no longer the one recorded. After a
+   push, a layer the run left unchanged is not level with its remote branch
+   (`unsentLayer`, as the later push checks it), or a remote's push URL is no
+   longer the one recorded. After a
    transport failure it reads the pushed refs back (`wtsync.RemoteRefs`)
    before saying where each branch is. The push and the read-back go to the
    endpoint URL the record holds, not the remote's name, and wt moves the
@@ -261,8 +263,11 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
 6. **Push later.** A run or resume that ends with branches unpushed
    (`--no-push`, a no, nobody to ask) calls `syncrun.KeepStackPush`, which keeps
    a `wtsync.PushRecord` for the line: each branch's `BranchPush` (remote,
-   lease, endpoint, tracking ref) and the tip the run left it at, plus the
-   layers it left out. A run writes it while it still holds the line's lock
+   lease, endpoint, tracking ref) and the tip the run left it at, the layers it
+   left out, and what it did with every layer (`PushRecord.Layers`: moved,
+   unchanged or held, with the tip it left). A stack whose layer moves stopped
+   part way is declined (`Stack.declined`, set by `FinishStack`): it pushes
+   nothing and keeps no record. A run writes it while it still holds the line's lock
    (`finishRebase`, or the resume before its push), from the tip it left, and
    `syncrun.SettleStackPush` takes out what its push sent, only while it is
    still the record that run wrote. Unpushed runs add up: `wtsync.AddPushRun`
@@ -282,7 +287,9 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    `--dry-run`, which only reads), from reading the record to replacing it (`wtsync.ReplacePushRecord`, only
    while it is still the record pushed from), re-reads it after the question,
    and refuses with no record, with a branch no longer at
-   the newest run's recorded tip, with a conflicted branch, or when
+   the newest run's recorded tip, with a conflicted branch, with a run that
+   kept no layers (an older build), with a layer it does not send that is not
+   at its recorded tip or not level with its remote branch (`unsentLayers`), or when
    `checkEndpoints` fails, all before pushing, and
    otherwise goes through the same `pushRemotes` as step 5 over the recorded
    leases, fetching nothing.
@@ -375,8 +382,10 @@ wt's job is to move branches without losing anything. Every change keeps these:
   a conflict stop wt handed over (`State.Resolutions`, read from the index by
   `wtsync.ResolutionsAtStop` when resume goes on and carried through every
   handover) is taken whole as they resolved it, with what the old line
-  changed in it after that commit (`resolvedAtStop`); every other path is held
-  to the merge. A failed guard moves no layer
+  changed in it after that commit (`resolvedAtStop`). What a person amended
+  into the commit at a check stop (`State.Fixes`, `wtsync.FixAtCheckStop`) is
+  merged into the line the result is compared to, and its paths are named in
+  `resolvedAtStop` too; every other path is held to the merge. A failed guard moves no layer
   and says so; `wt sync undo` puts the folded line back. The result is
   `fold.guard` in `--json`.
 - **The command layer writes no ref or checkout.** Moves go through wtsync,

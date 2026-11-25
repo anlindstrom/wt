@@ -146,7 +146,8 @@ func (l *LooseLine) Move(mainRoot string, epoch int64, onto, newTip string) erro
 		if m.New == m.Old {
 			continue
 		}
-		if err := moveRef(mainRoot, epoch, &m, MoveOptions{}); err != nil {
+		// Loose layers keep no stack record; their pins are what undo reads.
+		if err := moveRef(mainRoot, epoch, &m, MoveOptions{}, func() error { return nil }); err != nil {
 			return err
 		}
 		if m.Result == MoveMoved {

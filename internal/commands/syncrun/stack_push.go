@@ -177,6 +177,9 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	if !leftOut {
 		items = append(items, stackItem{BranchPush: *s.top, New: head, Top: true})
 	}
+	if why := s.unchangedOffRemote(ctx); why != "" {
+		return refuse(why)
+	}
 	remotes := byRemote(items)
 	if err := checkEndpoints(ctx.Repo.MainRoot, remotes); err != nil {
 		return refuse(err.Error())
@@ -199,6 +202,11 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 			// branch is not asked about a second time.
 			return targets, PushNever, nil, nil
 		}
+		// A fetch while the question waited may have moved a remote branch;
+		// the push still goes to the endpoints recorded.
+		if why := s.unchangedOffRemote(ctx); why != "" {
+			return refuse(why)
+		}
 	}
 	results, allIn := pushRemotes(ctx, w, remotes, s.work)
 	// In item order, whatever the remotes: layers bottom first, then the line.
@@ -216,6 +224,24 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 		failed = append(failed, s.work+" (stack push failed)")
 	}
 	return rest, restMode, pushed, failed
+}
+
+// unchangedOffRemote is why a layer the run left unchanged stops the push of
+// the layers above it, "" when none does: one not level with its remote
+// branch would leave the stack split on the remote (unsentLayer).
+func (s *Stack) unchangedOffRemote(ctx *kit.Context) string {
+	own := wtsync.ReadOwnOrUnknown(ctx.Repo.MainRoot, ctx.Config.MainBranch)
+	for _, l := range s.Layers {
+		if l.Result == nil || *l.Result != wtsync.MoveUnchanged {
+			continue
+		}
+		pl := wtsync.PushLayer{Branch: l.Branch, Result: wtsync.MoveUnchanged, Tip: l.OldTip}
+		way := "push " + l.Branch + " first, then wt sync push " + s.work + " --stack"
+		if why := unsentLayer(ctx, own, pl, "this run", "the run left it unchanged, so it was already off its remote branch before it", way); why != "" {
+			return why
+		}
+	}
+	return ""
 }
 
 // checkEndpoints holds each remote to what the leases were recorded for: it

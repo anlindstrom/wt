@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -354,11 +355,18 @@ const (
 // that moves it by hand. An error is the record that could not be written,
 // or the moves stopped by AfterMove; rec says what moved.
 func MoveLayers(mainRoot string, rec *StackRecord, tips []LayerTip, opts MoveOptions) error {
+	prior := rec.Moves
+	if err := IncompleteMove(rec); err != nil {
+		return err
+	}
 	rec.Moves = nil
 	for _, t := range tips {
 		m := LayerMove{Branch: t.Branch, Old: t.Old, New: t.New, Result: MovePlanned}
 		if t.New == t.Old {
 			m.Result = MoveUnchanged
+		}
+		if done, ok := movedBefore(mainRoot, prior, t); ok {
+			m = done
 		}
 		rec.Moves = append(rec.Moves, m)
 	}
@@ -392,6 +400,37 @@ func MoveLayers(mainRoot string, rec *StackRecord, tips []LayerTip, opts MoveOpt
 	return nil
 }
 
+// IncompleteMove is why rec's layers may not be moved again or the record
+// forgotten: an earlier pass of the run left a move cut short (moving) or
+// needing recovery, whose entry is what undo needs to put the layer back.
+// nil when there is none.
+func IncompleteMove(rec *StackRecord) error {
+	for _, m := range rec.Moves {
+		if m.Result == MoveMoving || m.Result == MoveRecovery {
+			return fmt.Errorf("layer %s has a move that was cut short and is not finished (its branch may stand at the new tip over its old files); nothing is moved again: wt sync undo %s puts back the line and every layer moved", m.Branch, rec.Work)
+		}
+	}
+	return nil
+}
+
+// movedBefore is the move an earlier pass of the same run recorded as made
+// for the layer of t, when it still holds: the same old and new tips, and the
+// branch standing at the new tip. Such a layer stays moved, with its pins; a
+// layer whose branch is anywhere else is moved or held as the rest are.
+func movedBefore(mainRoot string, prior []LayerMove, t LayerTip) (LayerMove, bool) {
+	i := slices.IndexFunc(prior, func(m LayerMove) bool {
+		return m.Branch == t.Branch && m.Result == MoveMoved && m.Old == t.Old && m.New == t.New
+	})
+	if i < 0 {
+		return LayerMove{}, false
+	}
+	tip, err := gitEnv(mainRoot, nil, nil, "rev-parse", "--verify", "refs/heads/"+t.Branch)
+	if err != nil || tip != t.New {
+		return LayerMove{}, false
+	}
+	return prior[i], true
+}
+
 // stopped is a test's Between stopping the moves where it stands.
 type stopped struct{ error }
 
@@ -414,7 +453,7 @@ func moveLayer(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions, sav
 	use, inUse := worktrees.Users()[m.Branch]
 	if !inUse {
 		m.How = MoveByRef
-		return moveRef(mainRoot, epoch, m, opts)
+		return moveRef(mainRoot, epoch, m, opts, save)
 	}
 	if heldBy(m.Branch, worktrees, use) != "" {
 		hold(m, "a "+use.By+" in "+use.Path+" holds it")
@@ -463,10 +502,7 @@ func moveLayer(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions, sav
 	// Recorded as under way before the ref moves: an interrupt between the
 	// ref and the files leaves HEAD at the new tip over the old index, and
 	// undo reads this to put the ref back rather than refuse the worktree.
-	m.Result = MoveMoving
-	if err := save(); err != nil {
-		unpin(mainRoot, epoch, m)
-		hold(m, "the record could not be written: "+err.Error())
+	if !markMoving(mainRoot, epoch, m, save) {
 		return nil
 	}
 	// The ref moves only from the old tip, in one step: a commit made in
@@ -500,12 +536,17 @@ func moveLayer(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions, sav
 // there; one of the old tip, or a bisect or rebase, has it put back,
 // guarded by its new tip, and held; anything else is left as it is for a
 // person, pinned, and needs recovery.
-func moveRef(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions) error {
+func moveRef(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions, save func() error) error {
 	if err := opts.between(StageBeforeMove, *m); err != nil {
 		return stopped{err}
 	}
 	if err := WriteRun(mainRoot, epoch, []Pin{{Branch: m.Branch, Safety: m.Old, Result: m.New}}); err != nil {
 		hold(m, err.Error())
+		return nil
+	}
+	// Recorded as under way before the ref moves, as a worktree move is: an
+	// interrupt after it leaves a move a retry refuses to make again.
+	if !markMoving(mainRoot, epoch, m, save) {
 		return nil
 	}
 	if _, err := gitEnv(mainRoot, nil, nil, "update-ref", "-m", "wt sync rebase --stack", "refs/heads/"+m.Branch, m.New, m.Old); err != nil {
@@ -546,6 +587,19 @@ func moveRef(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions) error
 	m.How = MoveByRef
 	hold(m, why)
 	return nil
+}
+
+// markMoving records m as under way before its ref moves. A record that
+// cannot be written holds the layer, its pins dropped, and says so: false,
+// and nothing is moved.
+func markMoving(mainRoot string, epoch int64, m *LayerMove, save func() error) bool {
+	m.Result = MoveMoving
+	if err := save(); err != nil {
+		unpin(mainRoot, epoch, m)
+		hold(m, "the record could not be written: "+err.Error())
+		return false
+	}
+	return true
 }
 
 // indexAt is which of the commits the index of the worktree at path holds

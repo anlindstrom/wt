@@ -592,6 +592,23 @@ func (o *Own) Push(branch string) Push {
 	return o.push(branch, o.dest(branch), o.State(branch))
 }
 
+// Destination is the remote-tracking ref branch pushes to, whether or not a
+// push may go there now: "" with none is nowhere to push (no remote, or the
+// destination is trunk), and why is a destination that cannot be read.
+func (o *Own) Destination(branch string) (tracking string, none bool, why string) {
+	if o.broken != "" {
+		return "", false, o.broken
+	}
+	d := o.dest(branch)
+	switch {
+	case d.none:
+		return "", true, ""
+	case d.unknown != "":
+		return "", false, d.unknown
+	}
+	return d.tracking, false, ""
+}
+
 // push is Push for a branch standing against its destination as own says.
 // Under another name the push exists only while the remote holds nothing but
 // what this branch was: the same commit, an ancestor of its tip, or a tip the

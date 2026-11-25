@@ -33,6 +33,11 @@ type ResumeOptions struct {
 	// AllowDropped goes on past a resolution that drops lines of a fixup
 	// moved ahead of its context: --allow-dropped.
 	AllowDropped bool
+	// AfterMove and Between are a test's hooks into the layer moves, as
+	// synccmd.StackOptions has them: an error stops the moves where they
+	// stand. Nil in a real resume.
+	AfterMove func(wtsync.LayerMove) error
+	Between   func(stage string, m wtsync.LayerMove) error
 	syncrun.VerbOptions
 	syncrun.PushOptions
 	syncrun.StepOptions
@@ -92,6 +97,9 @@ func syncResume(ctx *kit.Context, work string, opts ResumeOptions, w io.Writer) 
 	if err := r.takeLock(); err != nil {
 		return err
 	}
+	if err := r.keepStop(); err != nil {
+		return err
+	}
 	// Before the error is looked at: a resume that is refused after it ran
 	// checks has still timed them.
 	res, err := r.rebase()
@@ -148,6 +156,9 @@ type resume struct {
 	// resolved is what a person resolved at the stop this resume goes on
 	// from, as the index held it.
 	resolved []wtsync.StopResolution
+	// fixed is what a person changed at the check stop this resume goes on
+	// from.
+	fixed []wtsync.CheckFix
 	// lock is the handover's lock, taken over; nil once a fresh handover
 	// keeps it.
 	lock *wtsync.Lock
@@ -341,6 +352,8 @@ func (r *resume) verify() error {
 			return err
 		}
 		r.resolved = wtsync.ResolutionsAtStop(r.target.Path, st)
+		r.fixed = wtsync.FixAtCheckStop(r.target.Path, st)
+		wtsync.StampStops(st, r.resolved, r.fixed)
 		return nil
 	}
 	if a := r.adopt; a != nil {
@@ -529,7 +542,7 @@ func (r *resume) handOverAgain(res wtsync.Result) error {
 	herr := syncrun.HandOver(r.ctx, w, syncrun.HandoverInput{
 		Work: name, Branch: st.Branch, Path: r.target.Path, TrunkRef: st.TrunkRef, TrunkSHA: st.Trunk, OntoRef: st.OntoRef,
 		Onto: st.Onto, Upstream: st.Upstream, Epoch: st.Epoch, Cfg: r.cfg, Res: res, Lock: r.lock,
-		Found: st.Found, Earlier: st.Stopped, EarlierResolved: r.resolutions(), Tracker: r.tracker, FollowUps: st.FollowUps, ByHand: st.ByHand || !r.confirmed,
+		Found: st.Found, Earlier: st.Stopped, EarlierResolved: r.resolutions(), EarlierFixed: r.fixes(), Tracker: r.tracker, FollowUps: st.FollowUps, ByHand: st.ByHand || !r.confirmed,
 	})
 	if herr != nil {
 		fmt.Fprintf(w, "  ✗ failed: %v\n", herr)
@@ -647,6 +660,12 @@ func (r *resume) complete(res wtsync.Result) error {
 			// and the held ones are named in the failure the resume ends with.
 			r.held = failures
 			return nil
+		}
+		if stackFailure != "" && len(out.OwedFailures) == 0 {
+			// Layers held and nothing pushed: what the resume moved is still
+			// kept for wt sync push --stack, as a run keeps it.
+			syncrun.KeepStackPush(r.ctx, r.w, r.stack, []syncrun.PushTarget{{Work: name, Branch: st.Branch, Path: r.target.Path}}, "")
+			syncrun.SettleStackPush(r.ctx, r.w, r.stack)
 		}
 		return fmt.Errorf("not completed: %s", strings.Join(failures, ", "))
 	}
@@ -886,6 +905,11 @@ func (r *resume) finishStack(res wtsync.Result) string {
 		// The edit as the resume went on from it: what it was amended to.
 		rec.Edit = res.Edit
 	}
+	stopped := append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...)
+	if err := r.keepStopped(stopped); err != nil {
+		fmt.Fprintf(r.w, "  ✗ no layer moved: %v\n", err)
+		return "no layer moved"
+	}
 	listed, lerr := r.opts.SessionsAgain(r.ctx, syncrun.RebasedNothing)
 	// Confirmed only for a replay wt drove from start to end: the sequencer
 	// was still at the handover's stop when this resume began (what the
@@ -893,9 +917,11 @@ func (r *resume) finishStack(res wtsync.Result) string {
 	// hand. Anything else leaves the plan strict.
 	s, failure, ferr := syncrun.FinishStack(r.ctx, r.w, syncrun.StackFinishFor(rec, res, r.cfg, r.opts.Clock(), listed, lerr, syncrun.StackFinishCaller{
 		OldTip: r.st.OldTip, Own: wtsync.ReadOwnOrUnknown(main, r.ctx.Config.MainBranch),
-		Stopped:   append(append(slices.Clone(r.st.Stopped), wtsync.StopPaths(res.Stops)...), res.ByHand...),
+		Stopped:   stopped,
 		Resolved:  r.resolutions(),
-		Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked}))
+		Fixed:     r.fixes(),
+		Confirmed: r.confirmed, Gaps: r.gaps, Unchecked: r.unchecked,
+		AfterMove: r.opts.AfterMove, Between: r.opts.Between}))
 	r.j.SetSync(r.st.Branch, func(p *syncrun.SyncParticipant) { p.Stack = s; syncrun.SetFold(p, s) })
 	r.restored = s != nil && s.Restored
 	r.stack = s
@@ -1114,4 +1140,56 @@ func noteNotRechecked(w io.Writer, where string, st wtsync.State) {
 // resume's: the earlier handovers' and the one this resume goes on from.
 func (r *resume) resolutions() []wtsync.StopResolution {
 	return append(slices.Clone(r.st.Resolutions), r.resolved...)
+}
+
+// keepStop writes what was resolved and fixed at the stop this resume goes
+// on from into the handover, before the rebase goes on: a finish that then
+// fails leaves the handover for a retry, which no longer sees the stop and
+// would hold the fold to the line without them.
+func (r *resume) keepStop() error {
+	if len(r.resolved) == 0 && len(r.fixed) == 0 {
+		return nil
+	}
+	cur, ok, err := wtsync.ReadState(r.gitDir)
+	if err != nil {
+		return err
+	}
+	if !ok || cur.Epoch != r.st.Epoch {
+		return fmt.Errorf("the handover in %s changed while resume was checking it; nothing is resumed", r.name)
+	}
+	cur.Resolutions = append(cur.Resolutions, r.resolved...)
+	cur.Fixes = append(cur.Fixes, r.fixed...)
+	if err := wtsync.WriteState(r.gitDir, cur); err != nil {
+		return fmt.Errorf("%s: what was settled at the stop could not be kept with the handover (%w); nothing is resumed", r.name, err)
+	}
+	r.st.Resolutions, r.st.Fixes = cur.Resolutions, cur.Fixes
+	r.resolved, r.fixed = nil, nil
+	return nil
+}
+
+// keepStopped writes the paths the rebase stopped on, up to its end, into
+// the handover before any layer moves: a finish that fails after the moves
+// leaves the handover for a retry, whose rebase is already finished and
+// stops on nothing, and whose fold is held to the same paths.
+func (r *resume) keepStopped(stopped []string) error {
+	if slices.Equal(stopped, r.st.Stopped) {
+		return nil
+	}
+	cur, ok, err := wtsync.ReadState(r.gitDir)
+	if err != nil || !ok || cur.Epoch != r.st.Epoch {
+		// The finish removed the handover already: nothing is retried.
+		return err
+	}
+	cur.Stopped = syncrun.PathsOnce(stopped)
+	if err := wtsync.WriteState(r.gitDir, cur); err != nil {
+		return fmt.Errorf("the paths the rebase stopped on could not be kept with the handover (%w)", err)
+	}
+	r.st.Stopped = cur.Stopped
+	return nil
+}
+
+// fixes is what a person changed at every check stop of the run up to this
+// resume's.
+func (r *resume) fixes() []wtsync.CheckFix {
+	return append(slices.Clone(r.st.Fixes), r.fixed...)
 }
