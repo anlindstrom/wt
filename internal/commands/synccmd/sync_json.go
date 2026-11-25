@@ -68,6 +68,9 @@ type SyncOverview struct {
 	// Stack is the stack held on the line of the worktree --stack named,
 	// null without --stack.
 	Stack *syncrun.Stack `json:"stack"`
+	// Fold is, for --stack --autosquash with no --onto, the fold a run makes
+	// in place; null for any other look.
+	Fold *FoldLook `json:"fold"`
 }
 
 // NeedProbe is one need and its probe's answer: probed only when a step
@@ -315,6 +318,10 @@ func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
 		}
 		if o.Stack, err = stackLookAt(ctx, base, sha, target, opts.Stack, listed); err != nil {
 			o.Error = jsonout.Strp(err.Error())
+		} else if foldsInPlace(opts.Stack, target) {
+			if o.Fold, err = foldLookOf(ctx.Repo.MainRoot, cfg, o.Stack, opts.Stack.Alone || opts.Alone); err != nil {
+				o.Error = jsonout.Strp(err.Error())
+			}
 		}
 	}
 	return o
