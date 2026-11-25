@@ -356,12 +356,8 @@ const (
 // or the moves stopped by AfterMove; rec says what moved.
 func MoveLayers(mainRoot string, rec *StackRecord, tips []LayerTip, opts MoveOptions) error {
 	prior := rec.Moves
-	for _, m := range prior {
-		if m.Result == MoveMoving || m.Result == MoveRecovery {
-			// What undo needs to put the layer back is in this entry: it stays
-			// as it is, and nothing is moved over it.
-			return fmt.Errorf("layer %s has a move that was cut short and is not finished (its branch may stand at the new tip over its old files); nothing is moved again: wt sync undo %s puts back the line and every layer moved", m.Branch, rec.Work)
-		}
+	if err := IncompleteMove(rec); err != nil {
+		return err
 	}
 	rec.Moves = nil
 	for _, t := range tips {
@@ -399,6 +395,19 @@ func MoveLayers(mainRoot string, rec *StackRecord, tips []LayerTip, opts MoveOpt
 			if err := opts.AfterMove(*m); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// IncompleteMove is why rec's layers may not be moved again or the record
+// forgotten: an earlier pass of the run left a move cut short (moving) or
+// needing recovery, whose entry is what undo needs to put the layer back.
+// nil when there is none.
+func IncompleteMove(rec *StackRecord) error {
+	for _, m := range rec.Moves {
+		if m.Result == MoveMoving || m.Result == MoveRecovery {
+			return fmt.Errorf("layer %s has a move that was cut short and is not finished (its branch may stand at the new tip over its old files); nothing is moved again: wt sync undo %s puts back the line and every layer moved", m.Branch, rec.Work)
 		}
 	}
 	return nil

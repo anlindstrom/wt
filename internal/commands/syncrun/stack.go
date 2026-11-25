@@ -596,6 +596,13 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		s.declined = "the run's record has no leases (an older wt wrote it), and a lease read now would be on whatever was fetched since"
 	}
 	f := &stackFinisher{w: w, main: main, rec: rec, in: in, s: s}
+	if ierr := wtsync.IncompleteMove(rec); ierr != nil {
+		// Before any check that could refuse and forget the record: undo
+		// needs it to put the cut move back.
+		s.declined = "the layer moves stopped before every layer moved, and a push of the ones that did would leave the stack split on the remote; wt sync undo " + rec.Work + " puts back the line and every layer moved"
+		sidesNotMoved(w, s, "the layer moves stopped before it")
+		return s, "", ierr
+	}
 	if why := f.guardEdit(); why != "" {
 		return f.refuse(why)
 	}
