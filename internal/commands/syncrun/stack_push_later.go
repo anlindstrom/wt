@@ -362,7 +362,6 @@ func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) ([]stackItem, []wts
 func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.MergedItem) []string {
 	main := ctx.Repo.MainRoot
 	own := wtsync.ReadOwnOrUnknown(main, ctx.Config.MainBranch)
-	left := rec.LeftOut()
 	var reasons []string
 	seen := map[string]bool{}
 	runs := rec.Runs()
@@ -372,8 +371,10 @@ func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.Merg
 				continue
 			}
 			seen[l.Branch] = true
-			if l.Branch == rec.Branch || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == l.Branch }) ||
-				slices.ContainsFunc(left, func(p wtsync.PushLeft) bool { return p.Branch == l.Branch }) {
+			// Left out by the newest run that names it: held, or moved with no
+			// safe push. What an older run left out does not count.
+			leftNow := l.Result == wtsync.MoveHeld || slices.ContainsFunc(runs[i].Left, func(p wtsync.PushLeft) bool { return p.Branch == l.Branch })
+			if l.Branch == rec.Branch || leftNow || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == l.Branch }) {
 				continue
 			}
 			local, err := git.Run(main, "rev-parse", "--verify", "refs/heads/"+l.Branch)
@@ -382,12 +383,21 @@ func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.Merg
 				reasons = append(reasons, fmt.Sprintf("%s is no longer at %s, where %s left it", l.Branch, git.ShortID(l.Tip, 7), run))
 				continue
 			}
-			to := own.Push(l.Branch)
-			if to.Tracking == "" {
+			tracking, none, why := own.Destination(l.Branch)
+			switch {
+			case none:
+				continue
+			case why != "":
+				reasons = append(reasons, fmt.Sprintf("%s cannot be compared with its remote branch (%s), so the push cannot show the stack stays whole on the remote", l.Branch, why))
 				continue
 			}
-			remote, rerr := git.Run(main, "rev-parse", "--verify", to.Tracking)
-			if rerr != nil || remote == local {
+			remote, ok, rerr := ctx.Repo.ResolveRef(tracking)
+			if rerr != nil {
+				reasons = append(reasons, fmt.Sprintf("%s cannot be compared with %s: %v", l.Branch, strings.TrimPrefix(tracking, "refs/remotes/"), rerr))
+				continue
+			}
+			if !ok || remote == local {
+				// No remote branch yet: nothing on the remote to split.
 				continue
 			}
 			what := "a run moved it and the record holds no push for it"
@@ -395,7 +405,7 @@ func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.Merg
 				what = "the runs left it unchanged, so it was already off its remote branch before them"
 			}
 			reasons = append(reasons, fmt.Sprintf("%s differs from %s, and the push does not send it (%s): pushing the layers above it would leave the stack split on the remote; push %s first, then push again, or wt sync push %s --stack --forget drops the record",
-				l.Branch, strings.TrimPrefix(to.Tracking, "refs/remotes/"), what, l.Branch, rec.Work))
+				l.Branch, strings.TrimPrefix(tracking, "refs/remotes/"), what, l.Branch, rec.Work))
 		}
 	}
 	return reasons

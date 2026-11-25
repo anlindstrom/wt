@@ -138,17 +138,27 @@ func (r *PushRecord) Branches() []string {
 }
 
 // LeftOut is what the runs left out of the push, newest run first by
-// branch: a branch a run moved is not left out, whatever another run said.
+// branch: a branch a run moved is not left out, whatever another run said,
+// and an older run's word is past once a newer run moved the branch or found
+// it unchanged.
 func (r *PushRecord) LeftOut() []PushLeft {
 	moved := r.Branches()
 	var out []PushLeft
+	// decided is a branch a newer run moved or found unchanged: what an
+	// older run left out of it is past.
+	decided := map[string]bool{}
 	runs := r.Runs()
 	for i := len(runs) - 1; i >= 0; i-- {
 		for _, l := range runs[i].Left {
-			if slices.Contains(moved, l.Branch) || slices.ContainsFunc(out, func(o PushLeft) bool { return o.Branch == l.Branch }) {
+			if slices.Contains(moved, l.Branch) || decided[l.Branch] || slices.ContainsFunc(out, func(o PushLeft) bool { return o.Branch == l.Branch }) {
 				continue
 			}
 			out = append(out, l)
+		}
+		for _, l := range runs[i].Layers {
+			if l.Result != MoveHeld {
+				decided[l.Branch] = true
+			}
 		}
 	}
 	return out
