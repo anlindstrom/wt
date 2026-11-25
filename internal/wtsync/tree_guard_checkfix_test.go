@@ -164,3 +164,31 @@ func TestTreeGuardAppliesAModeOrDeletionFixToAResolvedPath(t *testing.T) {
 		}
 	})
 }
+
+// Two check-stop fixes to a resolved path, each merged onto what the one
+// before made of it: the second merges onto content no commit holds, and
+// still passes.
+func TestTreeGuardComposesTwoFixesOnAResolvedPath(t *testing.T) {
+	t.Parallel()
+	g := newGuardRepo(t, true)
+	resolution := tText("trunk mine", "last")
+	rec := g.resolvedAt(t, g.oldTip, resolution)
+	rec.Order = 1
+	// nth replaces the n-th "mid" line of s with with.
+	nth := func(s string, n int, with string) string {
+		lines := strings.Split(s, "\n")
+		lines[n] = with
+		return strings.Join(lines, "\n")
+	}
+	ended := strings.Replace(resolution, "last", "end", 1)
+	stopped1 := g.rewritten(t, g.onto, map[string]string{"t.txt": ended})
+	fixed1 := g.rewritten(t, stopped1, map[string]string{"t.txt": nth(ended, 1, "fix1")})
+	stopped2 := g.rewritten(t, fixed1, map[string]string{"t.txt": nth(ended, 1, "fix1")})
+	fixed2 := g.rewritten(t, stopped2, map[string]string{"t.txt": nth(nth(ended, 1, "fix1"), 6, "fix2")})
+	tip := g.rewritten(t, g.onto, map[string]string{"t.txt": nth(nth(resolution, 1, "fix1"), 6, "fix2")})
+	in := GuardInput{Base: g.base, Onto: g.onto, OldTip: g.oldTip, NewTip: tip, Stopped: []string{"t.txt"},
+		Resolved: []StopResolution{rec}, Fixes: []CheckFix{g.fixAt(t, stopped1, fixed1, 2), g.fixAt(t, stopped2, fixed2, 3)}}
+	if res := TreeGuard(g.dir, in); res.Why != "" || !slices.Contains(res.AtStop, "t.txt") {
+		t.Fatalf("%+v", res)
+	}
+}
