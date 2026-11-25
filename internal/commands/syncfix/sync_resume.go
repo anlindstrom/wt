@@ -33,11 +33,21 @@ type ResumeOptions struct {
 	// AllowDropped goes on past a resolution that drops lines of a fixup
 	// moved ahead of its context: --allow-dropped.
 	AllowDropped bool
+	// Drop takes the drop a conflict stop at a commit the target carries
+	// reworked offers, by that commit: --drop.
+	Drop string
 	// AfterMove and Between are a test's hooks into the layer moves, as
 	// synccmd.StackOptions has them: an error stops the moves where they
 	// stand. Nil in a real resume.
 	AfterMove func(wtsync.LayerMove) error
 	Between   func(stage string, m wtsync.LayerMove) error
+	// AfterKeepStop is a test's hook once what was settled at the stop is
+	// kept with the handover, before the rebase goes on: an error ends the
+	// resume there, as an interrupt would. Nil in a real resume.
+	AfterKeepStop func() error
+	// DuringDrop is a test's hook after --drop replaced each file: an error
+	// ends the resume there, as an interrupt would. Nil in a real resume.
+	DuringDrop func(path string) error
 	syncrun.VerbOptions
 	syncrun.PushOptions
 	syncrun.StepOptions
@@ -97,8 +107,16 @@ func syncResume(ctx *kit.Context, work string, opts ResumeOptions, w io.Writer) 
 	if err := r.takeLock(); err != nil {
 		return err
 	}
+	if err := r.takeDrop(); err != nil {
+		return err
+	}
 	if err := r.keepStop(); err != nil {
 		return err
+	}
+	if r.opts.AfterKeepStop != nil {
+		if err := r.opts.AfterKeepStop(); err != nil {
+			return err
+		}
 	}
 	// Before the error is looked at: a resume that is refused after it ran
 	// checks has still timed them.
@@ -344,17 +362,35 @@ func (r *resume) verify() error {
 	if err := r.probeNeeds(); err != nil {
 		return err
 	}
+	if len(st.DropLeft) > 0 && (r.opts.Drop == "" || !r.busy) {
+		way := wtsync.DropCommand(st.Work, st.StoppedCommit) + " finishes it"
+		if !r.busy {
+			way = "the rebase went on by hand past it, so wt sync undo " + st.Work + " puts everything back"
+		}
+		return fmt.Errorf("%s: the drop of %s stopped part way, with %s still to be set to trunk's side; nothing is resumed: %s",
+			name, git.ShortID(st.StoppedCommit, 7), strings.Join(st.DropLeft, ", "), way)
+	}
 	if r.busy {
 		if err := wtsync.VerifyLeft(r.target.Path, st); err != nil {
 			return fmt.Errorf("%s: %w; nothing is resumed", name, err)
 		}
-		if err := verifyHandover(r.target.Path, st, r.w); err != nil {
+		var dropping []string
+		if r.opts.Drop != "" {
+			if err := wtsync.CheckDrop(r.target.Path, st, r.opts.Drop); err != nil {
+				return fmt.Errorf("%s: %w; nothing is resumed", name, err)
+			}
+			dropping = st.TrunkCopy.Taken
+		}
+		if err := verifyHandover(r.target.Path, st, dropping, r.w); err != nil {
 			return err
 		}
 		r.resolved = wtsync.ResolutionsAtStop(r.target.Path, st)
 		r.fixed = wtsync.FixAtCheckStop(r.target.Path, st)
 		wtsync.StampStops(st, r.resolved, r.fixed)
 		return nil
+	}
+	if r.opts.Drop != "" {
+		return fmt.Errorf("%s: --drop is for a conflict stop at a commit trunk carries reworked, and the rebase is no longer stopped; nothing is resumed", name)
 	}
 	if a := r.adopt; a != nil {
 		fmt.Fprintf(r.w, "%s  the rebase was finished by hand at %s, with %s made after it; adopting it\n", name, git.ShortID(a.Finish, 7), kit.Count(len(a.Commits), "commit"))
@@ -1003,7 +1039,10 @@ func recordResumeFailed(j *syncrun.RunJournal, st wtsync.State, path string, rer
 // what they do not claim; telling the person to resolve it would invite a
 // hand-merge of a file a strategy owns. The recorded stop's blobs are
 // committed by then, so they are not compared, and that is said out loud.
-func verifyHandover(wtPath string, st wtsync.State, w io.Writer) error {
+//
+// dropping is the files a drop the resume takes sets to the target's side:
+// unmerged or changed there is what the drop replaces, not refused.
+func verifyHandover(wtPath string, st wtsync.State, dropping []string, w io.Writer) error {
 	// --untracked-files=no: an untracked file never blocks a rebase, and a
 	// script may have left one.
 	dirty, err := git.Run(wtPath, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
@@ -1046,7 +1085,7 @@ func verifyHandover(wtPath string, st wtsync.State, w io.Writer) error {
 		// The second status column is the worktree against the index: any
 		// mark there is a change git will refuse to continue over. An
 		// unmerged path marks both columns and is not a change of that kind.
-		if len(line) > 3 && line[1] != ' ' && !unmergedStatus(line[:2]) {
+		if len(line) > 3 && line[1] != ' ' && !unmergedStatus(line[:2]) && !slices.Contains(dropping, strings.TrimSpace(line[3:])) {
 			unstaged = append(unstaged, strings.TrimSpace(line[3:]))
 		}
 	}
@@ -1070,6 +1109,9 @@ func verifyHandover(wtPath string, st wtsync.State, w io.Writer) error {
 	if len(unmerged) > 0 {
 		var owned, yours []string
 		for _, c := range unmerged {
+			if slices.Contains(dropping, c.Path) && st.Strategy[c.Path] == "" {
+				continue
+			}
 			if s := st.Strategy[c.Path]; s != "" {
 				owned = append(owned, c.Path+" ("+s+")")
 			} else {
@@ -1079,7 +1121,9 @@ func verifyHandover(wtPath string, st wtsync.State, w io.Writer) error {
 		if len(owned) > 0 {
 			return fmt.Errorf("unmerged again after a strategy resolved it: %s; that is not yours to merge: %s", strings.Join(owned, ", "), undo)
 		}
-		return fmt.Errorf("still unmerged: %s; %s", strings.Join(yours, ", "), add)
+		if len(yours) > 0 {
+			return fmt.Errorf("still unmerged: %s; %s", strings.Join(yours, ", "), add)
+		}
 	}
 	var changed []string
 	for path := range st.Resolved {
@@ -1139,15 +1183,42 @@ func noteNotRechecked(w io.Writer, where string, st wtsync.State) {
 // resolutions is what a person resolved at every stop of the run up to this
 // resume's: the earlier handovers' and the one this resume goes on from.
 func (r *resume) resolutions() []wtsync.StopResolution {
-	return append(slices.Clone(r.st.Resolutions), r.resolved...)
+	resolutions, _ := r.st.SettledAt(r.resolved, r.fixed)
+	return resolutions
+}
+
+// takeDrop takes the drop --drop names, under the handover's lock, before
+// what was settled at the stop is kept: the files it takes are the stop's
+// resolutions, as a person's would be.
+func (r *resume) takeDrop() error {
+	if r.opts.Drop == "" {
+		return nil
+	}
+	d, st, err := wtsync.TakeDrop(r.target.Path, r.gitDir, r.st, r.opts.DuringDrop)
+	r.st = st
+	for i, line := range d.Lines(r.target.Path) {
+		mark := "    "
+		if i == 0 {
+			mark = r.name + "  ✓ "
+		}
+		fmt.Fprintln(r.w, mark+line)
+	}
+	if err != nil {
+		return fmt.Errorf("%s: the drop of %s stopped part way (%w); nothing is resumed: wt sync resume %s --drop %s goes on with it", r.name, git.ShortID(r.st.StoppedCommit, 7), err, r.st.Work, git.ShortID(r.st.StoppedCommit, 7))
+	}
+	r.resolved = wtsync.ResolutionsAtStop(r.target.Path, r.st)
+	wtsync.StampStops(r.st, r.resolved, r.fixed)
+	return nil
 }
 
 // keepStop writes what was resolved and fixed at the stop this resume goes
 // on from into the handover, before the rebase goes on: a finish that then
 // fails leaves the handover for a retry, which no longer sees the stop and
-// would hold the fold to the line without them.
+// would hold the fold to the line without them. It replaces what an earlier
+// resume of the same stop kept, so a retry counts the stop once.
 func (r *resume) keepStop() error {
-	if len(r.resolved) == 0 && len(r.fixed) == 0 {
+	resolutions, fixes := r.st.SettledAt(r.resolved, r.fixed)
+	if slices.Equal(resolutions, r.st.Resolutions) && slices.Equal(fixes, r.st.Fixes) {
 		return nil
 	}
 	cur, ok, err := wtsync.ReadState(r.gitDir)
@@ -1157,13 +1228,11 @@ func (r *resume) keepStop() error {
 	if !ok || cur.Epoch != r.st.Epoch {
 		return fmt.Errorf("the handover in %s changed while resume was checking it; nothing is resumed", r.name)
 	}
-	cur.Resolutions = append(cur.Resolutions, r.resolved...)
-	cur.Fixes = append(cur.Fixes, r.fixed...)
+	cur.Resolutions, cur.Fixes = cur.SettledAt(r.resolved, r.fixed)
 	if err := wtsync.WriteState(r.gitDir, cur); err != nil {
 		return fmt.Errorf("%s: what was settled at the stop could not be kept with the handover (%w); nothing is resumed", r.name, err)
 	}
 	r.st.Resolutions, r.st.Fixes = cur.Resolutions, cur.Fixes
-	r.resolved, r.fixed = nil, nil
 	return nil
 }
 
@@ -1191,5 +1260,6 @@ func (r *resume) keepStopped(stopped []string) error {
 // fixes is what a person changed at every check stop of the run up to this
 // resume's.
 func (r *resume) fixes() []wtsync.CheckFix {
-	return append(slices.Clone(r.st.Fixes), r.fixed...)
+	_, fixes := r.st.SettledAt(r.resolved, r.fixed)
+	return fixes
 }

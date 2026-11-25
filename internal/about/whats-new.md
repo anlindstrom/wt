@@ -4,6 +4,18 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-25 14:25 — Drop a stack commit trunk already carries, reworked, at its stop
+
+A conflict stop at a commit trunk may carry reworked, under its subject and author,
+now names trunk's commit and offers `wt sync resume <work> --drop <commit>`: it
+takes trunk's side of the files both commits change and keeps the rest of the
+commit, dropping it when nothing is left. Nothing is dropped unless you name it.
+Files it replaces are kept first under `refs/wt-sync-kept/<branch>/<epoch>-drop`;
+it refuses symlinks and files staged one way and changed another; `wt sync undo`
+puts it all back. Also: undo puts back a layer cut after its files moved, a retried resume
+counts a check-stop fix once, and a fix commit is counted only in the layers
+that really hold it.
+
 ## 2026-11-25 14:00 — The push of a stack's record covers every layer
 
 `wt sync push --stack` checks every layer of the line before it pushes. A layer it

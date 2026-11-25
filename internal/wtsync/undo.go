@@ -666,9 +666,10 @@ func (u *undo) readMoving() error {
 // checkMoving checks, under the lock of wt, the worktree the branch of an
 // interrupted move m is checked out in now: it must be the one the record
 // names and only that one, on the branch, which is at its new tip or back
-// at its old one, with the index and files of the old tip. settle is a ref
-// to put back; false with no error is a branch already at its old tip,
-// which undo's own checks take from here. Anything else refuses the undo,
+// at its old one, with the index and files of exactly one of the two. settle
+// is a ref to put back over the old tip's files; false with no error is a
+// branch already at its old tip, or one whose files followed it to its new
+// tip, which undo's own checks take from here. Anything else refuses the undo,
 // changing nothing and keeping the pins.
 func (u *undo) checkMoving(m LayerMove, wt repo.Worktree) (settle bool, err error) {
 	refuse := func(why string) (bool, error) {
@@ -695,13 +696,17 @@ func (u *undo) checkMoving(m LayerMove, wt repo.Worktree) (settle bool, err erro
 		return false, nil
 	case tip != m.New:
 		return refuse(fmt.Sprintf("it is at %s, neither its old nor its new tip", git.ShortID(tip, 7)))
-	case indexAt(m.Path, m.Old) != m.Old:
-		return refuse("the index in " + m.Path + " is not its old tip's: look at " + m.Path)
+	}
+	at := indexAt(m.Path, m.Old, m.New)
+	if at == "" {
+		return refuse("the index in " + m.Path + " is neither its old nor its new tip's: look at " + m.Path)
 	}
 	if _, _, err := gitEnvAllow(m.Path, nil, nil, 0, "diff", "--quiet"); err != nil {
 		return refuse("files in " + m.Path + " are changed: look at " + m.Path)
 	}
-	return true, nil
+	// Index and files at the new tip: the move was cut after its files
+	// followed, and undo puts it back as it does a finished move.
+	return at == m.Old, nil
 }
 
 // listed is the worktrees undo was handed.

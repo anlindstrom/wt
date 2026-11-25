@@ -340,6 +340,9 @@ const (
 	// StageAfterRef is after the branch's ref has moved, before anything
 	// else of the move.
 	StageAfterRef = "afterRef"
+	// StageAfterFiles is after a worktree's files have followed the ref,
+	// before the move is recorded as made.
+	StageAfterFiles = "afterFiles"
 )
 
 // MoveLayers moves every layer of rec to its checked new tip, bottom first,
@@ -525,6 +528,9 @@ func moveLayer(mainRoot string, epoch int64, m *LayerMove, opts MoveOptions, sav
 		unpin(mainRoot, epoch, m)
 		hold(m, why)
 		return nil
+	}
+	if err := opts.between(StageAfterFiles, *m); err != nil {
+		return stopped{err}
 	}
 	m.Result = MoveMoved
 	return nil

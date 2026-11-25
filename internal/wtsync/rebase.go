@@ -260,6 +260,10 @@ type Handover struct {
 	// Context is, at a fixup moved ahead of its context, the hunks of it
 	// that lack their context here.
 	Context []ContextGap
+	// TrunkCopy is the target's commit with the stopped commit's subject
+	// and author, when it has one: the stop offers to drop the stopped
+	// commit's changes to the files that commit touched.
+	TrunkCopy *TrunkCopy
 }
 
 // Result is what a rebase did.
@@ -1610,6 +1614,11 @@ func (d *driver) handover(stop StopResult, conflicts []Conflict) (*Handover, err
 		Context: GapsAt(d.req.Gaps, stop.Commit),
 	}
 	d.res.LayerState = d.layerState()
+	copied, err := d.trunkCopy(stop.Commit)
+	h.TrunkCopy = copied
+	if err != nil && d.log != nil {
+		fmt.Fprintf(d.log, "  note: whether the target carries %s reworked could not be read, so this stop offers no drop: %v\n", git.ShortID(stop.Commit, 7), err)
+	}
 	for _, f := range stop.Files {
 		if !f.Resolved {
 			h.Left = append(h.Left, f.Path)
@@ -1634,6 +1643,17 @@ func (d *driver) handover(stop StopResult, conflicts []Conflict) (*Handover, err
 		h.Staged[f.Path] = fields[1]
 	}
 	return h, nil
+}
+
+// trunkCopy is the target's commit with commit's subject and author, among
+// those it added since the replayed range began; nil for none.
+func (d *driver) trunkCopy(commit string) (*TrunkCopy, error) {
+	t := d.req.target()
+	base, err := t.base(d.mainRoot, d.old)
+	if err != nil {
+		return nil, err
+	}
+	return trunkCopyOf(d.mainRoot, base, t.Onto, commit)
 }
 
 func pathsOf(cs []Conflict) string {

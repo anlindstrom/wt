@@ -1,7 +1,11 @@
 package wtsync
 
 import (
+	"fmt"
+	"slices"
 	"strings"
+
+	"github.com/anlindstrom/wt/internal/git"
 )
 
 // LikelyStop is a commit the replay did not reach, because an earlier stop
@@ -132,4 +136,85 @@ func reworkedOnTrunk(mainRoot string, t Target, branch string, commits []commitP
 		}
 	}
 	return found, nil
+}
+
+// TrunkCopy is the commit the target added since the replayed range began
+// under a replayed commit's subject and author. Taken is the files both
+// changed, which a drop of the replayed commit takes the target's side of;
+// Kept is the replayed commit's other files, whose changes it keeps.
+type TrunkCopy struct {
+	Commit  string   `json:"commit"`
+	Subject string   `json:"subject"`
+	Taken   []string `json:"taken"`
+	Kept    []string `json:"kept"`
+}
+
+// DropCommand is the command that takes the drop at the stop at commit.
+func DropCommand(work, commit string) string {
+	return fmt.Sprintf("wt sync resume %s --drop %s", work, git.ShortID(commit, 7))
+}
+
+// Offer is what the stop at commit says of c: trunk's copy, and what the
+// drop takes and keeps.
+func (c TrunkCopy) Offer(work, commit string) string {
+	what := fmt.Sprintf("takes trunk's %s and keeps the commit's %s", strings.Join(c.Taken, ", "), strings.Join(c.Kept, ", "))
+	if len(c.Kept) == 0 {
+		what = fmt.Sprintf("takes trunk's %s, which is every file of the commit, so the commit is dropped", strings.Join(c.Taken, ", "))
+	}
+	return fmt.Sprintf("trunk may already carry this commit, reworked, as %s %q (same subject and author). If trunk's copy replaces it: %s %s",
+		git.ShortID(c.Commit, 7), c.Subject, DropCommand(work, commit), what)
+}
+
+// trunkCopyOf is the newest commit of base..onto with commit's subject and
+// author, nil for none, or for one that shares no file with commit.
+func trunkCopyOf(mainRoot, base, onto, commit string) (*TrunkCopy, error) {
+	mine, err := authoredLog(mainRoot, commit+"^!")
+	if err != nil || len(mine) == 0 {
+		return nil, err
+	}
+	trunk, err := authoredLog(mainRoot, base+".."+onto)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range trunk {
+		if c.subject != mine[0].subject || c.who != mine[0].who {
+			continue
+		}
+		theirs, err := changedPaths(mainRoot, c.sha)
+		if err != nil {
+			return nil, err
+		}
+		ours, err := changedPaths(mainRoot, commit)
+		if err != nil {
+			return nil, err
+		}
+		tc := &TrunkCopy{Commit: c.sha, Subject: c.subject, Taken: []string{}, Kept: []string{}}
+		for _, p := range ours {
+			if slices.Contains(theirs, p) {
+				tc.Taken = append(tc.Taken, p)
+			} else {
+				tc.Kept = append(tc.Kept, p)
+			}
+		}
+		if len(tc.Taken) == 0 {
+			return nil, nil
+		}
+		return tc, nil
+	}
+	return nil, nil
+}
+
+// changedPaths is the files commit changed from its first parent.
+func changedPaths(mainRoot, commit string) ([]string, error) {
+	out, err := runGit(mainRoot, nil, nil, "diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", "-z", commit+"^", commit, "--")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
 }

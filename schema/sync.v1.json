@@ -155,7 +155,7 @@
         },
         "reworkedOnTrunk": {
           "type": "array",
-          "description": "Since 1.16.0. The replayed commits that trunk carries under the same subject and author since the range began, a patch of its own that git does not drop. A name match does not prove trunk holds the changes: wt keeps and replays each of these, and drops one only as git does, when its changes are already there.",
+          "description": "Since 1.16.0. The replayed commits that trunk carries under the same subject and author since the range began, a patch of its own that git does not drop. A name match does not prove trunk holds the changes: wt keeps and replays each of these, and drops one only as git does, when its changes are already there, or when you choose it at the stop it causes (wt sync resume --drop).",
           "items": {
             "type": "object",
             "required": ["index", "total", "commit", "subject", "trunkCommit", "trunkSubject"],

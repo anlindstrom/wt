@@ -9,6 +9,7 @@ import (
 
 func newSyncResumeCmd() *cobra.Command {
 	var yes, allowOwed, adopt, allowDropped, asJSON bool
+	var drop string
 	var push func() syncrun.PushMode
 	resume := &cobra.Command{
 		Use:   "resume <work>",
@@ -75,6 +76,22 @@ func newSyncResumeCmd() *cobra.Command {
 			"still holds the layers to the old line, except in the files you resolved\n" +
 			"at a conflict stop wt handed over: those are taken as you resolved them\n" +
 			"(a change to one after the stop is refused), and the run names them.\n\n" +
+			"A conflict stop at a commit trunk may already carry, reworked under the\n" +
+			"same subject and author, says so and names trunk's commit. Nothing is\n" +
+			"dropped unless you choose it: --drop <commit>, naming the commit the\n" +
+			"rebase stopped at, takes trunk's side of every file both commits change\n" +
+			"and keeps the commit's changes to its other files; a commit left with\n" +
+			"nothing is dropped. Before it replaces anything, every file it\n" +
+			"replaces that you or the stop changed is kept in a commit under\n" +
+			"refs/wt-sync-kept/<branch>/<epoch>-drop, named with the command that\n" +
+			"shows it, bytes and mode as they are. It refuses a symlink or a\n" +
+			"submodule there, a file staged one way and changed another (content or\n" +
+			"executable bit), and a conflict in a file trunk's commit does\n" +
+			"not touch: that one is still yours, so resolve it and git add it\n" +
+			"first. The files it takes are then the stop's resolution, as if\n" +
+			"you had resolved them, and wt sync undo puts the commit back with the\n" +
+			"rest of the run. A drop cut short is finished by --drop again; a plain\n" +
+			"resume refuses until it is.\n\n" +
 			"At the stop --stack --edit asked for, HEAD is that commit: amend it, or\n" +
 			"add commits, leaving nothing uncommitted, and this replays the rest of\n" +
 			"the line onto what HEAD is then. Before the line moves its content is\n" +
@@ -89,12 +106,13 @@ func newSyncResumeCmd() *cobra.Command {
 			"  wt sync resume login-crash --yes      # yes to everything, push included\n" +
 			"  wt sync resume login-crash --adopt    # take over a rebase finished by hand\n" +
 			"  wt sync resume tmp/stack --allow-dropped  # past a fixup hunk dropped on purpose\n" +
+			"  wt sync resume tmp/stack --drop 2036e6a  # trunk's copy replaces the stopped commit\n" +
 			"  wt sync resume login-crash --push     # then push, without asking",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withVerbContext(cmd, args, "sync resume", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
-				return syncResume(cmd, args[0], ctx, yes, allowOwed, adopt, allowDropped, push(), j)
+				return syncResume(cmd, args[0], ctx, yes, allowOwed, adopt, allowDropped, drop, push(), j)
 			})
 		},
 	}
@@ -104,13 +122,14 @@ func newSyncResumeCmd() *cobra.Command {
 	resume.Flags().BoolVar(&allowOwed, "allow-owed", false, "resume even when a step's need does not answer; the step is owed, to run later")
 	resume.Flags().BoolVar(&adopt, "adopt", false, "take over a rebase finished by hand with commits made on top, when its reflog proves that")
 	resume.Flags().BoolVar(&allowDropped, "allow-dropped", false, "go on past a resolution that drops lines of a fixup moved ahead of its context, when the drop is meant")
+	resume.Flags().StringVar(&drop, "drop", "", "the commit a stop is at, when trunk carries it reworked: take trunk's side of the files both change")
 	resume.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
 	return resume
 }
 
 // syncResume is wt sync resume.
-func syncResume(cmd *cobra.Command, work string, ctx *kit.Context, yes, allowOwed, adopt, allowDropped bool, push syncrun.PushMode, j *syncrun.RunJournal) error {
-	opts := syncfix.ResumeOptions{Journal: j, Adopt: adopt, AllowDropped: allowDropped}
+func syncResume(cmd *cobra.Command, work string, ctx *kit.Context, yes, allowOwed, adopt, allowDropped bool, drop string, push syncrun.PushMode, j *syncrun.RunJournal) error {
+	opts := syncfix.ResumeOptions{Journal: j, Adopt: adopt, AllowDropped: allowDropped, Drop: drop}
 	opts.AllowOwed = allowOwed
 	opts.Push = push
 	// --yes answers yes to every question, the push included, unless
