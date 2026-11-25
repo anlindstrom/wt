@@ -227,6 +227,9 @@ type StackRecord struct {
 	Sides []SideBranch `json:"sides,omitempty"`
 	Forks []LayerPlan  `json:"forks,omitempty"`
 	Moves []LayerMove  `json:"moves"`
+	// PartMoves is the move! commits the rebase folds, each with the part
+	// it kept; none in a run with no move! commit.
+	PartMoves []PartMove `json:"partMoves,omitempty"`
 	// Pushes is where each layer and the line's own branch push and the
 	// commit each push is leased on, as read before anything moved.
 	Pushes []BranchPush `json:"pushes,omitempty"`

@@ -2193,6 +2193,14 @@ value for results saved before that), and:
 | `worktrees[].fold.guard.resolvedAtStop` | array of string | no | Since 1.24.0, present only when not empty: the paths a person settled at a stop wt handed over, taken as intended where the merge would have given other content. A path resolved at a conflict stop is held to what the stop resolved it to, with what the old line changed in it after that commit; a path changed at a check stop is held to the old line with that change merged in. |
 | `worktrees[].fold.guard.outcome` | `"passed"` \| `"failed"` | yes |  |
 | `worktrees[].fold.guard.reason` | string \| null | yes | Why it failed; null when it passed. |
+| `worktrees[].fold.moves` | array of object | yes | Since 1.28.0: every move! commit the fold folds, oldest first: the paths of a source commit moved into an earlier target. Empty for a fold with none, and in a resume or undo of a run whose record predates it. |
+| `worktrees[].fold.moves[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes | The move! commit, as the line had it. |
+| `worktrees[].fold.moves[].target` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit the part goes into, as the line had it. |
+| `worktrees[].fold.moves[].targetSubject` | string | yes |  |
+| `worktrees[].fold.moves[].source` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit the part comes from, as the line had it. |
+| `worktrees[].fold.moves[].sourceSubject` | string | yes |  |
+| `worktrees[].fold.moves[].paths` | array of string | yes | The part: whole paths of the source's change. |
+| `worktrees[].fold.moves[].kept` | string | yes | The ref the part is kept under, refs/wt-sync-kept/<branch>/<epoch>-move-<n>: a commit whose tree is the target's, with its fixups folded in, plus the part; its parent has that tree without the part, on the target. It stays after the run and after undo. |
 | `worktrees[].layerSteps` | array of object | yes | Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish. |
 | `worktrees[].layerSteps[].layer` | integer, at least 1 | yes | The layer, from 1 at the bottom. In a --stack run the line's own commits above its top layer are one more layer; a rebase of one branch is one layer. |
 | `worktrees[].layerSteps[].layers` | integer, at least 1 | yes | How many layers the run stopped at. |

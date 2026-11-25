@@ -80,7 +80,7 @@ func (r *RunPlan) readStack() error {
 	r.opts.Journal.SetSync(b, func(jp *syncrun.SyncParticipant) {
 		jp.Stack = s
 		if r.opts.Stack.Autosquash || r.opts.Steps != nil || r.edit != nil {
-			jp.Fold = &syncrun.StackFold{InPlace: r.foldsInPlace(), Base: line.Base}
+			jp.Fold = &syncrun.StackFold{InPlace: r.foldsInPlace(), Base: line.Base, Moves: []syncrun.FoldMove{}}
 		}
 	})
 	return nil

@@ -189,11 +189,13 @@ type StackFold struct {
 	// Guard is the tree guard's comparison; null when none ran (the run has
 	// not finished, or it was an edit).
 	Guard *FoldGuard `json:"guard"`
-	// Moves is the move! commits the fold folds, oldest first.
-	Moves []FoldMove `json:"moves,omitempty"`
+	// Moves is the move! commits the fold folds, oldest first, each with
+	// the ref its part is kept under; empty for none.
+	Moves []FoldMove `json:"moves"`
 }
 
-// FoldMove is one move! commit of a fold.
+// FoldMove is one move! commit of a fold: the paths of Source it folds into
+// Target, and the ref the part is kept under.
 type FoldMove struct {
 	Commit        string   `json:"commit"`
 	Target        string   `json:"target"`
@@ -1036,6 +1038,9 @@ func StackAfterRebase(ctx *kit.Context, rec *wtsync.StackRecord, res wtsync.Resu
 		return nil
 	}
 	rec.Plans, rec.Replay, rec.Forks = res.Layers, res.Replay, res.Forks
+	if res.Moves != nil {
+		rec.PartMoves = res.Moves
+	}
 	return wtsync.WriteStackRecord(ctx.Repo.MainRoot, rec)
 }
 
@@ -1080,7 +1085,18 @@ func FoldOf(rec *wtsync.StackRecord) *StackFold {
 	if !rec.Autosquash && !rec.InPlace && rec.Edit == nil {
 		return nil
 	}
-	return &StackFold{InPlace: rec.Onto == rec.Line.Base, Base: rec.Line.Base}
+	return &StackFold{InPlace: rec.Onto == rec.Line.Base, Base: rec.Line.Base, Moves: FoldMoves(rec.PartMoves)}
+}
+
+// FoldMoves is the move! commits of a fold as --json names them; empty for
+// none.
+func FoldMoves(moves []wtsync.PartMove) []FoldMove {
+	out := make([]FoldMove, 0, len(moves))
+	for _, m := range moves {
+		out = append(out, FoldMove{Commit: m.Commit, Target: m.Target, TargetSubject: m.TargetSubject, Source: m.Source,
+			SourceSubject: m.SourceSubject, Paths: m.Paths, Kept: m.Kept})
+	}
+	return out
 }
 
 // SetFold gives the participant the fold the finished stack reports; a

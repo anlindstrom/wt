@@ -198,12 +198,28 @@
     "fold": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["inPlace", "base", "guard"],
+      "required": ["inPlace", "base", "guard", "moves"],
       "description": "Since 1.18.0: a fold of the line. For a fold in place, the run's `target` and `onto` say only where the declaration is read from and what the line was assessed against: the rebase goes onto `base`.",
       "properties": {
         "inPlace": { "type": "boolean", "description": "The line is folded on its own base, not moved onto a target." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's own base: what an in-place fold rebases onto." },
-        "guard": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/foldGuard" }], "description": "The tree guard once the rebase finished: oldTip, newTip, onto (the commit a moving fold's old line was merged onto to compare, null for a fold in place), excludedGlobs (the declared per-layer step paths a changed file matched, left out), conflictAllowed (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), resolvedAtStop (since 1.24.0, only when not empty: paths a person resolved at a conflict stop or changed at a check stop, taken as they left them), outcome (passed or failed) and reason (why it failed, else null). Null while the run has not finished, and for an edit." }
+        "guard": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/foldGuard" }], "description": "The tree guard once the rebase finished: oldTip, newTip, onto (the commit a moving fold's old line was merged onto to compare, null for a fold in place), excludedGlobs (the declared per-layer step paths a changed file matched, left out), conflictAllowed (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), resolvedAtStop (since 1.24.0, only when not empty: paths a person resolved at a conflict stop or changed at a check stop, taken as they left them), outcome (passed or failed) and reason (why it failed, else null). Null while the run has not finished, and for an edit." },
+        "moves": { "type": "array", "items": { "$ref": "#/$defs/foldMove" }, "description": "Since 1.28.0: every move! commit the fold folds, oldest first: the paths of a source commit moved into an earlier target. Empty for a fold with none, and in a resume or undo of a run whose record predates it." }
+      }
+    },
+    "foldMove": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "target", "targetSubject", "source", "sourceSubject", "paths", "kept"],
+      "description": "Since 1.28.0: one move! commit of a fold in place. The fold takes the source's change to paths, applies it at the target as a fixup after the target's own fixups, and checks at the target and at the source, and drops the move! commit; the source's replay then no longer changes those paths, and the tip's tree is the line's.",
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The move! commit, as the line had it." },
+        "target": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit the part goes into, as the line had it." },
+        "targetSubject": { "type": "string" },
+        "source": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit the part comes from, as the line had it." },
+        "sourceSubject": { "type": "string" },
+        "paths": { "type": "array", "items": { "type": "string" }, "description": "The part: whole paths of the source's change." },
+        "kept": { "type": "string", "description": "The ref the part is kept under, refs/wt-sync-kept/<branch>/<epoch>-move-<n>: a commit whose tree is the target's, with its fixups folded in, plus the part; its parent has that tree without the part, on the target. It stays after the run and after undo." }
       }
     },
     "foldGuard": {
