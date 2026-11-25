@@ -729,7 +729,7 @@ func (f *stackFinisher) follow(plans []wtsync.LayerPlan) ([]wtsync.LayerPlan, er
 	if err != nil {
 		return nil, err
 	}
-	return wtsync.ApplyAdded(main, got, in.Fixed)
+	return wtsync.ApplyAdded(main, in.Onto, got, in.Fixed)
 }
 
 // alone ends the finish of an --alone run: the line is rebased, and no layer
