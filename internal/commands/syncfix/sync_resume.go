@@ -45,9 +45,16 @@ type ResumeOptions struct {
 	// kept with the handover, before the rebase goes on: an error ends the
 	// resume there, as an interrupt would. Nil in a real resume.
 	AfterKeepStop func() error
+	// BeforeLock is a test's hook once the checks ran, before the lock is
+	// taken: another resume of the run can go there. Nil in a real resume.
+	BeforeLock func()
 	// DuringDrop is a test's hook after --drop replaced each file: an error
 	// ends the resume there, as an interrupt would. Nil in a real resume.
 	DuringDrop func(path string) error
+	// PushByYes says Push is PushAlways because --yes answered the push
+	// question, not because --push was given: it does not push a run
+	// started with --no-push.
+	PushByYes bool
 	syncrun.VerbOptions
 	syncrun.PushOptions
 	syncrun.StepOptions
@@ -104,7 +111,13 @@ func syncResume(ctx *kit.Context, work string, opts ResumeOptions, w io.Writer) 
 			_ = r.lock.Release()
 		}
 	}()
+	if r.opts.BeforeLock != nil {
+		r.opts.BeforeLock()
+	}
 	if err := r.takeLock(); err != nil {
+		return err
+	}
+	if err := r.keepNoPush(); err != nil {
 		return err
 	}
 	if err := r.takeDrop(); err != nil {
@@ -195,6 +208,9 @@ type resume struct {
 	gaps []wtsync.ContextGap
 	// unchecked is what of the fold's fixups could not be analysed.
 	unchecked []string
+	// keptNoPush says the run's --no-push turned a yes to the push (--yes,
+	// or a person to ask) into none.
+	keptNoPush bool
 }
 
 // joinJournal records the run's repository and trunk, and the branch as
@@ -266,6 +282,23 @@ func (r *resume) readHandover(work string) error {
 	st.Work = cmp.Or(st.Work, work)
 	r.st, r.name = st, st.Work
 	return nil
+}
+
+// keepRunNoPush holds the resume to the --no-push of the run it resumes:
+// neither --yes nor a yes to the question pushes such a run; only --push on
+// the resume does.
+func (r *resume) keepRunNoPush() {
+	explicit := r.opts.Push == syncrun.PushAlways && !r.opts.PushByYes
+	if r.st.NoPush && r.opts.Push != syncrun.PushNever && !explicit {
+		r.opts.Push, r.keptNoPush = syncrun.PushNever, true
+	}
+}
+
+// sayKeptNoPush says why a resume told yes to the push does not push.
+func (r *resume) sayKeptNoPush() {
+	if r.keptNoPush {
+		fmt.Fprintf(r.w, "  = not pushed: the run was told --no-push\n")
+	}
 }
 
 // checkSafety checks the handover's safety ref is the run's and pins the
@@ -579,6 +612,7 @@ func (r *resume) handOverAgain(res wtsync.Result) error {
 		Work: name, Branch: st.Branch, Path: r.target.Path, TrunkRef: st.TrunkRef, TrunkSHA: st.Trunk, OntoRef: st.OntoRef,
 		Onto: st.Onto, Upstream: st.Upstream, Epoch: st.Epoch, Cfg: r.cfg, Res: res, Lock: r.lock,
 		Found: st.Found, Earlier: st.Stopped, EarlierResolved: r.resolutions(), EarlierFixed: r.fixes(), Tracker: r.tracker, FollowUps: st.FollowUps, ByHand: st.ByHand || !r.confirmed,
+		NoPush: st.NoPush,
 	})
 	if herr != nil {
 		fmt.Fprintf(w, "  ✗ failed: %v\n", herr)
@@ -700,6 +734,7 @@ func (r *resume) complete(res wtsync.Result) error {
 		if stackFailure != "" && len(out.OwedFailures) == 0 {
 			// Layers held and nothing pushed: what the resume moved is still
 			// kept for wt sync push --stack, as a run keeps it.
+			r.sayKeptNoPush()
 			syncrun.KeepStackPush(r.ctx, r.w, r.stack, []syncrun.PushTarget{{Work: name, Branch: st.Branch, Path: r.target.Path}}, "")
 			syncrun.SettleStackPush(r.ctx, r.w, r.stack)
 		}
@@ -971,6 +1006,7 @@ func (r *resume) finishStack(res wtsync.Result) string {
 // push offers the rebased branch's push, as a run does.
 func (r *resume) push() error {
 	ctx, st := r.ctx, r.st
+	r.sayKeptNoPush()
 	t := syncrun.PushTarget{Work: r.name, Branch: st.Branch, Path: r.target.Path}
 	r.j.Set(st.Branch, func(p *syncrun.UpParticipant) {
 		p.PushCommand, p.NoPushReason, p.FixCommand = syncrun.PushJSON(t, syncrun.PushOf(ctx, t))
@@ -1208,6 +1244,31 @@ func (r *resume) takeDrop() error {
 	}
 	r.resolved = wtsync.ResolutionsAtStop(r.target.Path, r.st)
 	wtsync.StampStops(r.st, r.resolved, r.fixed)
+	return nil
+}
+
+// keepNoPush decides the push from the handover as it reads it under the
+// lock: another resume of the run may have kept a --no-push there since the
+// checks read it. This resume's own --no-push is written into it before
+// anything moves, so a resume cut short or failing later leaves it for the
+// retry, which then does not push either.
+func (r *resume) keepNoPush() error {
+	cur, ok, err := wtsync.ReadState(r.gitDir)
+	if err != nil {
+		return err
+	}
+	if !ok || cur.Epoch != r.st.Epoch {
+		return fmt.Errorf("the handover in %s changed while resume was checking it; nothing is resumed", r.name)
+	}
+	own := r.opts.Push == syncrun.PushNever
+	if own && !cur.NoPush {
+		cur.NoPush = true
+		if err := wtsync.WriteState(r.gitDir, cur); err != nil {
+			return fmt.Errorf("%s: --no-push could not be kept with the handover (%w); nothing is resumed", r.name, err)
+		}
+	}
+	r.st.NoPush = cur.NoPush
+	r.keepRunNoPush()
 	return nil
 }
 

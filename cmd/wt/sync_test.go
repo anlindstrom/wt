@@ -294,3 +294,25 @@ func TestChoosePushNamesBothBranchesAndTakesOnlyANumber(t *testing.T) {
 		}
 	}
 }
+
+// wt#223: --yes on a resume is a yes to the push question, never the --push
+// that pushes a run started with --no-push.
+func TestResumePushTellsYesFromPush(t *testing.T) {
+	for _, tc := range []struct {
+		flag  syncrun.PushMode
+		yes   bool
+		mode  syncrun.PushMode
+		byYes bool
+	}{
+		{syncrun.PushAsk, false, syncrun.PushAsk, false},
+		{syncrun.PushAsk, true, syncrun.PushAlways, true},
+		{syncrun.PushNever, true, syncrun.PushNever, false},
+		{syncrun.PushAlways, false, syncrun.PushAlways, false},
+		{syncrun.PushAlways, true, syncrun.PushAlways, false},
+	} {
+		mode, byYes := resumePush(tc.flag, tc.yes)
+		if mode != tc.mode || byYes != tc.byYes {
+			t.Errorf("resumePush(%v, yes %v) = %v, by --yes %v; want %v, by --yes %v", tc.flag, tc.yes, mode, byYes, tc.mode, tc.byYes)
+		}
+	}
+}

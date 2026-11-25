@@ -172,12 +172,8 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	if err != nil {
 		return refuse("the tip of " + top.Branch + " could not be read: " + pushReason(err))
 	}
-	items := slices.Clone(s.items)
-	leftOut := s.top.Creates() && !ask.PushLine
-	if !leftOut {
-		items = append(items, stackItem{BranchPush: *s.top, New: head, Top: true})
-	}
-	if why := s.unchangedOffRemote(ctx); why != "" {
+	items, leftOut, why := s.pushItems(ctx, head, ask.PushLine)
+	if why != "" {
 		return refuse(why)
 	}
 	remotes := byRemote(items)
@@ -204,7 +200,7 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 		}
 		// A fetch while the question waited may have moved a remote branch;
 		// the push still goes to the endpoints recorded.
-		if why := s.unchangedOffRemote(ctx); why != "" {
+		if _, _, why := s.pushItems(ctx, head, ask.PushLine); why != "" {
 			return refuse(why)
 		}
 	}
@@ -217,6 +213,7 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	for _, it := range items {
 		s.Push.Branches = append(s.Push.Branches, results[it.Branch])
 	}
+	s.settleLayerPushes()
 	if results[s.Branch].Outcome == PushedOK {
 		pushed = append(pushed, top.Work)
 	}
@@ -224,6 +221,62 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 		failed = append(failed, s.work+" (stack push failed)")
 	}
 	return rest, restMode, pushed, failed
+}
+
+// settleLayerPushes takes the push command off each layer the push sent: a
+// layer carries one only while its push is still owed.
+func (s *Stack) settleLayerPushes() {
+	for i, l := range s.Layers {
+		if slices.ContainsFunc(s.Push.Branches, func(b StackPushed) bool { return b.Branch == l.Branch && b.Outcome == PushedOK }) {
+			s.Layers[i].PushCommand = nil
+		}
+	}
+}
+
+// pushItems is what the push of a run sends, whether the line's own branch
+// is left out because pushing it would create its remote branch, and why the
+// push refuses, "" when it does not. It is the layers the run moved and the
+// line's own branch; or, when the record holds earlier runs of the line that
+// nobody pushed, everything the record holds, as wt sync push --stack sends
+// it and under the same checks, so a layer only an earlier run moved is not
+// left behind on the remote (wt#223). A line with a record this run is not in
+// (it could not be added) refuses: this run's branches alone could leave
+// what the record holds behind.
+func (s *Stack) pushItems(ctx *kit.Context, head string, pushLine bool) (items []stackItem, leftOut bool, why string) {
+	if s.kept == nil {
+		if why := s.unkeptRecord(ctx); why != "" {
+			return nil, false, why
+		}
+	}
+	if s.kept != nil && len(s.kept.Earlier) > 0 {
+		all, _, _, why := recordedItems(ctx, s.kept)
+		if why != "" {
+			return nil, false, why
+		}
+		items = slices.DeleteFunc(all, func(it stackItem) bool { return it.Top && it.Creates() && !pushLine })
+		return items, len(items) < len(all), ""
+	}
+	items = slices.Clone(s.items)
+	leftOut = s.top.Creates() && !pushLine
+	if !leftOut {
+		items = append(items, stackItem{BranchPush: *s.top, New: head, Top: true})
+	}
+	return items, leftOut, s.unchangedOffRemote(ctx)
+}
+
+// unkeptRecord is why a run whose own record was not kept may not push, ""
+// when nothing is recorded for the line: the record earlier runs left holds
+// pushes still owed, or cannot be read.
+func (s *Stack) unkeptRecord(ctx *kit.Context) string {
+	rec, ok, err := wtsync.ReadPushRecord(ctx.Repo.MainRoot, s.Branch)
+	switch {
+	case err != nil:
+		return "the record of what earlier runs left unpushed cannot be read (" + err.Error() + "), so the push cannot show it sends every layer they moved"
+	case !ok:
+		return ""
+	}
+	return "this run could not be added to the record of what earlier runs left unpushed (" + strings.Join(rec.Branches(), ", ") +
+		"), so pushing only this run's branches could leave theirs behind on the remote; wt sync undo " + s.work + " puts this run back, and wt sync push " + s.work + " --stack then pushes the record"
 }
 
 // unchangedOffRemote is why a layer the run left unchanged stops the push of
