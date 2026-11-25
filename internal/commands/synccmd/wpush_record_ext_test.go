@@ -225,3 +225,35 @@ func TestRunPushRefusesALayerTheRunLeftOffItsRemote(t *testing.T) {
 		t.Errorf("no record was kept for the later push")
 	}
 }
+
+// s1 is level with its remote when the run asks whether to push, and a fetch
+// while the question waits shows origin/s1 moved: the yes pushes nothing.
+func TestRunPushChecksTheLayersAgainAfterTheQuestion(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories, a worktree each and a bare remote")
+	}
+	p := newPushedLine(t)
+	main := p.ctx.Repo.MainRoot
+	fixup(t, p.s.Paths[gittest.StackTmp], "b1.txt", "feat(s2): b1.txt")
+	var remote string
+	opts := synccmdtest.NoAgents()
+	opts.Push = syncrun.PushAsk
+	opts.ConfirmPush = func([]string) bool {
+		testkit.GitIn(t, p.bare, "update-ref", "refs/heads/s1", p.s.Base)
+		testkit.GitIn(t, main, "fetch", "-q", "origin")
+		remote = bareRefs(t, p.bare)
+		return true
+	}
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	_, human, _ := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, opts)
+	if remote == "" {
+		t.Fatalf("the run asked nothing\n%s", human)
+	}
+	if !strings.Contains(human, "✗ stack not pushed: s1 differs from origin/s1") {
+		t.Errorf("the push after the question does not refuse for s1:\n%s", human)
+	}
+	if got := bareRefs(t, p.bare); got != remote {
+		t.Errorf("the remote changed after the question:\nbefore %s\nafter %s", remote, got)
+	}
+}
