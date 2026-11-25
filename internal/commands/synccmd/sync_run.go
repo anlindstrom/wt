@@ -1361,6 +1361,10 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 			what = "the run stops there and puts the branch back: a stack parent cannot be left waiting"
 		}
 		fmt.Fprintf(w, "  ⚠ contested at %d/%d: %s\n", p.a.Replay.Stop.Index, p.a.Replay.Stop.Total, what)
+		printLikely(w, "  ", p.a.Replay.Likely)
+	}
+	if !inPlace {
+		printReworked(w, "  ", p.a.Replay.Reworked)
 	}
 	if line := syncrun.OwnElsewhere(p.a.Own); line != "" {
 		fmt.Fprintf(w, "  %s\n", line)

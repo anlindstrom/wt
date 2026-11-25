@@ -156,7 +156,7 @@ generating types from it:
 | `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | 1.12.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
-| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.15.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.16.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
 | `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.26.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
@@ -1733,6 +1733,18 @@ That run never rebases onto trunk, so the worktrees' `class`, `behind`, `stops`
 and `verdict` there still describe a rebase onto trunk it does not make; `fold`
 is what it does. With `--onto`, and without `--autosquash`, `fold` is null.
 
+Since 1.16.0 each worktree also carries `likelyStops` and `reworkedOnTrunk`, both
+advice that changes no class and no verdict. `likelyStops` lists the commits after
+the first stop that is yours that change a file trunk changed since the replayed
+range began, each with the files it shares: a guess from the overlap alone, where
+the simulation stopped looking. Git may merge any of them cleanly, and a file a
+declared rule claims is listed too, since the rule may refuse the conflict there;
+the run stops at the first stop that is yours whatever the list says.
+`reworkedOnTrunk` names each replayed commit that trunk carries under the same
+subject and author, with the trunk commit: a name match, not proof that trunk holds
+the changes, so wt keeps and replays the commit. Both are empty when there is
+nothing to say.
+
 With `--all`, `--roots` or `--profile` stdout is an **array** of these objects,
 one per repository, in the selection's order; `wt status --json` takes none of
 those, so there is nothing to mirror. A repository that could not be read is an
@@ -1805,6 +1817,19 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `worktrees[].stops[].files[].resolved` | boolean | yes |  |
 | `worktrees[].stops[].files[].strategy` | string \| null | yes | The strategy that claims it; null when none does. |
 | `worktrees[].stops[].files[].note` | string \| null | yes | Why a strategy refused it, or what a lift did. |
+| `worktrees[].likelyStops` | array of object | yes | Since 1.16.0. The commits after the first stop that is yours that change a file trunk changed since the replayed range began, in replay order; a file a declared rule claims is listed too. Guessed from the overlap alone, not simulated: git may merge any of them cleanly, and the run stops at the first stop that is yours whatever this says. Empty when the replay has no stop that is yours. |
+| `worktrees[].likelyStops[].index` | integer, at least 1 | yes | The commit's place in the replay: with total, 5/9. |
+| `worktrees[].likelyStops[].total` | integer, at least 1 | yes |  |
+| `worktrees[].likelyStops[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `worktrees[].likelyStops[].subject` | string | yes |  |
+| `worktrees[].likelyStops[].paths` | array of string | yes | The files it changes that trunk changed too. |
+| `worktrees[].reworkedOnTrunk` | array of object | yes | Since 1.16.0. The replayed commits that trunk carries under the same subject and author since the range began, a patch of its own that git does not drop. A name match does not prove trunk holds the changes: wt keeps and replays each of these, and drops one only as git does, when its changes are already there. |
+| `worktrees[].reworkedOnTrunk[].index` | integer, at least 1 | yes |  |
+| `worktrees[].reworkedOnTrunk[].total` | integer, at least 1 | yes |  |
+| `worktrees[].reworkedOnTrunk[].commit` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit on the branch. |
+| `worktrees[].reworkedOnTrunk[].subject` | string | yes |  |
+| `worktrees[].reworkedOnTrunk[].trunkCommit` | string, matching `^[0-9a-f]{40,64}$` | yes | The trunk commit it matches. |
+| `worktrees[].reworkedOnTrunk[].trunkSubject` | string | yes |  |
 | `worktrees[].strategies` | array of string | yes | The declared strategies that resolved a file at some stop, each once. |
 | `worktrees[].deferredDeclared` | array of object | yes | Since 1.4.0. The deferred steps .wt-sync.yaml declares on the trunk commit in onto, in the declared order: what a run goes through once it has rebased this worktree, itself or through wt sync resume after a handover. Declared, not predicted: each may run. A step with no paths does, after every finished rebase; one with paths only when the rebase changed one of them; none after a step that failed. The same list on every worktree, also one a run would skip or refuse, where nothing is rebased and so none runs: verdict says which. Empty when trunk declares none or has no .wt-sync.yaml. |
 | `worktrees[].deferredDeclared[]` | object | yes | Fields as at `eachCommitDeclared[]`. |
@@ -3160,4 +3185,5 @@ change made it.
 | `sync-run` 1.23.0 | `rule` on each branch of [`push`](#push--a-stacks-push) (recorded by `wt sync push-to`, or its own name) and `lineLeftOut`: why a stack push left the line's own branch out (pushing it would create its remote branch; `--push-line` includes it) |
 | `sync-run` 1.24.0 | `worktrees[].fold.guard.resolvedAtStop`, present only when a fold took a person's resolution at a stop as intended |
 | `sync-run` 1.25.0 | `from` on each branch of [`push`](#push--a-stacks-push) (the run its tip is from), `push.conflicted` (branches the unpushed runs disagree on) and `worktrees[].droppedRecord` (what `wt sync push --stack --forget` dropped) |
+| `sync` 1.16.0 | `likelyStops` and `reworkedOnTrunk` on each worktree: later commits that share a file with what trunk changed, and replayed commits trunk carries under the same subject and author; advice, never a verdict |
 | `sync-run` 1.26.0 | `untouched` among the `result` values of `worktrees[].layerSteps[]`: the run left the layer's tip as it was, so the step did not run (`ran` is false) |

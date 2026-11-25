@@ -61,6 +61,12 @@ type Replay struct {
 	// in the object store, never asked for bytes. Why says which.
 	Truncated bool
 	Why       string
+	// Likely are the commits after Stop that change a file trunk changed:
+	// stops the replay could not reach, named by overlap alone.
+	Likely []LikelyStop
+	// Reworked are the replayed commits trunk carries under the same
+	// subject and author, as a patch of its own.
+	Reworked []ReworkedCommit
 	// Err collects strategy failures — a script that would not run, a
 	// declaration that will not build. A file whose strategy failed is not
 	// resolved, so the class fails closed; this carries the reason.
@@ -113,6 +119,9 @@ func SimulateRebaseTo(mainRoot string, t Target, branch string, cfg *Config) (Re
 		commits = append(commits, c)
 	}
 	rep.Commits = len(commits)
+	if rep.Reworked, err = reworkedOnTrunk(mainRoot, t, branch, commits); err != nil {
+		return rep, err
+	}
 	base, err := gitEnv(mainRoot, nil, nil, "rev-parse", "--verify", onto+"^{commit}", "--")
 	if err != nil {
 		return rep, err
@@ -199,7 +208,8 @@ func SimulateRebaseTo(mainRoot string, t Target, branch string, cfg *Config) (Re
 				rep.Stops = append(rep.Stops, stop)
 				last := rep.Stops[len(rep.Stops)-1]
 				rep.Stop = &last
-				return rep, nil
+				rep.Likely, err = likelyStops(mainRoot, t, branch, commits, stop.Index)
+				return rep, err
 			}
 			// Past here the stop is resolved and nothing reads its bytes
 			// again: keep the outcomes, drop the blobs.

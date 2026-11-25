@@ -4,6 +4,15 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-25 10:30 — The restack look lists every likely stop
+
+`wt sync <work>` and the look before `wt sync rebase` now list the commits after
+the first stop that change a file trunk changed too, grouped by file, so a file
+that comes back at several commits is said so up front. They are likely, not
+certain: git may merge them. The look also names a stack commit that trunk
+carries with the same subject and author, and wt still keeps and replays it.
+`--json` adds `likelyStops` and `reworkedOnTrunk` to each worktree (sync 1.16.0).
+
 ## 2026-11-25 09:30 — The look at an in-place fold shows the fold
 
 `wt sync <work> --stack --autosquash` without `--onto` now describes the run it

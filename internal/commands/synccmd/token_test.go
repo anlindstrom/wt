@@ -168,6 +168,8 @@ func TestSurveyTokenCoversEveryRowField(t *testing.T) {
 		"Rows.PlanFile":         "the verdict it gives is in it",
 		"Rows.Sessions":         "the verdict they give is in it; a run weighs them again when it starts",
 		"Rows.Stops":            "what the simulation met on the way; the class it came to is in it",
+		"Rows.LikelyStops":      "a guess from file overlap; the class it comes to is in the token",
+		"Rows.ReworkedOnTrunk":  "a warning about a name match; a run replays the commit either way",
 		"Rows.Strategies":       "trunk's declaration, which is in it",
 		"Rows.DeferredDeclared": "trunk's declaration, which is in it",
 		"Rows.Checks":           "what a run checks, which it reads again and which decides nothing it starts on",
