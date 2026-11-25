@@ -57,13 +57,50 @@ func refuseGo(changes map[int]string) string {
 	return b.String()
 }
 
+// MoveShape is what NewMoveLineShaped adds to the plain MoveLine.
+type MoveShape struct {
+	// Between makes l2 change line 3 of door/refuse.go, the part's context.
+	Between bool
+	// Move puts the move! commit at the top.
+	Move bool
+	// Interior puts "feat(l3): after" (after.txt) above the source in l3,
+	// so the source is not its layer's tip.
+	Interior bool
+	// TargetFixup puts "fixup! feat(l1): door" in l2, below the source,
+	// changing line 3 of door/refuse.go: context the part needs that the
+	// target has only once its fixup is folded in.
+	TargetFixup bool
+	// SourceFixup puts "fixup! feat(l3): feature" at the top, below the
+	// move! commit, changing line 9 of door/refuse.go, far from the part.
+	SourceFixup bool
+	// Below puts a layer l0 under l1, "feat(l0): base" (base.txt), and
+	// "fixup! feat(l0): base" at the top, below the move! commit, changing
+	// line 9 of door/refuse.go: a fold target below the move's.
+	Below bool
+}
+
 // NewMoveLine builds a MoveLine in dir, a repository on main with at least
 // one commit. yaml is committed on trunk after the base; between makes l2
 // change the context of the part. With move false the line has no move!
 // commit, for a test that writes its own.
 func NewMoveLine(t testing.TB, dir, wtDir, yaml string, between, move bool) *MoveLine {
 	t.Helper()
+	return NewMoveLineShaped(t, dir, wtDir, yaml, MoveShape{Between: between, Move: move})
+}
+
+// The subjects the shapes add.
+const (
+	MoveAfter = "feat(l3): after"
+	MoveBelow = "feat(l0): base"
+)
+
+// NewMoveLineShaped is NewMoveLine with the shape's additions.
+func NewMoveLineShaped(t testing.TB, dir, wtDir, yaml string, shape MoveShape) *MoveLine {
+	t.Helper()
 	s := &MoveLine{Dir: dir, Layers: []string{"l1", "l2", "l3"}, Tips: map[string]string{}}
+	if shape.Below {
+		s.Layers = append([]string{"l0"}, s.Layers...)
+	}
 	write := func(rel, content string) { WriteFile(t, filepath.Join(dir, rel), content) }
 	commit := func(msg ...string) string {
 		Git(t, dir, "add", "-A")
@@ -74,6 +111,11 @@ func NewMoveLine(t testing.TB, dir, wtDir, yaml string, between, move bool) *Mov
 		Git(t, dir, args...)
 		return Git(t, dir, "rev-parse", "HEAD")
 	}
+	lines := map[int]string{}
+	refuse := func(n int, with string) {
+		lines[n] = with
+		write(MovePath, refuseGo(lines))
+	}
 	write(MovePath, refuseGo(nil))
 	s.Base = commit("base")
 	Git(t, dir, "checkout", "-q", "-b", MoveTmp)
@@ -81,24 +123,41 @@ func NewMoveLine(t testing.TB, dir, wtDir, yaml string, between, move bool) *Mov
 		s.Tips[name] = Git(t, dir, "rev-parse", "HEAD")
 		Git(t, dir, "branch", name)
 	}
+	if shape.Below {
+		write("base.txt", "base\n")
+		commit(MoveBelow)
+		branch("l0")
+	}
 	write("door/door.go", "package door\n")
 	commit(MoveTarget)
 	branch("l1")
 	write("other.txt", "other\n")
-	if between {
-		write(MovePath, refuseGo(map[int]string{3: "line 3, from l2"}))
+	if shape.Between {
+		refuse(3, "line 3, from l2")
 	}
 	commit(MoveBetween)
+	if shape.TargetFixup {
+		refuse(3, "line 3, fixed for the door")
+		commit("fixup! " + MoveTarget)
+	}
 	branch("l2")
 	write("feature.txt", "feature\n")
-	changes := map[int]string{2: "line 2, refused at the door"}
-	if between {
-		changes[3] = "line 3, from l2"
-	}
-	write(MovePath, refuseGo(changes))
+	refuse(2, "line 2, refused at the door")
 	commit(MoveSource)
+	if shape.Interior {
+		write("after.txt", "after\n")
+		commit(MoveAfter)
+	}
 	branch("l3")
-	if move {
+	if shape.SourceFixup {
+		refuse(9, "line 9, tidied")
+		commit("fixup! " + MoveSource)
+	}
+	if shape.Below {
+		refuse(9, "line 9, from below")
+		commit("fixup! " + MoveBelow)
+	}
+	if shape.Move {
 		commit("move! "+MoveTarget, MoveBody(MoveSource, MovePath))
 	}
 	s.Tips[MoveTmp] = Git(t, dir, "rev-parse", "HEAD")
