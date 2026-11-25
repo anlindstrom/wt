@@ -261,8 +261,11 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
 6. **Push later.** A run or resume that ends with branches unpushed
    (`--no-push`, a no, nobody to ask) calls `syncrun.KeepStackPush`, which keeps
    a `wtsync.PushRecord` for the line: each branch's `BranchPush` (remote,
-   lease, endpoint, tracking ref) and the tip the run left it at, plus the
-   layers it left out. A run writes it while it still holds the line's lock
+   lease, endpoint, tracking ref) and the tip the run left it at, the layers it
+   left out, and what it did with every layer (`PushRecord.Layers`: moved,
+   unchanged or held, with the tip it left). A stack whose layer moves stopped
+   part way is declined (`Stack.declined`, set by `FinishStack`): it pushes
+   nothing and keeps no record. A run writes it while it still holds the line's lock
    (`finishRebase`, or the resume before its push), from the tip it left, and
    `syncrun.SettleStackPush` takes out what its push sent, only while it is
    still the record that run wrote. Unpushed runs add up: `wtsync.AddPushRun`
@@ -282,7 +285,9 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    `--dry-run`, which only reads), from reading the record to replacing it (`wtsync.ReplacePushRecord`, only
    while it is still the record pushed from), re-reads it after the question,
    and refuses with no record, with a branch no longer at
-   the newest run's recorded tip, with a conflicted branch, or when
+   the newest run's recorded tip, with a conflicted branch, with a run that
+   kept no layers (an older build), with a layer it does not send that is not
+   at its recorded tip or not level with its remote branch (`unsentLayers`), or when
    `checkEndpoints` fails, all before pushing, and
    otherwise goes through the same `pushRemotes` as step 5 over the recorded
    leases, fetching nothing.

@@ -39,10 +39,10 @@ type PushRecord struct {
 	Items []PushRecordItem `json:"items"`
 	// Left are the layers the run left out, named again by the push.
 	Left []PushLeft `json:"left,omitempty"`
-	// Layers is every layer of the line the run read, bottom first: a push
-	// checks each against its remote branch, so a layer that moved and is in
-	// no item is found.
-	Layers []string `json:"layers,omitempty"`
+	// Layers is what the run did with every layer of the line, bottom first:
+	// a push holds each layer no item sends to the tip the run left it at and
+	// to its remote branch.
+	Layers []PushLayer `json:"layers,omitempty"`
 	// LayersRead says Layers is what the run read, which may be none: a
 	// record from a build that did not keep it cannot show it is complete.
 	LayersRead bool `json:"layersRead,omitempty"`
@@ -69,7 +69,7 @@ type PushRun struct {
 	Subject string           `json:"subject"`
 	Items   []PushRecordItem `json:"items"`
 	Left    []PushLeft       `json:"left,omitempty"`
-	Layers  []string         `json:"layers,omitempty"`
+	Layers  []PushLayer      `json:"layers,omitempty"`
 	// LayersRead is as on PushRecord.
 	LayersRead bool `json:"layersRead,omitempty"`
 }
@@ -252,6 +252,16 @@ type PushRecordItem struct {
 	BranchPush
 	New string `json:"new"`
 	Top bool   `json:"top,omitempty"`
+}
+
+// PushLayer is what a run did with one layer: Result is the layer's move as
+// the run ended it (MoveMoved, MoveUnchanged, MoveHeld), and Tip the commit
+// it left the branch at: the new tip of a moved layer, the one it found for
+// any other.
+type PushLayer struct {
+	Branch string `json:"branch"`
+	Result string `json:"result"`
+	Tip    string `json:"tip"`
 }
 
 // PushLeft is a layer the run left out of the push, and why.

@@ -47,7 +47,7 @@ func TestPushLaterRefusesAMovedLayerMissingFromTheRecord(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "s2") {
 		t.Fatalf("push: err %v, want a refusal naming s2\n%s", err, out.String())
 	}
-	for _, want := range []string{"s2 moved but is not in the record", "wt sync push tmp/stack --stack --forget"} {
+	for _, want := range []string{"s2 differs from origin/s2, and the push does not send it (a run moved it and the record holds no push for it)", "wt sync push tmp/stack --stack --forget"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("missing %q in\n%s", want, out.String())
 		}

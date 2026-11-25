@@ -140,7 +140,11 @@ func keptPush(s *Stack, head string, targets []PushTarget) *wtsync.PushRecord {
 	}
 	rec.LayersRead = true
 	for _, l := range s.Layers {
-		rec.Layers = append(rec.Layers, l.Branch)
+		pl := wtsync.PushLayer{Branch: l.Branch, Result: str(l.Result), Tip: l.OldTip}
+		if pl.Result == wtsync.MoveMoved {
+			pl.Tip = str(l.NewTip)
+		}
+		rec.Layers = append(rec.Layers, pl)
 	}
 	for _, it := range items {
 		rec.Items = append(rec.Items, wtsync.PushRecordItem{BranchPush: it.BranchPush, New: it.New, Top: it.Top})
@@ -322,9 +326,7 @@ func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) ([]stackItem, []wts
 	if len(moved) > 0 {
 		reasons = append(reasons, strings.Join(names, ", ")+" moved since the run: "+strings.Join(moved, "; "))
 	}
-	if missing := missingLayers(ctx, rec, merged); len(missing) > 0 {
-		reasons = append(reasons, strings.Join(missing, ", ")+" moved but is not in the record: the record holds no push for it, so a push would leave it behind on its old commits; wt sync push "+rec.Work+" --stack --forget drops the record, and a fresh --no-push run records the line again")
-	}
+	reasons = append(reasons, unsentLayers(ctx, rec, merged)...)
 	if unread := runsWithoutLayers(rec); len(unread) > 0 {
 		reasons = append(reasons, "the record of "+strings.Join(unread, ", ")+" was written by a wt that did not keep the line's layers, so it cannot show that every moved layer is in it; push the layers it names by hand over the leases it recorded, or wt sync push "+rec.Work+" --stack --forget drops the record, and a fresh --no-push run records the line again")
 	}
@@ -350,34 +352,53 @@ func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) ([]stackItem, []wts
 	return items, merged, conflicts, ""
 }
 
-// missingLayers is the layers a run read that are in no item of the record
-// and that differ from the remote branch they push to: moved, and left out of
-// the push by nothing the run said. A layer the runs left out on purpose, and
-// one with nowhere to push or no remote branch yet, is not missing.
-func missingLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.MergedItem) []string {
-	own := wtsync.ReadOwnOrUnknown(ctx.Repo.MainRoot, ctx.Config.MainBranch)
+// unsentLayers is why the layers the runs name that the push does not send
+// stop it: each such layer, unchanged by the runs or sent by an earlier push
+// of the record, must stand at the tip the newest run naming it left it at
+// and level with its remote branch, or the layers pushed above it would leave
+// the stack split on the remote. A layer a run left out is named by the push
+// instead, and one with nowhere to push or no remote branch yet has nothing
+// to be level with.
+func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.MergedItem) []string {
+	main := ctx.Repo.MainRoot
+	own := wtsync.ReadOwnOrUnknown(main, ctx.Config.MainBranch)
 	left := rec.LeftOut()
-	var missing []string
+	var reasons []string
 	seen := map[string]bool{}
-	for _, run := range rec.Runs() {
-		for _, b := range run.Layers {
-			if seen[b] || b == rec.Branch || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == b }) ||
-				slices.ContainsFunc(left, func(l wtsync.PushLeft) bool { return l.Branch == b }) {
+	runs := rec.Runs()
+	for i := len(runs) - 1; i >= 0; i-- {
+		for _, l := range runs[i].Layers {
+			if seen[l.Branch] {
 				continue
 			}
-			seen[b] = true
-			to := own.Push(b)
+			seen[l.Branch] = true
+			if l.Branch == rec.Branch || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == l.Branch }) ||
+				slices.ContainsFunc(left, func(p wtsync.PushLeft) bool { return p.Branch == l.Branch }) {
+				continue
+			}
+			local, err := git.Run(main, "rev-parse", "--verify", "refs/heads/"+l.Branch)
+			run := "the run of " + runLabel(runs[i].Written)
+			if err != nil || local != l.Tip {
+				reasons = append(reasons, fmt.Sprintf("%s is no longer at %s, where %s left it", l.Branch, git.ShortID(l.Tip, 7), run))
+				continue
+			}
+			to := own.Push(l.Branch)
 			if to.Tracking == "" {
 				continue
 			}
-			remote, rerr := git.Run(ctx.Repo.MainRoot, "rev-parse", "--verify", to.Tracking)
-			local, lerr := git.Run(ctx.Repo.MainRoot, "rev-parse", "--verify", "refs/heads/"+b)
-			if rerr == nil && lerr == nil && remote != local {
-				missing = append(missing, b)
+			remote, rerr := git.Run(main, "rev-parse", "--verify", to.Tracking)
+			if rerr != nil || remote == local {
+				continue
 			}
+			what := "a run moved it and the record holds no push for it"
+			if l.Result == wtsync.MoveUnchanged {
+				what = "the runs left it unchanged, so it was already off its remote branch before them"
+			}
+			reasons = append(reasons, fmt.Sprintf("%s differs from %s, and the push does not send it (%s): pushing the layers above it would leave the stack split on the remote; push %s first, then push again, or wt sync push %s --stack --forget drops the record",
+				l.Branch, strings.TrimPrefix(to.Tracking, "refs/remotes/"), what, l.Branch, rec.Work))
 		}
 	}
-	return missing
+	return reasons
 }
 
 // runsWithoutLayers is the runs of the record, by label, that did not keep

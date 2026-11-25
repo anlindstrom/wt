@@ -41,6 +41,9 @@ func TestPushLaterRefusesALayerTheRunLeftOffItsRemote(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("no record: %v", err)
 	}
+	if len(rec.Layers) == 0 || rec.Layers[0] != (wtsync.PushLayer{Branch: "s1", Result: wtsync.MoveUnchanged, Tip: p.s.Tips["s1"]}) {
+		t.Fatalf("the record does not say s1 was unchanged: %+v", rec.Layers)
+	}
 	remote, local := bareRefs(t, p.bare), testkit.GitOut(t, main, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads/")
 
 	var out bytes.Buffer
