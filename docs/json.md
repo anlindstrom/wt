@@ -2109,7 +2109,7 @@ value for results saved before that), and:
 | `worktrees[].stack.layers[].how` | `"ref"` \| `"worktree"` \| `null` | yes | The run's: ref (a branch in no worktree, moved with update-ref guarded by its old tip), worktree (in its worktree, under that worktree's lock: the same guarded update-ref, then its files follow with read-tree -m -u). For a layer in a worktree: update-ref, then read-tree -m -u <old> <new>. |
 | `worktrees[].stack.layers[].held` | string \| null | yes | The run's: why the layer was held, or for needsRecovery what to look at. It is also held for a tip that moved during the run, or another run's lock on its worktree, which holds while that run's process runs, however long, and otherwise until the lock is 30 minutes old. |
 | `worktrees[].stack.layers[].moveCommand` | string \| null | yes | The run's: what moves a held layer by hand. |
-| `worktrees[].stack.layers[].pushCommand` | array of string \| null, at least 1 items | yes | The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run pushes the layers it moved only with --push or a yes to the question, in one atomic push (push, since 1.21.0); without, this is the push to run by hand. Null otherwise. |
+| `worktrees[].stack.layers[].pushCommand` | array of string \| null, at least 1 items | yes | The run's: for a moved layer, its push to its own remote as an argv, with a lease on the commit wt last fetched there. A run pushes the layers it moved only with --push or a yes to the question, in one atomic push (push, since 1.21.0); without, this is the push to run by hand. Since 1.27.0 null once the run's own push sent the layer: it is there only while its push is owed. Null otherwise. |
 | `worktrees[].stack.layers[].noPushReason` | string \| null | yes | The run's: for a moved layer with no safe push command, why: no remote branch of its own yet, or the remote has commits the branch never had. |
 | `worktrees[].stack.layers[].note` | string \| null | yes | The run's: what else happened to a moved layer, such as a checkout of it that landed during its move, at its new tip. |
 | `worktrees[].stack.top` | object | yes | Since 1.17.0: the line's own branch, the top of the stack: the last row of the look's layer table. Not one of layers, which are the branches a run moves after its rebase; the rebase itself moves the top. Its fields: branch, oldTip, commits (from the line's base, its tip included; 0 for a branch with nothing ahead of trunk), subject (its tip's), worktree (where it is checked out). |
@@ -2290,6 +2290,18 @@ last fetched, kept in the run's record, so a resume leases on it too, not on a
 later fetch), and pushes `<new>:refs/heads/<remoteBranch>`. A line's own branch
 with no remote branch yet has a null `old`: its lease says the branch must not
 exist.
+
+Since `sync-run` 1.27.0, when the line's record holds earlier runs of it that
+nobody pushed (`--no-push` runs, or pushes refused), a run's or resume's own push
+sends the whole record as `wt sync push <work> --stack` does, under the same
+checks: each branch over the oldest run's lease, to the newest run's tip, so a
+layer only an earlier run moved is not left behind on the remote. A layer the
+push sent has a null `pushCommand` in `layers[]`: a layer carries one only while
+its push is owed.
+
+A run started or resumed with `--no-push` keeps it for every later `wt sync resume` of it:
+neither `--yes` nor a yes to the question pushes it; only `--push` on the resume
+does.
 
 `branches` lists what was in a push: the moved layers bottom first, then the
 line. A held layer and a layer with nowhere safe to push are not in it: they are
@@ -3188,3 +3200,4 @@ change made it.
 | `sync-run` 1.25.0 | `from` on each branch of [`push`](#push--a-stacks-push) (the run its tip is from), `push.conflicted` (branches the unpushed runs disagree on) and `worktrees[].droppedRecord` (what `wt sync push --stack --forget` dropped) |
 | `sync` 1.16.0 | `likelyStops` and `reworkedOnTrunk` on each worktree: later commits that share a file with what trunk changed, and replayed commits trunk carries under the same subject and author; advice, never a verdict |
 | `sync-run` 1.26.0 | `untouched` among the `result` values of `worktrees[].layerSteps[]`: the run left the layer's tip as it was, so the step did not run (`ran` is false) |
+| `sync-run` 1.27.0 | `stack.layers[].pushCommand` is null once the run's own push sent the layer; a run's or resume's push sends the layers earlier unpushed runs of the line recorded, as [`push`](#push--a-stacks-push) says |

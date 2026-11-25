@@ -4,6 +4,16 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-25 15:35 — A resume never pushes a run started with --no-push
+
+`wt sync resume` keeps the run's `--no-push`, or a resume's, through every stop and retry: `--yes` or a yes
+to the question no longer pushes it, and the resume says so; `--push` on the resume
+still does. A run or resume that pushes a stack now also sends the layers earlier
+unpushed runs of the line moved, under the checks `wt sync push --stack` makes,
+so origin never ends up with the stack half old and half new; when it cannot
+show it sends them all, it pushes nothing. In `--json`, a layer
+the push sent no longer carries a `pushCommand`.
+
 ## 2026-11-25 14:25 — Drop a stack commit trunk already carries, reworked, at its stop
 
 A conflict stop at a commit trunk may carry reworked, under its subject and author,
