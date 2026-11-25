@@ -151,3 +151,51 @@ func TestFoldOntoTrunkAcceptsFixesTriedAgainAtACheckStop(t *testing.T) {
 		})
 	}
 }
+
+// A side branch forked in the middle of s2, above the layer tip where a fix
+// commit was added at a check stop, is carried with the line: its fork plan
+// counts the added commit as the layers' plans do. Undo puts it back.
+func TestFoldOntoTrunkCarriesASideBranchAboveAnAddedFix(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	ctx, s, _ := synccmdtest.CheckedLine(t)
+	main, tmp := ctx.Repo.MainRoot, s.Paths[gittest.StackTmp]
+	b2 := testkit.GitOut(t, main, "rev-parse", s.Tips["s2"]+"~1")
+	side, _ := sideBranch(t, main, "side", b2, "x1.txt", false)
+	opts := foldOntoTrunk()
+	opts.EachCommit = "tips"
+	if _, human, err := synccmdtest.StackRun(t, ctx, gittest.StackTmp, opts); err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	testkit.WriteFile(t, tmp, "fix.txt", "fixed\n")
+	testkit.GitIn(t, tmp, "add", "fix.txt")
+	testkit.GitIn(t, tmp, "commit", "-q", "--no-verify", "-m", "fix: the check")
+	ropts := noResumeAgents()
+	ropts.Push = syncrun.PushNever
+	var human bytes.Buffer
+	err := SyncResume(ctx, gittest.StackTmp, ropts, &human)
+	if err == nil || err.Error() != "not completed: tmp/stack (2 layers held)" {
+		t.Fatalf("resume: err %v, want only the two held layers\n%s", err, human.String())
+	}
+	got := testkit.GitOut(t, main, "rev-parse", "side")
+	if got == side || strings.Contains(human.String(), "side held") {
+		t.Fatalf("side was not carried:\n%s", human.String())
+	}
+	if !strings.Contains(testkit.GitOut(t, main, "log", "--format=%s", "side"), "fix: the check") {
+		t.Errorf("side does not stand on the added fix:\n%s", testkit.GitOut(t, main, "log", "--oneline", "side"))
+	}
+	var undone bytes.Buffer
+	if err := SyncUndo(ctx, gittest.StackTmp, noAgentsUndo(), &undone); err != nil {
+		t.Fatalf("undo: %v\n%s", err, undone.String())
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", "side"); got != side {
+		t.Errorf("side is at %s after the undo, want %s", got, side)
+	}
+	for _, b := range append([]string{gittest.StackTmp}, s.Layers...) {
+		if got := testkit.GitOut(t, main, "rev-parse", b); got != s.Tips[b] {
+			t.Errorf("%s is at %s after the undo, want %s", b, got, s.Tips[b])
+		}
+	}
+}
