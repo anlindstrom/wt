@@ -91,6 +91,8 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 	isFoldAt := map[int]bool{}
 	// cleanFold is the fixups that merge clean onto their target.
 	cleanFold := map[int]bool{}
+	// targetOf is the commit each fixup seen so far folds into.
+	targetOf := map[int]int{}
 	for i, e := range all {
 		isFoldAt[i] = isFold(e.subject)
 	}
@@ -101,6 +103,7 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 		if !ok {
 			continue
 		}
+		targetOf[i] = j
 		cur, ok := folded[j]
 		if !ok {
 			if cur, err = gitEnv(dir, nil, nil, "rev-parse", all[j].sha+"^{tree}"); err != nil {
@@ -138,6 +141,10 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 		atRiskFiles, atRiskLater := map[string]bool{}, map[int]bool{}
 		atRiskHunks := 0
 		var mine []ContextGap
+		// replayed is the trees the commits after the target come to when
+		// the fixups before this one are folded: built once, on first use.
+		var replayed map[int]string
+		replayDone := false
 		for _, c := range conflicts {
 			hunks, err := fixupHunks(dir, e.sha, c.Path)
 			if err != nil {
@@ -189,9 +196,29 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 						// A fixup of a later commit folds into that commit,
 						// so what it adds is that commit's. Any other
 						// fixup's share of it cannot be told.
-						if t, ok := foldTarget(dir, all[:k], later.subject, index); ok && t > j && cleanFold[k] && foldedHas(t) {
+						t, ok := foldTarget(dir, all[:k], later.subject, index)
+						laterFold := ok && t > j && cleanFold[k]
+						if laterFold && foldedHas(t) {
 							needs = t
-						} else if why == "" {
+							break
+						}
+						if laterFold {
+							// The context may be what that fold and the
+							// commits up to a later one come to together.
+							if !replayDone {
+								replayDone = true
+								if replayed, err = replayAfter(dir, all, isFoldAt, targetOf, cleanFold, cur, j, i); err != nil {
+									return nil, nil, err
+								}
+							}
+							if m, found, err := firstReplayedWith(blobs, replayed, j, i, c.Path, h.before); err != nil {
+								return nil, nil, err
+							} else if found {
+								needs = m
+								break
+							}
+						}
+						if why == "" {
 							why = fmt.Sprintf("the context is in the fixup %s, whose own fold wt cannot predict", git.ShortID(later.sha, 7))
 						}
 					}
@@ -211,6 +238,75 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 		gaps = append(gaps, mine...)
 	}
 	return gaps, unchecked, nil
+}
+
+// replayAfter is the tree each ordinary commit between target j and fixup i
+// comes to in the fold, from start, the target's tree: each commit applied
+// in line order, and the clean fixups of it seen before i folded in right
+// behind it, as autosquash orders them. nil when the replay cannot be
+// established: a commit or a fixup of one that does not merge clean, a
+// fixup of one that conflicted, or a fixup of a commit below j seen before i,
+// whose fold changes the trees from j on in a way the replay does not apply.
+func replayAfter(dir string, all []lineCommit, isFoldAt map[int]bool, targetOf map[int]int, cleanFold map[int]bool, start string, j, i int) (map[int]string, error) {
+	for f := 0; f < i; f++ {
+		if t, ok := targetOf[f]; ok && t < j {
+			return nil, nil
+		}
+	}
+	trees := map[int]string{}
+	cur := start
+	apply := func(c int) (bool, error) {
+		parent, err := gitEnv(dir, nil, nil, "rev-parse", all[c].sha+"^^{tree}")
+		if err != nil {
+			return false, err
+		}
+		tree, clean, _, _, err := mergeTree(dir, parent, cur, all[c].sha)
+		if err != nil || !clean {
+			return false, err
+		}
+		cur = tree
+		return true, nil
+	}
+	for m := j + 1; m < i; m++ {
+		if isFoldAt[m] {
+			continue
+		}
+		if ok, err := apply(m); err != nil || !ok {
+			return nil, err
+		}
+		for f := m + 1; f < i; f++ {
+			if t, ok := targetOf[f]; !ok || t != m {
+				continue
+			}
+			if !cleanFold[f] {
+				return nil, nil
+			}
+			if ok, err := apply(f); err != nil || !ok {
+				return nil, err
+			}
+		}
+		trees[m] = cur
+	}
+	return trees, nil
+}
+
+// firstReplayedWith is the first commit after j, before i, whose replayed
+// tree has the hunk's context in path.
+func firstReplayedWith(blobs blobCache, trees map[int]string, j, i int, path string, before []string) (int, bool, error) {
+	for m := j + 1; m < i; m++ {
+		tree, ok := trees[m]
+		if !ok {
+			continue
+		}
+		has, err := blobs.has(tree, path, before)
+		if err != nil {
+			return 0, false, err
+		}
+		if has {
+			return m, true, nil
+		}
+	}
+	return 0, false, nil
 }
 
 // cleanPart is merged, a merge-tree result, with each conflicted file as
