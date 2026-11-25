@@ -45,7 +45,8 @@ func TestFoldLookWithoutOntoShowsTheInPlaceFold(t *testing.T) {
 		"fixup! feat(s4): d1.txt  →",
 		"feat(s4): d1.txt  (layer s4)",
 		"unchanged: s1",
-		"re-pointed: s2, s3, s4, s5",
+		"re-pointed: s2, s4",
+		"held where they are: s3 (",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the look lacks %q:\n%s", want, got)
@@ -68,6 +69,11 @@ func TestFoldLookWithoutOntoShowsTheInPlaceFold(t *testing.T) {
 	for _, b := range []string{"s2", "s4", gittest.StackTmp} {
 		if testkit.GitOut(t, main, "rev-parse", b) == before[b] {
 			t.Errorf("%s did not move, the look said re-pointed", b)
+		}
+	}
+	for _, b := range []string{"s3", "s5"} {
+		if testkit.GitOut(t, main, "rev-parse", b) != before[b] {
+			t.Errorf("%s moved, the look said held", b)
 		}
 	}
 	if out := testkit.GitOut(t, main, "log", "--format=%s", s.Base+".."+gittest.StackTmp, "--grep=^fixup!"); out != "" {

@@ -884,14 +884,7 @@ func (r *RunPlan) triage() (proceed bool, err error) {
 			p.verdict, p.reason = wtsync.Proceed, ""
 		}
 		if st := r.opts.Stack; st != nil {
-			switch {
-			case (st.Autosquash || st.Edit != "") && p.verdict == wtsync.SkipRun:
-				// A fold is onto the line's own base: trunk being there
-				// already is no reason to skip it.
-				p.verdict, p.reason = wtsync.Proceed, ""
-			case p.verdict == wtsync.Proceed && p.a.Own.FastForwards():
-				p.verdict, p.reason = wtsync.RefuseRun, "behind its own remote ("+p.a.Own.Ref+"): the layers were read from the line as it is here; bring it up to date first"
-			}
+			p.verdict, p.reason = stackVerdict(p.a, p.verdict, p.reason, st.Autosquash || st.Edit != "")
 		}
 		own, refused := p.a.Own, p.verdict == wtsync.RefuseRun
 		r.opts.Journal.Set(b, func(jp *syncrun.UpParticipant) {
@@ -1296,6 +1289,20 @@ func (r *RunPlan) passOver(b string, p *participant) bool {
 		return true
 	}
 	return false
+}
+
+// stackVerdict is the verdict of a --stack run for a worktree whose own is v
+// and why: a fold or an edit is onto the line's own base, so trunk being
+// there already is no reason to skip it, and a line behind its own remote is
+// refused, as the layers were read from it as it is here.
+func stackVerdict(a wtsync.Assessment, v wtsync.Verdict, why string, onOwnBase bool) (wtsync.Verdict, string) {
+	switch {
+	case onOwnBase && v == wtsync.SkipRun:
+		return wtsync.Proceed, ""
+	case v == wtsync.Proceed && a.Own.FastForwards():
+		return wtsync.RefuseRun, "behind its own remote (" + a.Own.Ref + "): the layers were read from the line as it is here; bring it up to date first"
+	}
+	return v, why
 }
 
 // request is b's rebase as the run asks for it, and what its line calls

@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-25 09:30 — The look at an in-place fold shows the fold
+
+`wt sync <work> --stack --autosquash` without `--onto` now describes the run it
+previews: which fixups fold into which commits and layers, and which layers stay
+and which get new commits. It no longer prints the rebase onto trunk that run
+never makes (the behind count, `contested`, the predicted stop). With `--onto`
+the look is as before. `--json` gains `fold` (wt sync 1.15.0).
+
 ## 2026-11-25 09:00 — The fold preview names context that comes from an earlier fold
 
 A fixup whose context only appears once a fixup of a later commit is folded in,
