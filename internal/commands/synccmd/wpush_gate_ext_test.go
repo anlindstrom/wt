@@ -3,6 +3,7 @@ package synccmd_test
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -108,4 +109,82 @@ func TestResumeWhoseMovesStopPushesNothing(t *testing.T) {
 		t.Fatalf("s1 did not move before the stop\n%s", out.String())
 	}
 	assertNothingPushed(t, p, remote, out.String())
+}
+
+// A ref-only move (s2 has no worktree) cut between its ref and the rest of
+// its move is recorded as under way, as a worktree move is: the resume after
+// it refuses before anything moves, names s2 and the undo, pushes nothing
+// with --push, keeps the record, and the undo puts every branch back.
+func TestResumeRefusesAfterARefOnlyMoveWasCutShort(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories, a worktree each and a bare remote")
+	}
+	p := newPushedLineWith(t, "conflicts: []\n")
+	main := p.ctx.Repo.MainRoot
+	opts := synccmdtest.NoAgents()
+	opts.Push = syncrun.PushNever
+	if _, human, err := synccmdtest.StackRun(t, p.ctx, gittest.StackTmp, opts); err == nil || !strings.Contains(err.Error(), "needs you") {
+		t.Fatalf("err %v\n%s", err, human)
+	}
+	tmp := p.s.Paths[gittest.StackTmp]
+	testkit.WriteFile(t, tmp, "v.txt", "1.0.6\n")
+	testkit.GitIn(t, tmp, "add", "v.txt")
+	// The finish fails after the moves, so the handover stays for a retry.
+	blocker := wtsync.ResultPrefix + gittest.StackTmp + "/99/x"
+	testkit.GitIn(t, main, "update-ref", blocker, p.s.Tips[gittest.StackTmp])
+	ropts := syncfix.ResumeOptions{VerbOptions: syncrun.VerbOptions{
+		Agents: []agents.Agent{}, Now: func() time.Time { return time.Unix(5, 0) },
+	}, StepOptions: syncrun.StepOptions{Probes: synccmdtest.DockerUp()}}
+	ropts.Push = syncrun.PushNever
+	ropts.Between = func(stage string, m wtsync.LayerMove) error {
+		if stage == wtsync.StageAfterRef && m.Branch == "s2" {
+			return errors.New("interrupted")
+		}
+		return nil
+	}
+	var cut bytes.Buffer
+	_ = syncfix.SyncResume(p.ctx, gittest.StackTmp, ropts, &cut)
+	if got := testkit.GitOut(t, main, "rev-parse", "s2"); got == p.s.Tips["s2"] {
+		t.Fatalf("s2's ref did not move before the cut\n%s", cut.String())
+	}
+	rec, ok, err := wtsync.ReadStackRecord(main, 99)
+	if err != nil || !ok {
+		t.Fatalf("no stack record after the cut: %v\n%s", err, cut.String())
+	}
+	if i := slices.IndexFunc(rec.Moves, func(m wtsync.LayerMove) bool { return m.Branch == "s2" }); i < 0 || rec.Moves[i].Result != wtsync.MoveMoving {
+		t.Fatalf("s2's move is not recorded as under way: %+v", rec.Moves)
+	}
+	testkit.GitIn(t, main, "update-ref", "-d", blocker)
+	refs := testkit.GitOut(t, main, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads/")
+	remote := bareRefs(t, p.bare)
+
+	ropts.Between = nil
+	ropts.Push = syncrun.PushAlways
+	var again bytes.Buffer
+	err = syncfix.SyncResume(p.ctx, gittest.StackTmp, ropts, &again)
+	if err == nil || !strings.Contains(again.String(), "layer s2 has a move that was cut short") || !strings.Contains(again.String(), "wt sync undo tmp/stack") {
+		t.Fatalf("second resume: err %v, want a refusal naming s2 and the undo\n%s", err, again.String())
+	}
+	if got := testkit.GitOut(t, main, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads/"); got != refs {
+		t.Errorf("the second resume moved branches:\nbefore %s\nafter %s", refs, got)
+	}
+	if got := bareRefs(t, p.bare); got != remote {
+		t.Errorf("the second resume pushed:\nbefore %s\nafter %s", remote, got)
+	}
+	if _, ok, _ := wtsync.ReadStackRecord(main, 99); !ok {
+		t.Fatal("the stack record is gone")
+	}
+	uopts := syncfix.UndoOptions{}
+	uopts.Agents = []agents.Agent{}
+	uopts.Now = func() time.Time { return time.Unix(9, 0) }
+	var undone bytes.Buffer
+	if err := syncfix.SyncUndo(p.ctx, gittest.StackTmp, uopts, &undone); err != nil {
+		t.Fatalf("undo: %v\n%s", err, undone.String())
+	}
+	for _, b := range append([]string{gittest.StackTmp}, p.s.Layers...) {
+		if got := testkit.GitOut(t, main, "rev-parse", b); got != p.s.Tips[b] {
+			t.Errorf("%s is at %s after the undo, want %s\n%s", b, got, p.s.Tips[b], undone.String())
+		}
+	}
 }
