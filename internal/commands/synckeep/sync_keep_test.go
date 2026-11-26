@@ -355,6 +355,7 @@ func TestSyncKeepRunNoPushRepeatsThePushCommandUntilItIsPushedByHand(t *testing.
 	t.Parallel()
 	ctx, bump := provisiontest.RunFixture(t, false)
 	testkit.BareOrigin(t, ctx)
+	onMachine(t, ctx, "darwin")
 	opts := keepOpts(syncrun.PushNever)
 	var out bytes.Buffer
 	if err := Run(ctx, opts, &out); err != nil {
@@ -556,23 +557,14 @@ func fakeLaunchctl(t *testing.T) (exe, calls string) {
 	return exe, log
 }
 
-// launchctlFor gives ctx's machine a fakeLaunchctl and returns the file it
-// records its calls in.
-func launchctlFor(t *testing.T, ctx *kit.Context) (calls string) {
-	t.Helper()
-	ctx.Machine.Launchctl, calls = fakeLaunchctl(t)
-	return calls
-}
-
 // start writes the plist under the home's LaunchAgents with what the shell
 // had, bootstraps it and refuses a second time; stop boots it out and
 // removes it, and the table then says stopped.
 func TestSyncKeepStartAndStopDriveLaunchd(t *testing.T) {
 	t.Parallel()
 	ctx, _ := provisiontest.RunFixture(t, false)
-	onMachine(t, ctx, "darwin")
+	calls := onMachine(t, ctx, "darwin")
 	home := ctx.Machine.Home
-	calls := launchctlFor(t, ctx)
 	env := map[string]string{"PATH": "/usr/bin:/bin", "HOME": home, "SSH_AUTH_SOCK": "/tmp/agent.sock"}
 	opts := KeepStartOptions{
 		Every:  time.Hour,
@@ -672,7 +664,6 @@ func TestSyncKeepStartWarnsAboutAnAgentLaunchersKey(t *testing.T) {
 	env := map[string]string{"PATH": "/usr/bin:/bin", "TMPDIR": "/var/folders/xy/T/", "GIT_SSH_COMMAND": "/Users/me/dotfiles/.config/agents/bin/agent-ssh", "FNOX_SECRET": "secret"}
 	ctx, _ := provisiontest.RunFixture(t, false)
 	onMachine(t, ctx, "darwin")
-	launchctlFor(t, ctx)
 	var out bytes.Buffer
 	if err := Start(ctx, KeepStartOptions{Getenv: func(k string) string { return env[k] }}, &out); err != nil {
 		t.Fatalf("err %v\n%s", err, out.String())
@@ -701,8 +692,7 @@ func TestSyncKeepStartWarnsAboutAnAgentLaunchersKey(t *testing.T) {
 func TestSyncKeepStopBootsOutAJobWhosePlistIsGone(t *testing.T) {
 	t.Parallel()
 	ctx, _ := provisiontest.RunFixture(t, false)
-	onMachine(t, ctx, "darwin")
-	calls := launchctlFor(t, ctx)
+	calls := onMachine(t, ctx, "darwin")
 	var out bytes.Buffer
 	if err := Start(ctx, KeepStartOptions{Getenv: func(string) string { return "" }}, &out); err != nil {
 		t.Fatalf("err %v\n%s", err, out.String())
@@ -909,7 +899,6 @@ func TestSyncKeepStatusSaysWhenTheNextPassIsOverdue(t *testing.T) {
 	t.Parallel()
 	ctx, _ := provisiontest.RunFixture(t, false)
 	onMachine(t, ctx, "darwin")
-	launchctlFor(t, ctx)
 	var out bytes.Buffer
 	if err := Start(ctx, KeepStartOptions{Getenv: func(string) string { return "" }, Now: func() time.Time { return keepDay }}, &out); err != nil {
 		t.Fatalf("err %v\n%s", err, out.String())
