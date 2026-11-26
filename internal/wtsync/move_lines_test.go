@@ -1,0 +1,227 @@
+package wtsync
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/anlindstrom/wt/internal/gittest"
+)
+
+// twoHunks is a MoveLine whose source changes lines 2 and 10 of
+// door/refuse.go, two hunks, and a function that commits a move! commit at
+// its top and returns the line's commits.
+func twoHunks(t *testing.T) (*gittest.MoveLine, func(body string) []string) {
+	t.Helper()
+	parent, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := gittest.NewRepo(t, parent, "r")
+	s := gittest.NewMoveLineShaped(t, dir, parent, "", gittest.MoveShape{TwoHunks: true})
+	return s, func(body string) []string {
+		gitIn(t, s.Path, "commit", "-q", "--no-verify", "--allow-empty", "-m", "move! "+gittest.MoveTarget, "-m", body)
+		return strings.Fields(gitIn(t, dir, "rev-list", "--reverse", s.Base+".."+gittest.MoveTmp))
+	}
+}
+
+func fileAt(t *testing.T, dir, rev, path string) string {
+	t.Helper()
+	return gitIn(t, dir, "cat-file", "-p", rev+":"+path)
+}
+
+// A range moves the hunks it overlaps and no other: the part has the source's
+// change to those lines only.
+func TestPlanMovesTakesTheHunksARangeCovers(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name   string
+		ranges []string
+		has    []string
+		lacks  []string
+	}{
+		{name: "the first hunk", ranges: []string{"door/refuse.go:2-2"}, has: []string{"line 2, refused at the door"}, lacks: []string{"line 10, refused"}},
+		{name: "the second hunk", ranges: []string{"door/refuse.go:10-10"}, has: []string{"line 10, refused"}, lacks: []string{"line 2, refused"}},
+		{name: "both, by two ranges", ranges: []string{"door/refuse.go:1-3", "door/refuse.go:10-10"}, has: []string{"line 2, refused", "line 10, refused"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			s, move := twoHunks(t)
+			moves, why, err := PlanMoves(s.Dir, move(gittest.MoveLinesBody(gittest.MoveSource, c.ranges...)))
+			if err != nil || why != "" || len(moves) != 1 {
+				t.Fatalf("moves %+v, refused %q, err %v", moves, why, err)
+			}
+			got := fileAt(t, s.Dir, moves[0].Part, gittest.MovePath)
+			for _, w := range c.has {
+				if !strings.Contains(got, w) {
+					t.Errorf("the part lacks %q:\n%s", w, got)
+				}
+			}
+			for _, w := range c.lacks {
+				if strings.Contains(got, w) {
+					t.Errorf("the part has %q:\n%s", w, got)
+				}
+			}
+			if changed := gitIn(t, s.Dir, "diff-tree", "--no-commit-id", "--name-only", "-r", moves[0].Part); changed != gittest.MovePath {
+				t.Errorf("the part changes %q, want only %s", changed, gittest.MovePath)
+			}
+			if !strings.Contains(moves[0].Line(), c.ranges[0]) {
+				t.Errorf("the move's line %q does not name %s", moves[0].Line(), c.ranges[0])
+			}
+		})
+	}
+}
+
+func TestPlanMovesRefusesLines(t *testing.T) {
+	t.Parallel()
+	src := gittest.MoveSource
+	for _, c := range []struct {
+		name, body string
+		refuse     []string
+	}{
+		{name: "a range that splits a hunk", body: gittest.MoveLinesBody(src, "door/refuse.go:1-1"),
+			refuse: []string{"door/refuse.go:1-1", "door/refuse.go:@@ -1,5 +1,5 @@", "whole"}},
+		{name: "a range in no hunk", body: gittest.MoveLinesBody(src, "door/refuse.go:40-50"),
+			refuse: []string{"door/refuse.go:40-50", "no hunk"}},
+		{name: "a path both whole and by lines", body: gittest.MoveBody(src, "door/refuse.go") + "Move-Lines: door/refuse.go:2-2\n",
+			refuse: []string{"door/refuse.go", "not both"}},
+		{name: "every hunk of every path", body: gittest.MoveLinesBody(src, "door/refuse.go:1-10", "feature.txt:1-1"),
+			refuse: []string{"every hunk of every path", "fixup!"}},
+		{name: "every hunk, one path whole", body: gittest.MoveBody(src, "feature.txt") + "Move-Lines: door/refuse.go:1-10\n",
+			refuse: []string{"every hunk of every path", "fixup!"}},
+		{name: "a path the source does not change", body: gittest.MoveLinesBody(src, "other.txt:1-1"),
+			refuse: []string{"does not change other.txt"}},
+		{name: "a range with no end", body: gittest.MoveLinesBody(src, "door/refuse.go:2"),
+			refuse: []string{"door/refuse.go:2", "<path>:<from>-<to>"}},
+		{name: "a range backwards", body: gittest.MoveLinesBody(src, "door/refuse.go:5-2"),
+			refuse: []string{"door/refuse.go:5-2", "<path>:<from>-<to>"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			s, move := twoHunks(t)
+			moves, why, err := PlanMoves(s.Dir, move(c.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if why == "" {
+				t.Fatalf("not refused: %+v", moves)
+			}
+			for _, w := range c.refuse {
+				if !strings.Contains(why, w) {
+					t.Errorf("refusal %q does not say %q", why, w)
+				}
+			}
+		})
+	}
+}
+
+// Two move! commits that take the same hunk are refused, naming the hunk.
+func TestPlanMovesRefusesAHunkTwoMovesTake(t *testing.T) {
+	t.Parallel()
+	s, move := twoHunks(t)
+	move(gittest.MoveLinesBody(gittest.MoveSource, "door/refuse.go:2-2"))
+	commits := move(gittest.MoveLinesBody(gittest.MoveSource, "door/refuse.go:1-3"))
+	moves, why, err := PlanMoves(s.Dir, commits)
+	if err != nil || why == "" || !strings.Contains(why, "door/refuse.go:@@ -1,5 +1,5 @@") || !strings.Contains(why, "also") {
+		t.Fatalf("moves %+v, refused %q, err %v", moves, why, err)
+	}
+}
+
+// edits is a line on a base with f.txt (lines 1 to 20), g.txt and b.bin: the
+// target "t", then the source "s", which change makes, and a move! commit of
+// ranges at the top.
+func edits(t *testing.T, change func(t *testing.T, dir string), ranges ...string) (string, []string) {
+	t.Helper()
+	parent, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := gittest.NewRepo(t, parent, "r")
+	commit := func(msg ...string) {
+		gitIn(t, dir, "add", "-A")
+		args := []string{"commit", "-q", "--no-verify", "--allow-empty"}
+		for _, m := range msg {
+			args = append(args, "-m", m)
+		}
+		gitIn(t, dir, args...)
+	}
+	gittest.WriteFile(t, filepath.Join(dir, "f.txt"), countedLines(20, nil))
+	gittest.WriteFile(t, filepath.Join(dir, "g.txt"), "g\n")
+	gittest.WriteFile(t, filepath.Join(dir, "b.bin"), "b\x00\n")
+	commit("base")
+	base := gitIn(t, dir, "rev-parse", "HEAD")
+	gittest.WriteFile(t, filepath.Join(dir, "t.txt"), "t\n")
+	commit("t")
+	change(t, dir)
+	gittest.WriteFile(t, filepath.Join(dir, "s.txt"), "s\n")
+	commit("s")
+	commit("move! t", gittest.MoveLinesBody("s", ranges...))
+	return dir, strings.Fields(gitIn(t, dir, "rev-list", "--reverse", base+"..HEAD"))
+}
+
+// countedLines is "line 1" to "line n", without the lines in drop.
+func countedLines(n int, drop map[int]bool) string {
+	var b strings.Builder
+	for i := 1; i <= n; i++ {
+		if !drop[i] {
+			fmt.Fprintf(&b, "line %d\n", i)
+		}
+	}
+	return b.String()
+}
+
+// A hunk with no added line is taken by a range that includes the line after
+// the deletion in the source's version; a range of its context alone splits
+// it.
+func TestPlanMovesTakesADeletionByTheLineAfterIt(t *testing.T) {
+	t.Parallel()
+	change := func(t *testing.T, dir string) {
+		gittest.WriteFile(t, filepath.Join(dir, "f.txt"), strings.Replace(countedLines(20, map[int]bool{15: true}), "line 2\n", "line two\n", 1))
+	}
+	dir, commits := edits(t, change, "f.txt:15-15")
+	moves, why, err := PlanMoves(dir, commits)
+	if err != nil || why != "" || len(moves) != 1 {
+		t.Fatalf("moves %+v, refused %q, err %v", moves, why, err)
+	}
+	if got, want := fileAt(t, dir, moves[0].Part, "f.txt"), strings.TrimRight(countedLines(20, map[int]bool{15: true}), "\n"); got != want {
+		t.Errorf("the part has\n%s\nwant the deletion alone", got)
+	}
+	dir, commits = edits(t, change, "f.txt:14-14")
+	if _, why, err := PlanMoves(dir, commits); err != nil || !strings.Contains(why, "f.txt:@@ -12,7 +12,6 @@") {
+		t.Errorf("refused %q, err %v, want the hunk split", why, err)
+	}
+}
+
+// A deletion at the end of a file, a deleted file and a binary file cannot be
+// taken by lines: the refusal says to move the path whole.
+func TestPlanMovesRefusesWhatLinesCannotName(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name, ranges string
+		change       func(t *testing.T, dir string)
+	}{
+		{name: "a deletion at the end", ranges: "f.txt:19-19", change: func(t *testing.T, dir string) {
+			gittest.WriteFile(t, filepath.Join(dir, "f.txt"), countedLines(19, nil))
+		}},
+		{name: "a deleted file", ranges: "g.txt:1-1", change: func(t *testing.T, dir string) {
+			if err := os.Remove(filepath.Join(dir, "g.txt")); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "a binary file", ranges: "b.bin:1-1", change: func(t *testing.T, dir string) {
+			gittest.WriteFile(t, filepath.Join(dir, "b.bin"), "c\x00\n")
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			dir, commits := edits(t, c.change, c.ranges)
+			moves, why, err := PlanMoves(dir, commits)
+			path, _, _ := strings.Cut(c.ranges, ":")
+			if err != nil || !strings.Contains(why, path) || !strings.Contains(why, "Move-Path") {
+				t.Errorf("moves %+v, refused %q, err %v", moves, why, err)
+			}
+		})
+	}
+}
