@@ -46,10 +46,13 @@
 //   - context.go: ContextGap, a fixup hunk whose context a later commit adds.
 //   - move.go: PlanMoves, a move! commit's part resolved, built and its fold
 //     replayed before the run; KeepMoves and KeptMoves, the part's kept ref.
+//   - movelines.go: LineRange, the hunks of a source's change a Move-Lines
+//     range takes and what the source keeps.
 //
 // Used from outside: AssessOwn, AssessTo, Assessment, Target,
 // FileOutcome, KeyGroup, KeyCounts, LandingList, Dropped, ReplayPlan,
-// ContextGaps, GapsAt, BehindAhead, PlanMoves, PartMove, MoveName.
+// ContextGaps, GapsAt, BehindAhead, PlanMoves, PartMove, MoveName, LineRange,
+// ParseLineRange, MoveWhat.
 //
 // # 3. Rebase driver
 //

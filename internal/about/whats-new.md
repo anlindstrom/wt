@@ -12,6 +12,14 @@ id, status (ok, warn, fail or unknown), detail and fix; exit 1 on any fail. Both
 `wt doctor --all` counts a `.wt-sync.yaml` that does not parse, and a launchd that does
 not answer in 10 s is said so, not reported as a keeper that is not loaded.
 
+## 2026-11-26 10:00 — Move hunks of a file, and `wt sync move --json`
+
+A `move!` commit can move some hunks of a file, not only whole paths:
+`wt sync move <work> --lines <path>:<from>-<to> --from <commit> --into <commit>`,
+lines counted in the file as `--from` leaves it. A range must take each hunk it
+touches whole, or the move is refused and names the hunk.
+`wt sync move --json` prints the commit written, or why none was.
+
 ## 2026-11-25 22:06 — Move part of a commit into an earlier one during a fold
 
 A `move!` commit moves whole paths of a later commit into an earlier one in the same

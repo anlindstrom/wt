@@ -44,6 +44,16 @@ func MoveBody(source string, paths ...string) string {
 	return body
 }
 
+// MoveLinesBody is the body of a move! commit that moves the line ranges,
+// each "<path>:<from>-<to>", from source.
+func MoveLinesBody(source string, ranges ...string) string {
+	body := "Move-From: " + source + "\n"
+	for _, r := range ranges {
+		body += "Move-Lines: " + r + "\n"
+	}
+	return body
+}
+
 // refuseGo is door/refuse.go with line n changed to with, for each pair.
 func refuseGo(changes map[int]string) string {
 	var b strings.Builder
@@ -83,6 +93,12 @@ type MoveShape struct {
 	// v.txt then has more owned lines than the source's, and an owned-line
 	// lift refuses at the source's own stop.
 	LiftAtSource bool
+	// TwoHunks makes the source change line 10 of door/refuse.go too, a hunk
+	// of its own beside line 2's.
+	TwoHunks bool
+	// Lines, with Move, makes the move! commit move these ranges
+	// ("<path>:<from>-<to>") in place of MovePath whole.
+	Lines []string
 }
 
 // NewMoveLine builds a MoveLine in dir, a repository on main with at least
@@ -153,6 +169,9 @@ func NewMoveLineShaped(t testing.TB, dir, wtDir, yaml string, shape MoveShape) *
 	branch("l2")
 	write("feature.txt", "feature\n")
 	refuse(2, "line 2, refused at the door")
+	if shape.TwoHunks {
+		refuse(10, "line 10, refused at the door too")
+	}
 	if shape.LiftAtSource {
 		write("v.txt", "1.0.1\n"+notes)
 	}
@@ -175,7 +194,11 @@ func NewMoveLineShaped(t testing.TB, dir, wtDir, yaml string, shape MoveShape) *
 		commit("fixup! " + MoveTarget)
 	}
 	if shape.Move {
-		commit("move! "+MoveTarget, MoveBody(MoveSource, MovePath))
+		body := MoveBody(MoveSource, MovePath)
+		if len(shape.Lines) > 0 {
+			body = MoveLinesBody(MoveSource, shape.Lines...)
+		}
+		commit("move! "+MoveTarget, body)
 	}
 	s.Tips[MoveTmp] = Git(t, dir, "rev-parse", "HEAD")
 	Git(t, dir, "checkout", "-q", "main")

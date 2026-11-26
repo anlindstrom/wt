@@ -65,7 +65,7 @@ func newSyncCmd() *cobra.Command {
 			"          wt sync undo <work>       put back every ref that run moved\n" +
 			"          wt sync steps <work>      run the steps a run left owed, in\n" +
 			"                                    place, without rebasing onto trunk\n" +
-			"          wt sync move <work> <path>... --from <c> --into <c>\n" +
+			"          wt sync move <work> [<path>...] --from <c> --into <c>\n" +
 			"                                    write a move! commit, which the\n" +
 			"                                    next fold makes\n" +
 			"          wt sync doctor            what a run needs, and --fix / --prune\n" +

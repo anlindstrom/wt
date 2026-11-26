@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-move.v1.json",
+  "x-version": "1.0.0",
+  "title": "wt sync move --json",
+  "description": "What `wt sync move --json` prints on stdout: one object, for a move! commit written or refused. A refusal has a null commit, writes nothing and exits non-zero; a command line wt cannot read prints no object and exits non-zero. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
+  "type": "object",
+  "required": ["schema", "schemaVersion", "command", "work", "branch", "commit", "from", "into", "paths", "lines", "refusal"],
+  "properties": {
+    "schema": { "const": 1, "description": "The major version: a new one only for a change that breaks readers." },
+    "schemaVersion": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$", "description": "The full semantic version of this schema that the output follows." },
+    "command": { "const": "sync move" },
+    "work": { "type": "string", "description": "The worktree as it was named." },
+    "branch": { "type": ["string", "null"], "description": "The worktree's branch, whose top the commit goes on; null when the worktree was not found." },
+    "commit": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["sha", "message"],
+          "properties": {
+            "sha": { "$ref": "#/$defs/sha" },
+            "message": { "type": "string", "description": "The whole message: the move! subject and the Move-From, Move-Path and Move-Lines lines." }
+          }
+        }
+      ],
+      "description": "The move! commit written, now the branch's tip; null when none was written."
+    },
+    "from": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/end" }], "description": "The commit --from names on the line; null when it names none, more than one, or the line was not read." },
+    "into": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/end" }], "description": "The commit --into names on the line; null as for from." },
+    "paths": { "type": "array", "items": { "type": "string" }, "description": "The paths moved whole, as given; for a commit written, each once." },
+    "lines": { "type": "array", "items": { "$ref": "#/$defs/lineRange" }, "description": "The line ranges moved, as given; for a commit written, each once." },
+    "refusal": { "type": ["string", "null"], "description": "Why no commit was written, in the words printed on stderr; null when one was." }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+    "end": {
+      "type": "object",
+      "required": ["sha", "subject"],
+      "properties": {
+        "sha": { "$ref": "#/$defs/sha" },
+        "subject": { "type": "string" }
+      }
+    },
+    "lineRange": {
+      "type": "object",
+      "required": ["path", "from", "to"],
+      "description": "Lines from to to, inclusive, of path as the source commit leaves it: the move takes every hunk of the source's diff of path the range overlaps.",
+      "properties": {
+        "path": { "type": "string" },
+        "from": { "type": "integer", "minimum": 1 },
+        "to": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
