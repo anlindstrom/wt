@@ -65,8 +65,8 @@ var hunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@
 // with the context and hunk boundaries git's defaults give, whatever the
 // user's settings say.
 func diffOfPath(dir, from, to, path string) (fileDiff, error) {
-	out, err := runGit(dir, nil, nil, "--literal-pathspecs", "diff-tree", "-p", "--binary", "--full-index", "--no-renames", "--no-color",
-		"--no-ext-diff", "--no-textconv", "-U3", "--inter-hunk-context=0", "--diff-algorithm=myers", "--src-prefix=a/", "--dst-prefix=b/",
+	out, err := runGit(dir, nil, nil, "-c", "diff.suppressBlankEmpty=false", "--literal-pathspecs", "diff-tree", "-p", "--binary", "--full-index", "--no-renames", "--no-color",
+		"--no-ext-diff", "--no-textconv", "-U3", "--inter-hunk-context=0", "--diff-algorithm=myers", "--indent-heuristic", "--src-prefix=a/", "--dst-prefix=b/",
 		from, to, "--", path)
 	if err != nil {
 		return fileDiff{}, err
@@ -184,6 +184,8 @@ func pickHunks(d fileDiff, ranges []LineRange) (linesPick, string) {
 		return linesPick{}, path + " is a binary file, which has no lines" + whole
 	case d.deleted:
 		return linesPick{}, "the source deletes " + path + ", which no line range can name" + whole
+	case len(d.hunks) == 1 && d.hunks[0].newLen == 0:
+		return linesPick{}, "the source empties " + path + ", which no line range can name" + whole
 	}
 	p := linesPick{diff: d, picked: make([]bool, len(d.hunks))}
 	for _, r := range ranges {
