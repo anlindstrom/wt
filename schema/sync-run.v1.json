@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json",
-  "x-version": "1.28.0",
+  "x-version": "1.29.0",
   "title": "wt sync rebase|resume|undo --json",
   "description": "What a wt sync rebase, resume or undo did. Printed by `wt sync rebase [<work>...] --json`, `wt sync resume <work> --json` and `wt sync undo <work> --json` as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -204,21 +204,22 @@
         "inPlace": { "type": "boolean", "description": "The line is folded on its own base, not moved onto a target." },
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's own base: what an in-place fold rebases onto." },
         "guard": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/foldGuard" }], "description": "The tree guard once the rebase finished: oldTip, newTip, onto (the commit a moving fold's old line was merged onto to compare, null for a fold in place), excludedGlobs (the declared per-layer step paths a changed file matched, left out), conflictAllowed (a moving fold only: files that conflicted in that merge and were resolved at a stop, in which every line of the merge outside the conflicting regions must still be, in order; not step paths), resolvedAtStop (since 1.24.0, only when not empty: paths a person resolved at a conflict stop or changed at a check stop, taken as they left them), outcome (passed or failed) and reason (why it failed, else null). Null while the run has not finished, and for an edit." },
-        "moves": { "type": "array", "items": { "$ref": "#/$defs/foldMove" }, "description": "Since 1.28.0: every move! commit the fold folds, oldest first: the paths of a source commit moved into an earlier target. Empty for a fold with none, and in a resume or undo of a run whose record predates it." }
+        "moves": { "type": "array", "items": { "$ref": "#/$defs/foldMove" }, "description": "Since 1.28.0: every move! commit the fold folds, oldest first: the part of a source commit moved into an earlier target. Empty for a fold with none, and in a resume or undo of a run whose record predates it." }
       }
     },
     "foldMove": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["commit", "target", "targetSubject", "source", "sourceSubject", "paths", "kept"],
-      "description": "Since 1.28.0: one move! commit of a fold in place. The fold takes the source's change to paths, applies it at the target as a fixup after the target's own fixups, and checks at the target and at the source, and drops the move! commit; the source's replay then no longer changes those paths, and the tip's tree is the line's.",
+      "required": ["commit", "target", "targetSubject", "source", "sourceSubject", "paths", "lines", "kept"],
+      "description": "Since 1.28.0: one move! commit of a fold in place. The fold takes the source's change to paths and, since 1.29.0, the hunks of it that lines cover, applies it at the target as a fixup after the target's own fixups, checks at the target and at the source, and drops the move! commit; the source's replay then no longer makes that change, and the tip's tree is the line's.",
       "properties": {
         "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The move! commit, as the line had it." },
         "target": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit the part goes into, as the line had it." },
         "targetSubject": { "type": "string" },
         "source": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit the part comes from, as the line had it." },
         "sourceSubject": { "type": "string" },
-        "paths": { "type": "array", "items": { "type": "string" }, "description": "The part: whole paths of the source's change." },
+        "paths": { "type": "array", "items": { "type": "string" }, "description": "The paths of the source's change moved whole; empty when only line ranges move." },
+        "lines": { "type": "array", "items": { "type": "object", "required": ["path", "from", "to"], "properties": { "path": { "type": "string" }, "from": { "type": "integer", "minimum": 1 }, "to": { "type": "integer", "minimum": 1 } } }, "description": "Since 1.29.0: the line ranges moved of other paths (Move-Lines), lines from to to, inclusive, of path as source leaves it: the hunks of source's diff of path they overlap move. Empty when only whole paths move." },
         "kept": { "type": "string", "description": "The ref the part is kept under, refs/wt-sync-kept/<branch>/<epoch>-move-<n>: a commit whose tree is the target's, with its fixups folded in, plus the part; its parent has that tree without the part, on the target. It stays after the run and after undo." }
       }
     },

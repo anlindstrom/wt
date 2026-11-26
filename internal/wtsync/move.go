@@ -3,6 +3,7 @@ package wtsync
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,44 +13,74 @@ import (
 
 // movePrefix starts the subject of a move! commit: an empty commit naming,
 // after the prefix, the commit the part goes into, and in its body the
-// commit the part comes from (Move-From) and the part, whole paths
-// (Move-Path, one or more). Git's autosquash does not know it; a fold of the
-// line does.
+// commit the part comes from (Move-From) and the part: whole paths
+// (Move-Path) and line ranges taking whole hunks (Move-Lines), one or more
+// of either. Git's autosquash does not know it; a fold of the line does.
 const movePrefix = "move! "
 
 // The body lines of a move! commit, and of the commit the part is kept as.
 const (
 	moveFromKey   = "Move-From:"
 	movePathKey   = "Move-Path:"
+	moveLinesKey  = "Move-Lines:"
 	moveCommitKey = "Move-Commit:"
 	moveIntoKey   = "Move-Into:"
 )
 
 func isMove(subject string) bool { return strings.HasPrefix(subject, movePrefix) }
 
-// PartMove is a move! commit of a line: the part of Source it names, whole
-// paths, folded into Target, which lies below.
+// PartMove is a move! commit of a line: the part of Source it names, folded
+// into Target, which lies below.
 type PartMove struct {
-	Commit        string   `json:"commit"`
-	Subject       string   `json:"subject"`
-	Target        string   `json:"target"`
-	TargetSubject string   `json:"targetSubject"`
-	Source        string   `json:"source"`
-	SourceSubject string   `json:"sourceSubject"`
-	Paths         []string `json:"paths"`
+	Commit        string `json:"commit"`
+	Subject       string `json:"subject"`
+	Target        string `json:"target"`
+	TargetSubject string `json:"targetSubject"`
+	Source        string `json:"source"`
+	SourceSubject string `json:"sourceSubject"`
+	// Paths is the paths moved whole; Lines the ranges moved of others.
+	Paths []string    `json:"paths"`
+	Lines []LineRange `json:"lines,omitempty"`
 	// Part is the commit the run folds into Target: Target's tree with the
 	// part applied, Target its parent. Kept is the ref it is kept under
 	// once a run keeps it (KeepMoves); empty before.
 	Part string `json:"part"`
 	Kept string `json:"kept"`
-	// patch is the source's change to Paths, for the replay to build Part
-	// from.
+	// patch is the source's change that the move takes, for the replay to
+	// build Part from.
 	patch string
+	// changed is every path the source changes, and picks the hunks taken of
+	// each path in Lines.
+	changed []string
+	picks   map[string]linesPick
+}
+
+// touched is every path the move changes, each once.
+func (m PartMove) touched() []string {
+	paths := slices.Clone(m.Paths)
+	for _, r := range m.Lines {
+		if !slices.Contains(paths, r.Path) {
+			paths = append(paths, r.Path)
+		}
+	}
+	return paths
+}
+
+// What is the part as a person reads it: the whole paths, then the ranges.
+func (m PartMove) What() string { return MoveWhat(m.Paths, m.Lines) }
+
+// MoveWhat names whole paths and line ranges as What does.
+func MoveWhat(paths []string, lines []LineRange) string {
+	what := slices.Clone(paths)
+	for _, r := range lines {
+		what = append(what, r.String())
+	}
+	return strings.Join(what, ", ")
 }
 
 // Line is what a person is told about the move.
 func (m PartMove) Line() string {
-	return fmt.Sprintf("move! %s moves %s of %s %q into %s %q", git.ShortID(m.Commit, 7), strings.Join(m.Paths, ", "),
+	return fmt.Sprintf("move! %s moves %s of %s %q into %s %q", git.ShortID(m.Commit, 7), m.What(),
 		git.ShortID(m.Source, 7), oneLinePlan(m.SourceSubject), git.ShortID(m.Target, 7), oneLinePlan(m.TargetSubject))
 }
 
@@ -78,11 +109,13 @@ type moveCommit struct {
 // why is set, and no move returned, when the fold cannot take one: the
 // target or source does not name exactly one commit below it, the target is
 // not below the source, the move! commit changes anything, a path is one the
-// source does not change, the paths are the whole source, the part does not
-// apply at the target, or the fold, replayed in the object store with the
-// part behind its target's fixups, conflicts anywhere, leaves the part in
-// the source or ends in another tree than the line's tip. Nothing but
-// objects in the store is written.
+// source does not change or is named both whole and by lines, a range splits
+// a hunk or selects none, the part is the whole source, two moves take the
+// same hunk, the part does not apply at the target, or the fold, replayed in
+// the object store with the part behind its target's fixups, conflicts
+// anywhere, leaves the source other than what no move takes or ends in
+// another tree than the line's tip. Nothing but objects in the store is
+// written.
 func PlanMoves(dir string, commits []string) ([]PartMove, string, error) {
 	if len(commits) == 0 {
 		return nil, "", nil
@@ -104,6 +137,9 @@ func PlanMoves(dir string, commits []string) ([]PartMove, string, error) {
 	}
 	if len(moves) == 0 {
 		return nil, "", nil
+	}
+	if why := sharedParts(moves); why != "" {
+		return nil, why, nil
 	}
 	if why, err := replayMoves(dir, all, moves); err != nil || why != "" {
 		return nil, why, err
@@ -139,6 +175,7 @@ func planMove(dir string, all []moveCommit, i int) (PartMove, string, error) {
 		return PartMove{}, fmt.Sprintf("%s %q: ", git.ShortID(c.sha, 7), oneLinePlan(c.subject)) + fmt.Sprintf(format, a...), nil
 	}
 	var from []string
+	var badRange error
 	for _, l := range strings.Split(c.body, "\n") {
 		l = strings.TrimSpace(l)
 		if v, ok := strings.CutPrefix(l, moveFromKey); ok {
@@ -146,6 +183,13 @@ func planMove(dir string, all []moveCommit, i int) (PartMove, string, error) {
 		} else if v, ok := strings.CutPrefix(l, movePathKey); ok {
 			if p := strings.TrimSpace(v); p != "" && !slices.Contains(m.Paths, p) {
 				m.Paths = append(m.Paths, p)
+			}
+		} else if v, ok := strings.CutPrefix(l, moveLinesKey); ok {
+			r, err := ParseLineRange(strings.TrimSpace(v))
+			if err != nil {
+				badRange = err
+			} else if !slices.Contains(m.Lines, r) {
+				m.Lines = append(m.Lines, r)
 			}
 		}
 	}
@@ -155,8 +199,15 @@ func planMove(dir string, all []moveCommit, i int) (PartMove, string, error) {
 		return refuse("names no target after move!")
 	case len(from) != 1 || from[0] == "":
 		return refuse("needs one %s line naming the commit the part comes from", moveFromKey)
-	case len(m.Paths) == 0:
-		return refuse("needs a %s line for each path it moves", movePathKey)
+	case badRange != nil:
+		return refuse("its %s %s", moveLinesKey, badRange)
+	case len(m.Paths) == 0 && len(m.Lines) == 0:
+		return refuse("needs a %s line for each path it moves, or a %s line for each range", movePathKey, moveLinesKey)
+	}
+	for _, r := range m.Lines {
+		if slices.Contains(m.Paths, r.Path) {
+			return refuse("%s is named by %s and by %s: a path is moved whole or by lines, not both", r.Path, movePathKey, moveLinesKey)
+		}
 	}
 	t, why, err := resolveOnLine(dir, all[:i], into)
 	if err != nil {
@@ -195,22 +246,109 @@ func planMove(dir string, all []moveCommit, i int) (PartMove, string, error) {
 	if err != nil {
 		return PartMove{}, "", err
 	}
-	paths := strings.Split(strings.TrimRight(changed, "\x00"), "\x00")
-	for _, p := range m.Paths {
-		if !slices.Contains(paths, p) {
-			return refuse("the source %s does not change %s: a move takes whole paths the source changes", git.ShortID(source.sha, 7), p)
+	m.changed = strings.Split(strings.TrimRight(changed, "\x00"), "\x00")
+	for _, p := range m.touched() {
+		if !slices.Contains(m.changed, p) {
+			return refuse("the source %s does not change %s: a move takes what the source changes", git.ShortID(source.sha, 7), p)
 		}
 	}
-	if len(m.Paths) == len(paths) {
-		return refuse("it moves every path the source %s changes: make the source a fixup! of %s instead", git.ShortID(source.sha, 7), git.ShortID(target.sha, 7))
+	m.picks = map[string]linesPick{}
+	for _, p := range m.touched() {
+		if slices.Contains(m.Paths, p) {
+			continue
+		}
+		d, err := diffOfPath(dir, source.sha+"^", source.sha, p)
+		if err != nil {
+			return PartMove{}, "", err
+		}
+		var ranges []LineRange
+		for _, r := range m.Lines {
+			if r.Path == p {
+				ranges = append(ranges, r)
+			}
+		}
+		pick, why := pickHunks(d, ranges)
+		if why != "" {
+			return refuse("%s", why)
+		}
+		m.picks[p] = pick
+		m.patch += pick.patch()
 	}
-	part, err := gitEnv(dir, nil, nil, append([]string{"--literal-pathspecs", "diff-tree", "-p", "--binary", "--full-index", "--no-renames", "--no-color", "--no-ext-diff",
-		source.sha + "^", source.sha, "--"}, m.Paths...)...)
-	if err != nil {
-		return PartMove{}, "", err
+	if takesAll([]PartMove{m}) {
+		what := "every path"
+		if len(m.Lines) > 0 {
+			what = "every hunk of every path"
+		}
+		return refuse("it moves %s the source %s changes: make the source a fixup! of %s instead", what, git.ShortID(source.sha, 7), git.ShortID(target.sha, 7))
 	}
-	m.patch = part
+	if len(m.Paths) > 0 {
+		out, err := runGit(dir, nil, nil, append([]string{"--literal-pathspecs", "diff-tree", "-p", "--binary", "--full-index", "--no-renames", "--no-color", "--no-ext-diff",
+			source.sha + "^", source.sha, "--"}, m.Paths...)...)
+		if err != nil {
+			return PartMove{}, "", err
+		}
+		m.patch += string(out)
+	}
 	return m, "", nil
+}
+
+// takesAll is whether moves, all of one source, leave it nothing: each path it
+// changes is taken whole, or every hunk of it by lines.
+func takesAll(moves []PartMove) bool {
+	for _, p := range moves[0].changed {
+		if slices.ContainsFunc(moves, func(m PartMove) bool { return slices.Contains(m.Paths, p) }) {
+			continue
+		}
+		var picks []linesPick
+		for _, m := range moves {
+			if pick, ok := m.picks[p]; ok {
+				picks = append(picks, pick)
+			}
+		}
+		if len(picks) == 0 || picks[0].diff.newMode != "" {
+			return false
+		}
+		for i := range picks[0].diff.hunks {
+			if !slices.ContainsFunc(picks, func(pick linesPick) bool { return pick.picked[i] }) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// sharedParts is why the moves cannot be made together, "" when they can: two
+// of one source take the same hunk, or, with lines among them, they leave the
+// source nothing between them.
+func sharedParts(moves []PartMove) string {
+	bySource := map[string][]PartMove{}
+	for _, m := range moves {
+		for _, o := range bySource[m.Source] {
+			for _, p := range slices.Sorted(maps.Keys(m.picks)) {
+				pick := m.picks[p]
+				other, byLines := o.picks[p]
+				for i, h := range pick.diff.hunks {
+					if pick.picked[i] && (slices.Contains(o.Paths, p) || byLines && other.picked[i]) {
+						return fmt.Sprintf("%s: it takes the hunk %s:%s, which %s also takes", m.Line(), p, h.header, git.ShortID(o.Commit, 7))
+					}
+				}
+			}
+			for _, p := range slices.Sorted(maps.Keys(o.picks)) {
+				if pick := o.picks[p]; slices.Contains(m.Paths, p) {
+					i := slices.Index(pick.picked, true)
+					return fmt.Sprintf("%s: it takes the hunk %s:%s, which %s also takes", m.Line(), p, pick.diff.hunks[i].header, git.ShortID(o.Commit, 7))
+				}
+			}
+		}
+		bySource[m.Source] = append(bySource[m.Source], m)
+	}
+	for _, m := range moves {
+		of := bySource[m.Source]
+		if len(of) > 1 && slices.ContainsFunc(of, func(o PartMove) bool { return len(o.Lines) > 0 }) && takesAll(of) {
+			return fmt.Sprintf("%s: together the move! commits take every hunk of every path the source %s changes: make the source a fixup! instead", m.Line(), git.ShortID(m.Source, 7))
+		}
+	}
+	return ""
 }
 
 // resolveOnLine is the commit of earlier name names: the one commit its id
@@ -257,7 +395,7 @@ func applyPart(dir, tree, patch string) (string, bool, error) {
 	if _, err := gitEnv(dir, env, nil, "read-tree", tree); err != nil {
 		return "", false, err
 	}
-	if _, code, err := gitEnvAllow(dir, env, strings.NewReader(patch+"\n"), 1, "apply", "--cached", "--binary", "-"); err != nil {
+	if _, code, err := gitEnvAllow(dir, env, strings.NewReader(patch), 1, "apply", "--cached", "--binary", "-"); err != nil {
 		return "", false, err
 	} else if code != 0 {
 		return "", false, nil
@@ -272,8 +410,8 @@ func applyPart(dir, tree, patch string) (string, bool, error) {
 // move's part last in its target's group, and the move! commits left out.
 // why is set when any of them does not merge clean, when a part does not
 // apply at its target as the target's fixups leave it, when a source's
-// replay still changes its moved paths, or when the tip's tree is not the
-// line's. Each move's Part is built there (buildPart).
+// replay changes a path moved whole, or of a path moved by lines other than
+// the hunks left to it, or when the tip's tree is not the line's. Each move's Part is built there (buildPart).
 func replayMoves(dir string, all []moveCommit, moves []PartMove) (string, error) {
 	lc := make([]lineCommit, len(all))
 	index := map[string]int{}
@@ -317,34 +455,44 @@ func replayMoves(dir string, all []moveCommit, moves []PartMove) (string, error)
 	var group func(i int) (string, error)
 	group = func(i int) (string, error) {
 		c := all[i]
-		// What the source's replay finds of its moved paths: the part is
-		// already there, so the replay must leave them as they are.
-		var before []treeEntry
+		// A path moved whole is there already, so the replay must leave it as
+		// it is; one moved by lines keeps the hunks no move takes.
+		var whole []string
+		byLines := map[string][]linesPick{}
 		for _, m := range sources[c.sha] {
-			for _, p := range m.Paths {
-				e, err := entryAt(dir, cur, p)
-				if err != nil {
-					return "", err
-				}
-				before = append(before, e)
+			whole = append(whole, m.Paths...)
+			for p, pick := range m.picks {
+				byLines[p] = append(byLines[p], pick)
 			}
 		}
+		var before []treeEntry
+		for _, p := range whole {
+			e, err := entryAt(dir, cur, p)
+			if err != nil {
+				return "", err
+			}
+			before = append(before, e)
+		}
+		below := cur
 		if ok, err := step(c.sha); err != nil {
 			return "", err
 		} else if !ok {
 			return moveConflict(all, moves, i), nil
 		}
-		k := 0
-		for _, m := range sources[c.sha] {
-			for _, p := range m.Paths {
-				got, err := entryAt(dir, cur, p)
-				if err != nil {
-					return "", err
-				}
-				if got != before[k] {
-					return fmt.Sprintf("%s: the source's replay still changes %s once the part is below it", m.Line(), p), nil
-				}
-				k++
+		for k, p := range whole {
+			got, err := entryAt(dir, cur, p)
+			if err != nil {
+				return "", err
+			}
+			if got != before[k] {
+				return fmt.Sprintf("%s: the source's replay still changes %s once the part is below it", sources[c.sha][0].Line(), p), nil
+			}
+		}
+		for _, p := range slices.Sorted(maps.Keys(byLines)) {
+			if ok, err := keepsTheRest(dir, below, cur, p, byLines[p]); err != nil {
+				return "", err
+			} else if !ok {
+				return fmt.Sprintf("%s: the source's replay would change %s other than by the hunks left to it", sources[c.sha][0].Line(), p), nil
 			}
 		}
 		for _, f := range folds[i] {
@@ -410,9 +558,7 @@ func buildPart(dir string, all []moveCommit, index map[string]int, m *PartMove, 
 	}
 	msg := fmt.Sprintf("wt sync: the part %s moves into %s\n\n%s %s\n%s %s\n%s %s\n", git.ShortID(m.Commit, 7), git.ShortID(m.Target, 7),
 		moveCommitKey, m.Commit, moveFromKey, m.Source, moveIntoKey, m.Target)
-	for _, p := range m.Paths {
-		msg += movePathKey + " " + p + "\n"
-	}
+	msg += partLines(m.Paths, m.Lines)
 	m.Part, err = gitEnv(dir, nil, strings.NewReader(msg), "commit-tree", tree, "-p", base)
 	return "", err
 }
@@ -488,9 +634,15 @@ func KeptMoves(mainRoot, branch string, epoch int64) ([]PartMove, error) {
 				m.Target = v
 			case movePathKey:
 				m.Paths = append(m.Paths, v)
+			case moveLinesKey:
+				r, err := ParseLineRange(v)
+				if err != nil {
+					return nil, fmt.Errorf("the kept part %s does not say what it moves: %w", f[0], err)
+				}
+				m.Lines = append(m.Lines, r)
 			}
 		}
-		if m.Commit == "" || m.Target == "" || len(m.Paths) == 0 {
+		if m.Commit == "" || m.Target == "" || len(m.touched()) == 0 {
 			return nil, errors.New("the kept part " + f[0] + " does not say what it moves")
 		}
 		found = append(found, kept{n, m})
@@ -530,14 +682,22 @@ func MoveName(dir string, commits []string, name string) (sha, write, why string
 	return c.sha, c.sha, "", nil
 }
 
-// MoveMessage is the message of a move! commit that moves paths of the
-// commit from names into the commit into names.
-func MoveMessage(into, from string, paths []string) string {
-	msg := movePrefix + into + "\n\n" + moveFromKey + " " + from + "\n"
+// MoveMessage is the message of a move! commit that moves paths, and the
+// ranges lines, of the commit from names into the commit into names.
+func MoveMessage(into, from string, paths []string, lines []LineRange) string {
+	return movePrefix + into + "\n\n" + moveFromKey + " " + from + "\n" + partLines(paths, lines)
+}
+
+// partLines is the body lines naming a part.
+func partLines(paths []string, lines []LineRange) string {
+	var b strings.Builder
 	for _, p := range paths {
-		msg += movePathKey + " " + p + "\n"
+		fmt.Fprintf(&b, "%s %s\n", movePathKey, p)
 	}
-	return msg
+	for _, r := range lines {
+		fmt.Fprintf(&b, "%s %s\n", moveLinesKey, r)
+	}
+	return b.String()
 }
 
 // WriteMove commits msg as an empty move! commit on line's tip, checks the

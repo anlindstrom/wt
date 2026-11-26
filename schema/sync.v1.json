@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json",
-  "x-version": "1.17.0",
+  "x-version": "1.18.0",
   "title": "wt sync --json",
   "description": "What a rebase onto trunk would do to every worktree of a repository, as `wt sync --json` prints it on stdout: one overview object, or with --all, --roots or --profile an array of them, one per repository. It fetches trunk and each worktree branch's own remote (unless --no-fetch) and writes nothing else. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "oneOf": [
@@ -231,7 +231,7 @@
       "required": ["base", "refusal", "folds", "unchanged", "repointed", "held"],
       "properties": {
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's own base, which the fold stays on: stack.base." },
-        "refusal": { "type": ["string", "null"], "description": "Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, a declaration the line cannot take, or (since 1.17.0) a move! commit the fold cannot take: its target or source does not name one commit below it, a path the source does not change, the whole source, a part that does not apply at the target or a fold that does not merge clean or would end in another tree with it. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty." },
+        "refusal": { "type": ["string", "null"], "description": "Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, a declaration the line cannot take, or (since 1.17.0) a move! commit the fold cannot take: its target or source does not name one commit below it, a path the source does not change, a range that splits a hunk or selects none (since 1.18.0), a hunk two move! commits take, the whole source, a part that does not apply at the target or a fold that does not merge clean or would end in another tree with it. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty." },
         "folds": {
           "type": "array",
           "description": "Every fixup!, squash! or amend! commit of the line with the commit it folds into, and since 1.17.0 every move! commit with the commit its part goes into, oldest first. A fixup whose name finds no commit, or more than one, is left out: the run refuses it.",
@@ -251,16 +251,17 @@
                   { "type": "null" },
                   {
                     "type": "object",
-                    "required": ["source", "sourceSubject", "sourceLayer", "paths"],
+                    "required": ["source", "sourceSubject", "sourceLayer", "paths", "lines"],
                     "properties": {
                       "source": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit the part comes from." },
                       "sourceSubject": { "type": "string" },
                       "sourceLayer": { "type": "string", "description": "The layer branch the source is a commit of, or the line's own branch above the top layer." },
-                      "paths": { "type": "array", "items": { "type": "string" }, "description": "The part: whole paths of the source's change." }
+                      "paths": { "type": "array", "items": { "type": "string" }, "description": "The paths of the source's change moved whole; empty when only line ranges move." },
+                      "lines": { "type": "array", "items": { "type": "object", "required": ["path", "from", "to"], "properties": { "path": { "type": "string" }, "from": { "type": "integer", "minimum": 1 }, "to": { "type": "integer", "minimum": 1 } } }, "description": "Since 1.18.0: the line ranges moved of other paths (Move-Lines), lines from to to, inclusive, of path as source leaves it: the hunks of source's diff of path they overlap move. Empty when only whole paths move." }
                     }
                   }
                 ],
-                "description": "Since 1.17.0: for kind move, what the move! commit moves into target: whole paths of source, which then no longer changes them. Null for kind fold."
+                "description": "Since 1.17.0: for kind move, what the move! commit moves into target: whole paths and, since 1.18.0, line ranges of source, which then no longer changes them. Null for kind fold."
               }
             }
           }

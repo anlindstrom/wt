@@ -62,12 +62,14 @@ const (
 	foldKindMove = "move"
 )
 
-// FoldLookMove is what a move! commit moves: whole paths of Source.
+// FoldLookMove is what a move! commit moves: whole paths of Source, and line
+// ranges of others, in Source's own line numbers.
 type FoldLookMove struct {
-	Source        string   `json:"source"`
-	SourceSubject string   `json:"sourceSubject"`
-	SourceLayer   string   `json:"sourceLayer"`
-	Paths         []string `json:"paths"`
+	Source        string             `json:"source"`
+	SourceSubject string             `json:"sourceSubject"`
+	SourceLayer   string             `json:"sourceLayer"`
+	Paths         []string           `json:"paths"`
+	Lines         []wtsync.LineRange `json:"lines"`
 }
 
 // foldsInPlace is whether a look with these options and target describes a
@@ -146,7 +148,8 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, alone bool) (
 	for _, m := range moves {
 		fl.Folds = append(fl.Folds, FoldLookPair{Kind: foldKindMove, Fixup: m.Commit, FixupSubject: m.Subject, FixupLayer: layerAt(at[m.Commit]),
 			Target: m.Target, TargetSubject: m.TargetSubject, TargetLayer: layerAt(at[m.Target]),
-			Move: &FoldLookMove{Source: m.Source, SourceSubject: m.SourceSubject, SourceLayer: layerAt(at[m.Source]), Paths: m.Paths}})
+			Move: &FoldLookMove{Source: m.Source, SourceSubject: m.SourceSubject, SourceLayer: layerAt(at[m.Source]),
+				Paths: append([]string{}, m.Paths...), Lines: append([]wtsync.LineRange{}, m.Lines...)}})
 		lowest = min(lowest, at[m.Target])
 	}
 	slices.SortStableFunc(fl.Folds, func(a, b FoldLookPair) int { return at[a.Fixup] - at[b.Fixup] })
@@ -190,7 +193,7 @@ func printFoldLook(w io.Writer, fl *FoldLook) {
 			git.ShortID(p.Target, 7), kit.OneLine(p.TargetSubject), p.TargetLayer)
 		if m := p.Move; m != nil {
 			moves++
-			fmt.Fprintf(w, "      moves %s of %s %s  (layer %s)\n", strings.Join(m.Paths, ", "), git.ShortID(m.Source, 7), kit.OneLine(m.SourceSubject), m.SourceLayer)
+			fmt.Fprintf(w, "      moves %s of %s %s  (layer %s)\n", wtsync.MoveWhat(m.Paths, m.Lines), git.ShortID(m.Source, 7), kit.OneLine(m.SourceSubject), m.SourceLayer)
 		}
 	}
 	if moves > 0 {

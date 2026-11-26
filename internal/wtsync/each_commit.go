@@ -237,7 +237,7 @@ func (d *driver) planTipChecks() error {
 	// the target is then checked with the part, as with any fixup.
 	d.moveSources = nil
 	for _, m := range d.moves {
-		if called := cfg.calledBy(m.Paths); len(called) > 0 {
+		if called := cfg.calledBy(m.touched()); len(called) > 0 {
 			d.checks = append(d.checks, m.Part)
 			d.callSteps[m.Part] = called
 			if d.req.EachCommit == EachTargets && !slices.Contains(d.moveSources, m.Source) {

@@ -414,39 +414,55 @@ it gave. Every new layer tip must descend from the destination.
 
 #### Moving part of a commit into an earlier one
 
-A `move!` commit moves whole paths of one commit of the line (the source) into
-an earlier one (the target) in the same fold, where a `fixup!` can only move a
-whole commit. It is an empty commit at the top of the line, written by hand or by
-`wt sync move <work> <path>... --from <source> --into <target>`:
+A `move!` commit moves part of one commit of the line (the source) into an
+earlier one (the target) in the same fold, where a `fixup!` can only move a
+whole commit. The part is whole paths, hunks of a file chosen by line ranges, or
+both. It is an empty commit at the top of the line, written by hand or by
+`wt sync move <work> [<path>...] [--lines <path>:<from>-<to>] --from <source> --into <target>`:
 
 ```
 move! feat: refusals
 
 Move-From: feat: the door
 Move-Path: door/refuse.go
+Move-Lines: door/door.go:12-20
 ```
 
 Each of target and source is a commit id or a whole subject that exactly one
-commit of the line has; a shared subject is refused, naming the commits. The
-fold, `wt sync rebase <work> --stack --autosquash --each-commit=targets`, applies
-the source's change to those paths at the target, after the target's own
+commit of the line has; a shared subject is refused, naming the commits. A path
+is named by `Move-Path` (the source's whole change to it) or by `Move-Lines`
+(some of its hunks), never both; each may be repeated.
+
+A `Move-Lines` range counts lines in the file as the source leaves it,
+inclusive, and takes every hunk of the source's diff of that path it overlaps,
+with git's default three lines of context (`git diff <source>^ <source> --
+<path>`). It must cover each such hunk's changed lines whole: a range that stops
+inside a hunk is refused, naming the hunk (`door/door.go:@@ -10,7 +10,9 @@`)
+and the range. A hunk that only removes lines is named by the line after the
+removal. A removal at the end of a file, a deleted or emptied file, a binary file and a
+file whose type the source changes have no line to name: move the path whole. A
+change of a file's mode stays with the source.
+
+The fold, `wt sync rebase <work> --stack --autosquash --each-commit=targets`,
+applies that part of the source's change at the target, after the target's own
 fixups, as a fixup of a commit it builds on the target and keeps under
 `refs/wt-sync-kept/<branch>/<epoch>-move-<n>`; the source's replay then no
-longer changes them, and the `move!` commit is dropped. The tip's tree stays the
-line's, so the content check holds as for any fold in place, and undo puts back
-every layer.
+longer makes that part of the change, keeps the rest of it, and the `move!`
+commit is dropped. The tip's tree stays the line's, so the content check holds
+as for any fold in place, and undo puts back every layer.
 
 Before anything moves the run replays the whole fold in the object store and
 refuses, naming the cause: a target or source that does not name one commit
 below the `move!` commit, a target not below the source, a `move!` commit that
-changes anything, a path the source does not change, every path of the source
-(make it a `fixup!` instead), a part that does not apply at the target (naming
-the first commit in between that carries its context), any commit of the fold
-that does not merge clean with the part moved, a source whose replay still
-changes the paths, and a fold that would end in another tree. It needs
-`--each-commit=targets`, so a part that builds only with code from a commit in
-between fails the check at the target's layer; `--onto` and `--edit` are
-refused for now, and so are parts of a file. `wt sync <work> --stack
+changes anything, a path the source does not change, a range that splits a hunk
+or selects none, every hunk of every path the source changes (make it a
+`fixup!` instead), a hunk two `move!` commits take, a part that does not apply
+at the target (naming the first commit in between that carries its context),
+any commit of the fold that does not merge clean with the part moved, a source
+whose replay would change anything but what the moves leave it, and a fold that
+would end in another tree. It needs `--each-commit=targets`, so a part that
+builds only with code from a commit in between fails the check at the target's
+layer; `--onto` and `--edit` are refused for now. `wt sync <work> --stack
 --autosquash` lists each move, or the refusal, and moves nothing.
 
 #### A fixup moved ahead of its context

@@ -194,8 +194,8 @@ type StackFold struct {
 	Moves []FoldMove `json:"moves"`
 }
 
-// FoldMove is one move! commit of a fold: the paths of Source it folds into
-// Target, and the ref the part is kept under.
+// FoldMove is one move! commit of a fold: the whole paths and line ranges of
+// Source it folds into Target, and the ref the part is kept under.
 type FoldMove struct {
 	Commit        string   `json:"commit"`
 	Target        string   `json:"target"`
@@ -203,7 +203,9 @@ type FoldMove struct {
 	Source        string   `json:"source"`
 	SourceSubject string   `json:"sourceSubject"`
 	Paths         []string `json:"paths"`
-	Kept          string   `json:"kept"`
+	// Lines is the ranges of other paths moved, in Source's own line numbers.
+	Lines []wtsync.LineRange `json:"lines"`
+	Kept  string             `json:"kept"`
 }
 
 // FoldGuard is what the guard compared and how it came out.
@@ -1094,7 +1096,7 @@ func FoldMoves(moves []wtsync.PartMove) []FoldMove {
 	out := make([]FoldMove, 0, len(moves))
 	for _, m := range moves {
 		out = append(out, FoldMove{Commit: m.Commit, Target: m.Target, TargetSubject: m.TargetSubject, Source: m.Source,
-			SourceSubject: m.SourceSubject, Paths: m.Paths, Kept: m.Kept})
+			SourceSubject: m.SourceSubject, Paths: nonNil(m.Paths), Lines: append([]wtsync.LineRange{}, m.Lines...), Kept: m.Kept})
 	}
 	return out
 }
