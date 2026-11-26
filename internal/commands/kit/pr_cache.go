@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/anlindstrom/wt/internal/github"
 )
 
@@ -174,24 +176,19 @@ func writeThroughRename(path string, data []byte) error {
 
 // prCacheWritable reports what stops the cache being written, or nil when it
 // can be: `wt doctor` is where a listing that silently asks GitHub every time
-// becomes visible. It writes what the file already holds, so a cache in use
-// is left exactly as it was.
+// becomes visible. It writes nothing: a write goes through a rename, so it
+// needs the git dir writable, and a cache already there to be a readable file.
 func prCacheWritable(ctx *Context) error {
 	path := PRCachePath(ctx)
 	if path == "" {
 		return errors.New("this repository's git dir cannot be resolved")
 	}
-	data, err := os.ReadFile(path)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		// Nothing cached yet: write one and take it away again, so asking the
-		// question leaves the repository as it was.
-		if err := writeThroughRename(path, []byte("{}")); err != nil {
-			return err
-		}
-		return os.Remove(path)
-	case err != nil:
+	if _, err := os.ReadFile(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	return writeThroughRename(path, data)
+	dir := filepath.Dir(path)
+	if err := unix.Access(dir, unix.W_OK|unix.X_OK); err != nil {
+		return &fs.PathError{Op: "write", Path: dir, Err: err}
+	}
+	return nil
 }
