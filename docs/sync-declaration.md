@@ -243,7 +243,7 @@ plan file and the end of the run say which mode ran, and so does `--json`
 way.
 
 Use `targets` for a fold in place (`--stack --autosquash`, without `--onto`)
-over a long line: there the commits that are not targets keep their own
+over a long line, and for any fold with a `move!` commit: there the commits that are not targets keep their own
 changes, so the targets and the tips are the commits whose change differs, and
 a fold that only touches string literals compiles about once per layer plus
 once per target, not once per commit. At a target the check is due when the
@@ -253,8 +253,9 @@ commit a per-layer step folds generated output into is a target too, and the
 rechecks after such a fold are at the targets and the tips only. The commits
 between are not checked and not owed, as under `tips`, and `retry`, a script the
 commit predates and `--allow-owed` work as there. `targets` is refused, before
-anything moves, for a run that is not an in-place fold (no `--autosquash`,
-`--onto`, or `--edit`): use `tips` there. A resume does not know the targets
+anything moves, for a run that is neither an in-place fold nor a fold with a
+`move!` commit (no `--autosquash`, `--onto` on a line without a `move!`, or
+`--edit`): use `tips` there. A resume does not know the targets
 of the run before it, so its rechecks after a per-layer fold cover every
 commit the fold rewrote, and it says so.
 
@@ -448,8 +449,8 @@ applies that part of the source's change at the target, after the target's own
 fixups, as a fixup of a commit it builds on the target and keeps under
 `refs/wt-sync-kept/<branch>/<epoch>-move-<n>`; the source's replay then no
 longer makes that part of the change, keeps the rest of it, and the `move!`
-commit is dropped. The tip's tree stays the line's, so the content check holds
-as for any fold in place, and undo puts back every layer.
+commit is dropped. In place the tip's tree stays the line's, so the content
+check holds as for any fold in place, and undo puts back every layer.
 
 Before anything moves the run replays the whole fold in the object store and
 refuses, naming the cause: a target or source that does not name one commit
@@ -464,8 +465,21 @@ would change anything but what the moves leave it, and a fold that would end in
 another tree. Several `move!` commits into different targets may take all of a
 source between them; the fold then drops it as empty. It needs `--each-commit=targets`, so a part that
 builds only with code from a commit in between fails the check at the target's
-layer; `--onto` and `--edit` are refused for now. `wt sync <work> --stack
---autosquash` lists each move, or the refusal, and moves nothing.
+layer; `--edit` is refused. `wt sync <work> --stack --autosquash` lists each
+move, or the refusal, and moves nothing.
+
+With `--onto <ref>` (and `--upstream`, if given) the same fold replays the line
+onto `<ref>`, and every rule above holds there: the part applies at the target
+as replayed onto `<ref>`, no commit conflicts, and the tip must be the tree the
+same replay gives without the `move!` commits, which the object store shows
+before anything moves and the content check holds again at the end, with what
+you amended at a check stop merged in. Also refused, naming the commit: a line
+that does not replay clean onto `<ref>`; a `<ref>` that already carries a
+move's target or source, by patch, by history or by content (a dropped target
+would put the part in the commit below); and a file a lifting rule claims that
+both `<ref>` and the line changed. For each, drop the `move!` commit, rebase
+onto `<ref>`, then write the move again. `wt sync <work> --stack --autosquash
+--onto <ref>` says the same and moves nothing.
 
 #### A fixup moved ahead of its context
 

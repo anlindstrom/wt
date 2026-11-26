@@ -46,7 +46,8 @@ func newSyncRebaseCmd() *cobra.Command {
 			"--each-commit=targets checks at the tips and at each commit a fixup,\n" +
 			"squash or amend! folded into: for a fold in place (--stack --autosquash,\n" +
 			"without --onto) over a long line, where only the targets and the tips\n" +
-			"differ from what was checked before; it is refused for any other run.\n" +
+			"differ from what was checked before, and for a fold with a move! commit,\n" +
+			"in place or with --onto; it is refused for any other run.\n" +
 			"--each-commit=off runs no check. all is the default. A resume goes on\n" +
 			"with its run's mode. With --edit, tips is refused.\n\n" +
 			"A step with a retry: command runs it at the same commit when its run\n" +
@@ -263,11 +264,14 @@ func newSyncRebaseCmd() *cobra.Command {
 			"A move! commit (wt sync move --help) moves part of one commit, whole\n" +
 			"paths or hunks, into an earlier one in the same fold: the part is applied\n" +
 			"at the target after its own fixups, the later commit keeps only the rest,\n" +
-			"and the move! commit is dropped. It needs a fold in place with\n" +
-			"--each-commit=targets, so the checks run at the target and the source.\n" +
+			"and the move! commit is dropped. It needs --each-commit=targets, so the\n" +
+			"checks run at the target and the source. With --onto the tip must be the\n" +
+			"tree the same run gives without the move! commits; a new base that carries\n" +
+			"a move's target or source, changes the part's context or conflicts with\n" +
+			"the line refuses the run: rebase without the move! commit first.\n" +
 			"Before anything moves the fold is replayed in the object store, and the\n" +
 			"run is refused if the part does not apply at the target, a commit in\n" +
-			"between conflicts with it, or the tip's tree would change; the part is\n" +
+			"between conflicts with it, or the tip's tree would not be that one; the part is\n" +
 			"kept under refs/wt-sync-kept/<branch>/<epoch>-move-<n>.\n\n" +
 			"--stack --edit <rev> moves a change down the line to an earlier commit:\n" +
 			"the fix a review asks of a low commit that a later one already carries.\n" +
@@ -294,6 +298,7 @@ func newSyncRebaseCmd() *cobra.Command {
 			"  wt sync rebase tmp/stack --stack --layer ui --layer api   # two layers, as repeated flags\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash  # fold review fixes in place\n" +
 			"  wt sync rebase tmp/stack --stack --autosquash --onto main  # fold and move\n" +
+			"  wt sync rebase tmp/stack --stack --autosquash --onto main --each-commit=targets  # a move! commit, onto main\n" +
 			"  wt sync rebase tmp/stack --stack --no-side-branches  # move the line, leave branches cut from it\n" +
 			"  wt sync rebase tmp/stack --stack --edit 1a2b3c4  # stop there to amend\n" +
 			"  wt sync rebase login-crash --force --allow-diverged  # past session, origin\n" +
