@@ -19,7 +19,9 @@ func newSyncMoveCmd() *cobra.Command {
 			"both. The fold makes the move: wt sync rebase <work> --stack\n" +
 			"--autosquash --each-commit=targets applies the part at the earlier\n" +
 			"commit, after its own fixups, takes it out of the later one, and drops\n" +
-			"the move! commit. The tip's tree stays the line's.\n\n" +
+			"the move! commit. In place the tip's tree stays the line's; with\n" +
+			"--onto <ref> the line is replayed onto <ref> too, and the tip is the tree\n" +
+			"that gives without the move.\n\n" +
 			"A range is <path>:<from>-<to>: line numbers, inclusive, in the file as\n" +
 			"--from leaves it. It takes every hunk of --from's diff of that file it\n" +
 			"overlaps (git diff, three lines of context), and must cover each one's\n" +

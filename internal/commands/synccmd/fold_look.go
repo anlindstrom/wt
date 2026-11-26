@@ -13,11 +13,14 @@ import (
 	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
-// FoldLook is what a fold with no --onto does to the line, read from the
-// line as it is: the run folds in place, on the line's own base, and moves
-// nothing onto trunk. Null in --json for any other look.
+// FoldLook is what a fold does to the line, read from the line as it is: with
+// no --onto the run folds in place, on the line's own base, and moves nothing
+// onto trunk; with --onto it is made only for a line with a move! commit,
+// replayed onto the target. Null in --json for any other look.
 type FoldLook struct {
-	// Base is the line's own base the fold stays on.
+	// onto is the target of a fold that moves the line, nil in place.
+	onto *OntoTarget
+	// Base is the line's own base, which a fold in place stays on.
 	Base string `json:"base"`
 	// Refusal is why the run refuses the fold, the words it refuses with;
 	// null when it does not. When set, Folds, Unchanged, Repointed and Held
@@ -72,23 +75,39 @@ type FoldLookMove struct {
 	Lines         []wtsync.LineRange `json:"lines"`
 }
 
-// foldsInPlace is whether a look with these options and target describes a
-// fold in place, as a run folds unless --onto names where the line goes.
-func foldsInPlace(look *StackLook, target *OntoTarget) bool {
-	return look != nil && look.Autosquash && target == nil
-}
-
-// foldLookAt reads the stack of look and the fold a run of it makes.
-func foldLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, look *StackLook, listed []agents.Agent) (*syncrun.Stack, *FoldLook, error) {
-	s, err := stackLookAt(ctx, base, trunkSHA, nil, look, listed)
+// foldLookAt reads the stack of look and the fold a run of it makes; a nil
+// fold for a run onto target with no move! commit on the line.
+func foldLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent) (*syncrun.Stack, *FoldLook, error) {
+	s, err := stackLookAt(ctx, base, trunkSHA, target, look, listed)
 	if err != nil {
 		return nil, nil, err
 	}
-	fl, err := foldLookOf(ctx.Repo.MainRoot, cfg, s, look.Alone)
+	fl, err := foldLookFor(ctx.Repo.MainRoot, cfg, s, target, look.Alone)
 	if err != nil {
 		return nil, nil, err
 	}
 	return s, fl, nil
+}
+
+// foldLookFor is foldLookOf where a look has a fold to show: in place, or onto
+// target for a line with a move! commit.
+func foldLookFor(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoTarget, alone bool) (*FoldLook, error) {
+	if target != nil {
+		commits, err := lineCommits(main, s)
+		if err != nil {
+			return nil, err
+		}
+		if moves, err := wtsync.HasMoves(main, commits); err != nil || !moves {
+			return nil, err
+		}
+	}
+	return foldLookOf(main, cfg, s, target, alone)
+}
+
+// lineCommits is the commits of s's line, oldest first.
+func lineCommits(main string, s *syncrun.Stack) ([]string, error) {
+	out, err := git.Run(main, "rev-list", "--reverse", s.Base+".."+s.Head)
+	return strings.Fields(out), err
 }
 
 // aloneHeld is why --alone leaves a layer where it is.
@@ -97,25 +116,25 @@ const aloneHeld = "--alone leaves every layer on its old commits"
 // foldLookOf reads the fold the run of s would make from the commits of its
 // line, as the run decides it: the refusals it makes before it writes
 // anything, the layers a worktree holds, and --alone.
-func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, alone bool) (*FoldLook, error) {
-	out, err := git.Run(main, "rev-list", "--reverse", s.Base+".."+s.Head)
+func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoTarget, alone bool) (*FoldLook, error) {
+	commits, err := lineCommits(main, s)
 	if err != nil {
 		return nil, err
 	}
-	var commits []string
-	if out != "" {
-		commits = strings.Split(out, "\n")
-	}
 	fl := &FoldLook{Base: s.Base, Folds: []FoldLookPair{}, Unchanged: []string{}, Repointed: []string{}, Held: []FoldLookHeld{}}
+	onto, upstream := s.Base, ""
+	if target != nil {
+		fl.onto, onto, upstream = target, target.SHA, target.Upstream
+	}
 	why := cfg.StackFoldRefusal()
 	if why == "" {
-		if why, err = wtsync.FixupOfCarried(main, s.Base, "", s.Branch, commits); err != nil {
+		if why, err = wtsync.FixupOfCarried(main, onto, upstream, s.Branch, commits); err != nil {
 			return nil, err
 		}
 	}
 	var moves []wtsync.PartMove
 	if why == "" {
-		if moves, why, err = wtsync.PlanMoves(main, commits); err != nil {
+		if moves, why, err = wtsync.PlanMovesOnto(main, cfg, commits, onto, upstream); err != nil {
 			return nil, err
 		}
 	}
@@ -154,7 +173,7 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, alone bool) (
 	}
 	slices.SortStableFunc(fl.Folds, func(a, b FoldLookPair) int { return at[a.Fixup] - at[b.Fixup] })
 	for _, l := range s.Layers {
-		changes := len(fl.Folds) > 0 && l.Commits > lowest
+		changes := onto != s.Base || len(fl.Folds) > 0 && l.Commits > lowest
 		switch {
 		case alone:
 			fl.Held = append(fl.Held, FoldLookHeld{Branch: l.Branch, Why: aloneHeld})
@@ -185,8 +204,12 @@ func printFoldLook(w io.Writer, fl *FoldLook) {
 		fmt.Fprintf(w, "  no fixup!, squash! or amend! commit on the line: the fold changes nothing\n")
 		return
 	}
-	fmt.Fprintf(w, "  %s in place on the line's own base %s, nothing is rebased onto trunk:\n",
-		foldVerb(fl.Folds), git.ShortID(fl.Base, 7))
+	if t := fl.onto; t != nil {
+		fmt.Fprintf(w, "  %s as the line is replayed onto %s:\n", foldVerb(fl.Folds), t.Short())
+	} else {
+		fmt.Fprintf(w, "  %s in place on the line's own base %s, nothing is rebased onto trunk:\n",
+			foldVerb(fl.Folds), git.ShortID(fl.Base, 7))
+	}
 	moves := 0
 	for _, p := range fl.Folds {
 		fmt.Fprintf(w, "    %s %s  → %s %s  (layer %s)\n", git.ShortID(p.Fixup, 7), kit.OneLine(p.FixupSubject),
@@ -243,11 +266,16 @@ func foldVerb(folds []FoldLookPair) string {
 	return kit.Count(fixups, "fixup") + " and " + kit.Count(moves, "move") + " fold"
 }
 
-// printFoldDetail is wt sync <work> --stack --autosquash with no --onto: the
-// worktree and what the run does with it. A run folds the line on its own
-// base, so nothing is said of a rebase onto trunk.
+// printFoldDetail is wt sync <work> --stack --autosquash for a look with a
+// fold: the worktree and what the run does with it. A run folds the line on
+// its own base, or onto --onto's target, so nothing is said of a rebase onto
+// trunk.
 func printFoldDetail(w io.Writer, work string, a wtsync.Assessment, fl *FoldLook) {
-	fmt.Fprintf(w, "\n%s  folds in place\n", work)
+	where := "in place"
+	if fl.onto != nil {
+		where = "onto " + fl.onto.Ref
+	}
+	fmt.Fprintf(w, "\n%s  folds %s\n", work, where)
 	printFacts(w, a)
 	fmt.Fprintf(w, "  run     %s\n", foldVerdict(work, a, fl))
 	if a.PlanFile != "" {
@@ -262,7 +290,7 @@ func printFoldDetail(w io.Writer, work string, a wtsync.Assessment, fl *FoldLook
 // gives a stack.
 func foldVerdict(work string, a wtsync.Assessment, fl *FoldLook) string {
 	v, why := wtsync.Preflight(a)
-	v, why = stackVerdict(a, v, why, true)
+	v, why = stackVerdict(a, v, why, fl.onto == nil)
 	switch {
 	case v == wtsync.SkipRun:
 		return "skipped: " + why
@@ -271,11 +299,18 @@ func foldVerdict(work string, a wtsync.Assessment, fl *FoldLook) string {
 	case fl.Refusal != nil:
 		return "refused: the fold: " + kit.OneLine(*fl.Refusal)
 	}
-	flags := "--stack --autosquash"
+	flags, does := "--stack --autosquash", "folds the line in place"
+	if t := fl.onto; t != nil {
+		flags += " --onto " + t.Ref
+		if t.UpstreamRef != "" {
+			flags += " --upstream " + t.UpstreamRef
+		}
+		does = "folds the line and moves it onto " + t.Ref
+	}
 	if slices.ContainsFunc(fl.Folds, func(p FoldLookPair) bool { return p.Move != nil }) {
 		flags += " --each-commit=targets"
 	}
-	verdict := fmt.Sprintf("wt sync rebase %s %s folds the line in place", work, flags)
+	verdict := fmt.Sprintf("wt sync rebase %s %s %s", work, flags, does)
 	if len(fl.Folds) == 0 {
 		verdict = fmt.Sprintf("wt sync rebase %s --stack --autosquash has no fixup to fold", work)
 	}

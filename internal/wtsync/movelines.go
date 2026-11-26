@@ -1,6 +1,7 @@
 package wtsync
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"regexp"
@@ -291,16 +292,20 @@ func withPicked(dir, source string, picks map[string]linesPick) (string, error) 
 // carried is the file ours becomes when the change from base to theirs is
 // merged onto it, as a blob id, "" for no file; ok is false when it does not
 // merge clean. Modes are not merged.
-func carried(dir string, ours, base, theirs treeEntry) (string, bool) {
+func carried(dir string, ours, base, theirs treeEntry) (id string, ok bool, err error) {
 	switch {
 	case ours.oid == base.oid:
-		return theirs.oid, true
+		return theirs.oid, true, nil
 	case base.oid == theirs.oid || ours.oid == theirs.oid:
-		return ours.oid, true
+		return ours.oid, true, nil
 	}
 	const mode = "100644"
 	merged, err := mergeEntries(dir, treeEntry{mode, ours.oid}, treeEntry{mode, base.oid}, treeEntry{mode, theirs.oid})
-	return merged.oid, err == nil
+	var refusal mergeRefusal
+	if errors.As(err, &refusal) {
+		return "", false, nil
+	}
+	return merged.oid, err == nil, err
 }
 
 // entriesAt is path's entry in each of the trees or commits revs.
@@ -332,8 +337,9 @@ func landsAsSourced(dir, source string, picks map[string]linesPick, onto, part s
 		if err != nil {
 			return false, err
 		}
-		if want, ok := carried(dir, e[0], e[1], e[2]); !ok || e[3].oid != want {
-			return false, nil
+		want, ok, err := carried(dir, e[0], e[1], e[2])
+		if err != nil || !ok || e[3].oid != want {
+			return false, err
 		}
 	}
 	return true, nil
@@ -359,8 +365,14 @@ func keepsTheRest(dir, source, before, after string, picks map[string]linesPick)
 		if newMode := picks[path].diff.newMode; newMode != "" {
 			mode = newMode
 		}
-		there, ok := carried(dir, below, parent, taken)
-		want, clean := carried(dir, below, taken, own)
+		there, ok, err := carried(dir, below, parent, taken)
+		if err != nil {
+			return "", err
+		}
+		want, clean, err := carried(dir, below, taken, own)
+		if err != nil {
+			return "", err
+		}
 		if !ok || there != below.oid || !clean || got.oid != want || got.mode != mode {
 			return path, nil
 		}

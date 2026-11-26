@@ -1,6 +1,7 @@
 package wtsync
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -23,6 +24,9 @@ import (
 type GuardInput struct {
 	Base, Onto     string
 	OldTip, NewTip string
+	// Upstream is where --upstream said the replayed commits start, "" without
+	// it.
+	Upstream       string
 	Folds, Stopped []string
 	Resolved       []StopResolution
 	// Fixes is what a person changed at check stops, merged into the line the
@@ -38,7 +42,13 @@ type GuardInput struct {
 // AtStop is the paths it took as a person resolved them at a stop, where the
 // merge would have given other content.
 type GuardResult struct {
-	Why             string
+	Why string
+	// Err is set, with Why, when the check could not be made: not a
+	// difference found in the line.
+	Err error
+	// Replayed says the line has move! commits and moved, so it was held to the
+	// line replayed without them.
+	Replayed        bool
 	Excluded        []string
 	ConflictAllowed []string
 	AtStop          []string
@@ -61,6 +71,11 @@ type GuardResult struct {
 // what the new line must have there (checkResolved). The steps' own paths
 // are the steps'. A moving
 // fold is never accepted on the old tree alone.
+//
+// A moving fold of a line with move! commits is held to the old line replayed
+// onto the target without them (movedLineTree), with what a person changed at
+// check stops merged in, and to nothing a stop resolved: such a run has no
+// conflict to resolve.
 func TreeGuard(main string, in GuardInput) (res GuardResult) {
 	base, onto, oldTip, newTip, folds, stopped := in.Base, in.Onto, in.OldTip, in.NewTip, in.Folds, in.Stopped
 	excluded := func(p string) bool {
@@ -81,11 +96,25 @@ func TreeGuard(main string, in GuardInput) (res GuardResult) {
 		return res
 	}
 	ref, conflicted := was, []string(nil)
+	differs := " differs from the old line merged onto the target"
 	if onto != base {
-		var err error
-		if ref, conflicted, err = MergedTree(main, base, onto, oldTip); err != nil {
-			res.Why = tree + ": the old line merged onto the target could not be read: " + err.Error()
+		replayed, moved, why, err := movedLineTree(main, base, onto, in.Upstream, oldTip)
+		switch {
+		case err != nil:
+			res.Why, res.Err = tree+": the old line replayed onto the target could not be read: "+err.Error(), err
 			return res
+		case why != "":
+			res.Why = tree + ": " + why
+			return res
+		case moved:
+			ref, res.Replayed = replayed, true
+			differs = " differs from the old line replayed onto the target without the move! commits"
+			in.Resolved, stopped = nil, nil
+		default:
+			if ref, conflicted, err = MergedTree(main, base, onto, oldTip); err != nil {
+				res.Why = tree + ": the old line merged onto the target could not be read: " + err.Error()
+				return res
+			}
 		}
 	}
 	// A fold in place stays held to the old tree: a change made at a check
@@ -135,7 +164,12 @@ func TreeGuard(main string, in GuardInput) (res GuardResult) {
 		if GlobMatching(folds, r.Path) != "" {
 			continue
 		}
-		if why := checkResolved(main, oldTip, newTip, r, fixes); why != "" {
+		why, err := checkResolved(main, oldTip, newTip, r, fixes)
+		if err != nil {
+			res.Err = fmt.Errorf("%s: %w", r.Path, err)
+			why = "could not be checked: " + err.Error()
+		}
+		if why != "" {
 			res.Why = tree + ", " + r.Path + ": " + why
 			return res
 		}
@@ -155,7 +189,7 @@ func TreeGuard(main string, in GuardInput) (res GuardResult) {
 			}
 			res.ConflictAllowed = append(res.ConflictAllowed, p)
 		default:
-			res.Why = tree + ", " + p + " differs from the old line merged onto the target"
+			res.Why = tree + ", " + p + differs
 			return res
 		}
 	}
@@ -308,14 +342,14 @@ func lastResolutions(resolved []StopResolution) []StopResolution {
 // checkResolved is why newTip's path is not what a person resolved it to at
 // a stop, carried over what the old line changed in it after that commit; ""
 // when it is. A path whose expected content cannot be rebuilt is refused,
-// never left to a looser check.
-func checkResolved(main, oldTip, newTip string, r StopResolution, fixes []CheckFix) string {
+// never left to a looser check; err is a rebuild that failed to run.
+func checkResolved(main, oldTip, newTip string, r StopResolution, fixes []CheckFix) (string, error) {
 	p := r.Path
 	at, err1 := entryAt(main, r.Commit, p)
 	old, err2 := entryAt(main, oldTip, p)
 	now, err3 := entryAt(main, newTip, p)
 	if err := errors.Join(err1, err2, err3); err != nil {
-		return "what the stop resolved it to could not be compared: " + err.Error()
+		return "", fmt.Errorf("what the stop resolved it to could not be compared: %w", err)
 	}
 	want := treeEntry{r.Mode, r.Blob}
 	if r.Blob == "" {
@@ -326,7 +360,7 @@ func checkResolved(main, oldTip, newTip string, r StopResolution, fixes []CheckF
 		// what the person resolved.
 		merged, err := carryLater(main, r, at, old)
 		if err != nil {
-			return "what the stop at " + git.ShortID(r.Commit, 7) + " resolved it to, with the old line's later changes, could not be rebuilt: " + err.Error()
+			return refusedMerge("what the stop at "+git.ShortID(r.Commit, 7)+" resolved it to, with the old line's later changes, could not be rebuilt", err)
 		}
 		want = merged
 	}
@@ -338,7 +372,7 @@ func checkResolved(main, oldTip, newTip string, r StopResolution, fixes []CheckF
 		before, err1 := entryAt(main, f.Before, p)
 		after, err2 := entryAt(main, f.After, p)
 		if err := errors.Join(err1, err2); err != nil {
-			return "what was changed at the check stop at " + git.ShortID(f.Stop, 7) + " could not be read: " + err.Error()
+			return "", fmt.Errorf("what was changed at the check stop at %s could not be read: %w", git.ShortID(f.Stop, 7), err)
 		}
 		switch {
 		case before == after || want == after:
@@ -351,14 +385,31 @@ func checkResolved(main, oldTip, newTip string, r StopResolution, fixes []CheckF
 		}
 		merged, err := mergeEntries(main, want, before, after)
 		if err != nil {
-			return "what was changed at the check stop at " + git.ShortID(f.Stop, 7) + " could not be merged onto what the stop resolved it to: " + err.Error()
+			return refusedMerge("what was changed at the check stop at "+git.ShortID(f.Stop, 7)+" could not be merged onto what the stop resolved it to", err)
 		}
 		want = merged
 	}
 	if now != want {
-		return "differs from what the stop at " + git.ShortID(r.Commit, 7) + " resolved it to"
+		return "differs from what the stop at " + git.ShortID(r.Commit, 7) + " resolved it to", nil
 	}
-	return ""
+	return "", nil
+}
+
+// mergeRefusal is mergeEntries finding that a file does not merge: a
+// conflict, or a side that adds or deletes it, changes its mode or has it
+// binary. Any other error of mergeEntries is a failure to try.
+type mergeRefusal string
+
+func (r mergeRefusal) Error() string { return string(r) }
+
+// refusedMerge is checkResolved's answer to err from a merge: why with it for
+// a file that does not merge, err itself for anything else.
+func refusedMerge(why string, err error) (string, error) {
+	var refusal mergeRefusal
+	if errors.As(err, &refusal) {
+		return why + ": " + err.Error(), nil
+	}
+	return "", fmt.Errorf("%s: %w", why, err)
 }
 
 // carryLater is the entry of the path once the old line's later changes (from
@@ -367,17 +418,17 @@ func checkResolved(main, oldTip, newTip string, r StopResolution, fixes []CheckF
 // not merge cleanly or the path is added or deleted on either side.
 func carryLater(main string, r StopResolution, at, old treeEntry) (treeEntry, error) {
 	if r.Blob == "" || at.oid == "" || old.oid == "" || at.mode != old.mode || r.Mode != at.mode {
-		return treeEntry{}, errors.New("the path is added, deleted or changed in mode by a later change")
+		return treeEntry{}, mergeRefusal("the path is added, deleted or changed in mode by a later change")
 	}
 	return mergeEntries(main, treeEntry{r.Mode, r.Blob}, at, old)
 }
 
 // mergeEntries is the entry of a file once the change from base to theirs is
-// merged onto ours; an error when it does not merge cleanly or the file is
-// added, deleted or changed in mode on any side.
+// merged onto ours; a mergeRefusal when it does not merge cleanly or the file
+// is added, deleted, binary or changed in mode on any side.
 func mergeEntries(main string, ours, base, theirs treeEntry) (treeEntry, error) {
 	if ours.oid == "" || base.oid == "" || theirs.oid == "" || ours.mode != base.mode || base.mode != theirs.mode {
-		return treeEntry{}, errors.New("the path is added, deleted or changed in mode")
+		return treeEntry{}, mergeRefusal("the path is added, deleted or changed in mode")
 	}
 	dir, cleanup, err := tempDir("wtsync-carry-")
 	if err != nil {
@@ -390,13 +441,22 @@ func mergeEntries(main string, ours, base, theirs treeEntry) (treeEntry, error) 
 		if err != nil {
 			return treeEntry{}, err
 		}
+		// What git takes for binary, which merge-file does not merge.
+		if bytes.IndexByte(b[:min(len(b), 8000)], 0) >= 0 {
+			return treeEntry{}, mergeRefusal("the file is binary")
+		}
 		files[i] = filepath.Join(dir, v.name)
 		if err := os.WriteFile(files[i], b, 0o600); err != nil {
 			return treeEntry{}, err
 		}
 	}
 	if _, err := git.Run(main, "merge-file", files[0], files[1], files[2]); err != nil {
-		return treeEntry{}, fmt.Errorf("the later changes do not merge onto it cleanly: %w", err)
+		// merge-file exits with the number of conflicts, up to 127.
+		var failed *git.Error
+		if errors.As(err, &failed) && failed.Code > 0 && failed.Code < 128 {
+			return treeEntry{}, mergeRefusal("the later changes do not merge onto it cleanly: " + err.Error())
+		}
+		return treeEntry{}, err
 	}
 	// Written, since a later fix may merge onto it and read it back.
 	id, err := git.Run(main, "hash-object", "-w", "--", files[0])

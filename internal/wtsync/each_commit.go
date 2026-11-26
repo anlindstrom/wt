@@ -30,17 +30,17 @@ const (
 	EachTips = "tips"
 	// EachTargets checks at the tip of each layer, as tips does, and at each
 	// fold target: a commit a fixup, squash or amend folded into. It is for a
-	// fold in place.
+	// fold in place, and for one with a move! commit.
 	EachTargets = "targets"
 	// EachOff runs no each_commit check.
 	EachOff = "off"
 )
 
 // TargetsRefusal is why --each-commit=targets is refused for a run that is
-// not a fold in place. An edit run is told what an edit run under tips is: its
+// neither a fold in place nor a fold with a move! commit. An edit run is told what an edit run under tips is: its
 // checks sit above the edit, so off, or edit first and check after.
 func TargetsRefusal(edit bool) string {
-	const why = "--each-commit=targets is for an in-place fold (--stack --autosquash, without --onto): there the commits that are not fold targets keep their own changes"
+	const why = "--each-commit=targets is for an in-place fold (--stack --autosquash, without --onto), or one that folds a move! commit"
 	if edit {
 		return why + "; an --edit run's checks sit at the commits above the edit: use --each-commit=off, or edit first and check after"
 	}

@@ -377,7 +377,8 @@ wt's job is to move branches without losing anything. Every change keeps these:
 - **The tree guard.** A fold must not change what the line holds:
   `wtsync.TreeGuard`, called by `syncrun.FinishStack`, compares the new tip
   with the old one (a fold in place) or with git's merge of the old line onto the target (a fold that
-  moves), leaving out the declared per-layer step paths and, for a moving
+  moves; for a line with `move!` commits, with the old line replayed onto the
+  target without them, and nothing a conflict stop resolved), leaving out the declared per-layer step paths and, for a moving
   fold, the conflicting regions a stop resolved. A path a person resolved at
   a conflict stop wt handed over (`State.Resolutions`, read from the index by
   `wtsync.ResolutionsAtStop` when resume goes on and carried through every

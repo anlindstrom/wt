@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-26 11:53 — A `move!` commit folds with `--onto`
+
+`wt sync rebase <work> --stack --autosquash --onto <ref> --each-commit=targets` moves
+the part as it replays the line onto `<ref>`; the tip is what that run gives without the
+move. It refuses, moving nothing, when `<ref>` carries the target or source, changes the
+part's context or conflicts with the line: rebase without the `move!` commit first.
+`wt sync <work> --stack --autosquash --onto <ref>` shows the moves or the refusal.
+
 ## 2026-11-26 10:05 — wt doctor and wt sync doctor print JSON, and write nothing
 
 `--json` on `wt doctor` (with `--all` too) and `wt sync doctor` prints one record per finding:

@@ -533,8 +533,10 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 	if err != nil {
 		return Result{Branch: req.Branch}, err
 	}
-	if mode == EachTargets && (req.Stack == nil || !req.Stack.Autosquash || req.Edit != nil || req.Onto != req.Stack.Line.Base) {
-		return Result{Branch: req.Branch}, errors.New(TargetsRefusal(req.Edit != nil))
+	if mode == EachTargets {
+		if why, err := targetsRefusedFor(req); err != nil || why != "" {
+			return Result{Branch: req.Branch}, cmp.Or(err, errors.New(why))
+		}
 	}
 	if mode == EachTips && req.Edit != nil {
 		return Result{Branch: req.Branch}, errors.New("--each-commit=tips cannot be combined with --edit: the checks of an edit run sit at the commits above the edit")
@@ -567,9 +569,9 @@ func Rebase(mainRoot string, cfg *Config, req Request, log io.Writer) (Result, e
 		}
 		// So is a move! commit the fold cannot take, with the whole fold
 		// replayed in the object store to prove it.
-		moves, why, err := PlanMoves(req.Path, req.Stack.Line.Commits)
+		moves, why, err := PlanMovesOnto(req.Path, cfg, req.Stack.Line.Commits, req.Onto, req.Upstream)
 		if err == nil && why == "" && len(moves) > 0 {
-			why = MoveRunRefusal(req.Onto == req.Stack.Line.Base && req.Upstream == "", req.Edit != nil, mode)
+			why = MoveRunRefusal(req.Edit != nil, mode)
 		}
 		if err == nil && why != "" {
 			err = errors.New(why)
@@ -805,6 +807,23 @@ func writeScript(body string) (string, func(), error) {
 // shellQuote quotes s for the shell git runs an editor through.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// targetsRefusedFor is why req cannot run under --each-commit=targets, ""
+// when it can: it folds the line's fixups, in place or, with a move! commit,
+// onto another commit.
+func targetsRefusedFor(req Request) (string, error) {
+	if req.Stack == nil || !req.Stack.Autosquash || req.Edit != nil {
+		return TargetsRefusal(req.Edit != nil), nil
+	}
+	if req.Onto == req.Stack.Line.Base {
+		return "", nil
+	}
+	moves, err := HasMoves(req.Path, req.Stack.Line.Commits)
+	if err != nil || moves {
+		return "", err
+	}
+	return TargetsRefusal(false), nil
 }
 
 // Resume drives a rebase a previous run left stopped. The caller has already

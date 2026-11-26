@@ -290,7 +290,7 @@ func (r *RunPlan) run(works []string) error {
 		return err
 	}
 	r.eachCommit = mode
-	if mode == wtsync.EachTargets && opts.Steps == nil && (opts.Stack == nil || !opts.Stack.Autosquash || opts.Stack.Edit != "" || opts.Onto != "") {
+	if mode == wtsync.EachTargets && opts.Steps == nil && (opts.Stack == nil || !opts.Stack.Autosquash || opts.Stack.Edit != "") {
 		return errors.New(wtsync.TargetsRefusal(opts.Stack != nil && opts.Stack.Edit != ""))
 	}
 	if mode == wtsync.EachTips && opts.Stack != nil && opts.Stack.Edit != "" {
