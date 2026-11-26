@@ -231,8 +231,8 @@ func TestPlanMovesRefusesWhatLinesCannotName(t *testing.T) {
 }
 
 // Two move! commits may share a source: each hunk goes to its own target, and
-// the source keeps only what neither takes. Together they may not take all of
-// it.
+// the source keeps only what neither takes. Together they may take all of it,
+// which no single fixup! could say.
 func TestPlanMovesTwoMovesOfOneSource(t *testing.T) {
 	t.Parallel()
 	s, move := twoHunks(t)
@@ -274,8 +274,8 @@ func TestPlanMovesTwoMovesOfOneSource(t *testing.T) {
 	}
 
 	commits = move(gittest.MoveBody(gittest.MoveSource, "feature.txt"))
-	if _, why, err := PlanMoves(s.Dir, commits); err != nil || !strings.Contains(why, "together") {
-		t.Errorf("refused %q, err %v, want the whole source refused", why, err)
+	if moves, why, err := PlanMoves(s.Dir, commits); err != nil || why != "" || len(moves) != 3 {
+		t.Errorf("moves %+v, refused %q, err %v, want all three", moves, why, err)
 	}
 }
 
@@ -369,5 +369,87 @@ func TestPlanMovesReadsHunksUnderTheUsersDiffSettings(t *testing.T) {
 	moves, why, err := PlanMoves(dir, strings.Fields(gitIn(t, dir, "rev-list", "--reverse", base+"..HEAD")))
 	if err != nil || why != "" || len(moves) != 1 {
 		t.Fatalf("moves %+v, refused %q, err %v", moves, why, err)
+	}
+}
+
+// linesLine is a line over f.txt: base, a commit "t" that leaves the file
+// alone, between's content of it when not empty, the source "s" with source's,
+// and a move! of ranges into t. It returns the repository and the line.
+func linesLine(t *testing.T, base, between, source string, ranges ...string) (string, []string) {
+	t.Helper()
+	parent, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := gittest.NewRepo(t, parent, "r")
+	commit := func(content string, msg ...string) {
+		if content != "" {
+			gittest.WriteFile(t, filepath.Join(dir, "f.txt"), content)
+		}
+		gitIn(t, dir, "add", "-A")
+		args := []string{"commit", "-q", "--no-verify", "--allow-empty"}
+		for _, m := range msg {
+			args = append(args, "-m", m)
+		}
+		gitIn(t, dir, args...)
+	}
+	commit(base, "base")
+	start := gitIn(t, dir, "rev-parse", "HEAD")
+	gittest.WriteFile(t, filepath.Join(dir, "t.txt"), "t\n")
+	commit("", "t")
+	if between != "" {
+		commit(between, "x")
+	}
+	gittest.WriteFile(t, filepath.Join(dir, "s.txt"), "s\n")
+	commit(source, "s")
+	commit("", "move! t", gittest.MoveLinesBody("s", ranges...))
+	return dir, strings.Fields(gitIn(t, dir, "rev-list", "--reverse", start+"..HEAD"))
+}
+
+// exactFile is rev's path byte for byte.
+func exactFile(t *testing.T, dir, rev, path string) string {
+	t.Helper()
+	out, err := runGit(dir, nil, nil, "cat-file", "blob", rev+":"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}
+
+// A commit between adds lines above three identical blocks, so the source's
+// line numbers point one block further down at the target. The hunk still
+// goes to the block the source changed.
+func TestPlanMovesPutsAHunkInTheBlockTheSourceChanged(t *testing.T) {
+	t.Parallel()
+	block := "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\n"
+	changed := strings.Replace(block, "d\n", "D\n", 1)
+	prefix := countedLines(12, nil)
+	dir, commits := linesLine(t, block+block+block, prefix+block+block+block, prefix+changed+changed+block, "f.txt:16-16")
+	moves, why, err := PlanMoves(dir, commits)
+	if err != nil || why != "" || len(moves) != 1 {
+		t.Fatalf("moves %+v, refused %q, err %v", moves, why, err)
+	}
+	if got, want := exactFile(t, dir, moves[0].Part, "f.txt"), changed+block+block; got != want {
+		t.Errorf("the target gets\n%s\nwant the first block changed", got)
+	}
+	if got := gitIn(t, dir, "diff-tree", "--name-only", "-r", moves[0].Target, moves[0].Part); got != "f.txt" {
+		t.Errorf("the target differs in %q, want only f.txt", got)
+	}
+}
+
+// What the source keeps may diff differently once the part is below it: the
+// move is judged by the content, not by how git words the rest.
+func TestPlanMovesAcceptsARestGitAlignsAnotherWay(t *testing.T) {
+	t.Parallel()
+	lines := func(l ...string) string { return strings.Join(l, "\n") + "\n" }
+	base := lines("a", "c", "d", "a", "a", "b", "b", "", "b")
+	source := lines("", "d", "b", "d", "a", "c", "d", "a", "a", "b", "b", "c", "", "b", "", "a", "d", "b")
+	dir, commits := linesLine(t, base, "", source, "f.txt:1-4")
+	moves, why, err := PlanMoves(dir, commits)
+	if err != nil || why != "" || len(moves) != 1 {
+		t.Fatalf("moves %+v, refused %q, err %v", moves, why, err)
+	}
+	if got, want := exactFile(t, dir, moves[0].Part, "f.txt"), lines("", "d", "b", "d")+base; got != want {
+		t.Errorf("the target gets\n%q\nwant\n%q", got, want)
 	}
 }

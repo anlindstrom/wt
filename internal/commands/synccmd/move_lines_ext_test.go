@@ -173,3 +173,63 @@ func TestMoveLinesResumeKeepsTheMove(t *testing.T) {
 	movedAndUndone(t, ctx, s, b, logPath, human+resumed.String(), l1,
 		[]string{"feature.txt"}, []string{gittest.MoveTarget, gittest.MoveSource})
 }
+
+// Two moves into two targets may take all of the source between them. The run
+// drops the emptied source, keeps the tip's tree, and undo puts every branch
+// back.
+func TestMoveLinesTwoMovesEmptyTheSource(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx, s, logPath := synccmdtest.MoveLineShaped(t, linesShape(), "", false)
+	main := ctx.Repo.MainRoot
+	testkit.GitIn(t, s.Path, "commit", "-q", "--no-verify", "--allow-empty", "-m", "move! "+gittest.MoveBetween,
+		"-m", gittest.MoveLinesBody(gittest.MoveSource, gittest.MovePath+":10-10")+"Move-Path: feature.txt\n")
+	b := readMoveBefore(t, ctx, s)
+	look := &synccmd.StackLook{Work: gittest.MoveTmp, Autosquash: true}
+	o := synccmdtest.OverviewJSONWith(t, ctx, synccmd.SyncOptions{NoFetch: true, Stack: look})
+	if o.Fold == nil || o.Fold.Refusal != nil || len(o.Fold.Folds) != 2 {
+		t.Fatalf("fold %+v", o.Fold)
+	}
+	_, human, err := synccmdtest.StackRun(t, ctx, gittest.MoveTmp, targetsFold())
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, human)
+	}
+	if subjects := testkit.GitOut(t, main, "log", "--format=%s", s.Base+".."+gittest.MoveTmp); strings.Contains(subjects, gittest.MoveSource) || strings.Contains(subjects, "move!") {
+		t.Errorf("the line still has the source or a move!:\n%s", subjects)
+	}
+	l1 := testkit.GitOut(t, main, "cat-file", "-p", "l1:"+gittest.MovePath)
+	if !strings.Contains(l1, "line 2, refused") || strings.Contains(l1, "line 10, refused") {
+		t.Errorf("layer 1 has\n%s", l1)
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", "l2:"+gittest.MovePath); got != b.tipBlob {
+		t.Errorf("layer 2 has %s of %s, want the tip's %s", got, gittest.MovePath, b.tipBlob)
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", "l3"); got != testkit.GitOut(t, main, "rev-parse", "l2") {
+		t.Errorf("the emptied layer 3 is at %s, want where layer 2 ends", got)
+	}
+	if got := testkit.GitOut(t, main, "rev-parse", gittest.MoveTmp+"^{tree}"); got != b.tree {
+		t.Errorf("the tip's tree is %s, want %s", got, b.tree)
+	}
+	for _, l := range s.Layers {
+		moved := testkit.GitOut(t, main, "rev-parse", l) != b.refs[l]
+		if slices.Contains(o.Fold.Repointed, l) != moved {
+			t.Errorf("the look re-points %q, %s moved: %v\n%s", o.Fold.Repointed, l, moved, human)
+		}
+	}
+	if st := testkit.GitOut(t, s.Path, "status", "--porcelain"); st != "" {
+		t.Errorf("the worktree is not clean: %s", st)
+	}
+	if got := synccmdtest.CheckedSubjects(t, logPath); !slices.Contains(got, gittest.MoveTarget) || !slices.Contains(got, gittest.MoveBetween) {
+		t.Errorf("checked %q, want both targets", got)
+	}
+	var undone bytes.Buffer
+	if err := syncfix.SyncUndo(ctx, gittest.MoveTmp, syncfix.UndoOptions{VerbOptions: targetsFold().VerbOptions}, &undone); err != nil {
+		t.Fatalf("undo: %v\n%s", err, undone.String())
+	}
+	if got := refsOf(t, main, moveBranches(s)); !mapsEqual(got, b.refs) {
+		t.Errorf("undo left %v, want %v\n%s", got, b.refs, undone.String())
+	}
+	if st := testkit.GitOut(t, s.Path, "status", "--porcelain"); st != "" {
+		t.Errorf("the worktree is not clean after undo: %s", st)
+	}
+}
