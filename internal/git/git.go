@@ -13,8 +13,9 @@ var ErrNotRepo = errors.New("not a git repository")
 
 // GitTimeout is the deadline every git invocation gets when the caller names
 // none. Nothing here is interactive, so a git that has not answered by then
-// is stuck rather than slow, and wt must not sit on it forever.
-const GitTimeout = 10 * time.Minute
+// is stuck rather than slow, and wt must not sit on it forever. A variable
+// for the test that proves a git given up on is reported as that.
+var GitTimeout = 10 * time.Minute
 
 // Run executes git in dir under GitTimeout and returns trimmed stdout.
 func Run(dir string, args ...string) (string, error) {
