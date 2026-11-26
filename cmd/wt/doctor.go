@@ -1,25 +1,31 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/anlindstrom/wt/internal/commands/admin"
+	"github.com/anlindstrom/wt/internal/commands/kit"
 	"github.com/anlindstrom/wt/internal/config"
+	"github.com/anlindstrom/wt/internal/git"
 )
 
 func newDoctorCmd() *cobra.Command {
 	var sel selectionFlags
+	var asJSON bool
+	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check configuration, required tools and worktree health",
 		Long: "Check what every other command depends on: that worktree.conf parses\n" +
 			"and says something sensible, that your own settings do, that the tools\n" +
-			"it requires are on the PATH, and that no worktree is nested, missing or\n" +
-			"in a layout nothing owns. It changes nothing, and exits non-zero when\n" +
-			"it found something.\n\n" +
+			"it requires are on the PATH, and that no worktree is nested inside the\n" +
+			"main checkout or in a layout nothing owns. It changes nothing, and\n" +
+			"exits non-zero when it found something.\n\n" +
 			"A Superset section and a GitHub section say how far each integration\n" +
 			"would get here and where it would stop. Neither counts as a problem on\n" +
 			"its own — a machine without gh is an ordinary machine — except where a\n" +
@@ -31,30 +37,53 @@ func newDoctorCmd() *cobra.Command {
 			"It also checks your roots and profiles, and outside any repository that\n" +
 			"is all it checks. --all, --roots or --profile check every repository\n" +
 			"they name instead: this doctor in each, and wt sync doctor where trunk\n" +
-			"declares wt sync, one line per repository with what they found under it.\n\n" +
+			"declares wt sync, one line per repository with what they found under it.\n" +
+			"A .wt-sync.yaml on trunk that does not parse is a problem there.\n\n" +
+			"With --json it prints one object instead: a record per finding, with\n" +
+			"its id, status (ok, warn, fail or unknown), detail and fix, and with\n" +
+			"--all, --roots or --profile the records of each repository. It exits 1\n" +
+			"when a record is fail. A check given no answer in time is unknown.\n" +
+			"`wt schema doctor` is its schema.\n\n" +
 			selectionHelp,
 		Example: "  wt doctor               # check this repository\n" +
 			"  wt doctor; echo $?      # 0 when it found nothing, 1 when it did\n" +
+			"  wt doctor --repo ../app --json  # another repository, as records\n" +
 			"  wt doctor --all         # every repository under your roots\n" +
 			"  wt doctor --roots work  # the ones under one root\n" +
 			"  wt doctor --profile api # the ones a profile names",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := cmd.OutOrStdout()
-			if colourOn(out) {
+			if !asJSON && colourOn(out) {
 				marks := &statusWriter{w: out}
 				defer marks.Flush()
 				out = marks
 			}
 			if sel.selection().Any() {
+				if repoPath != "" {
+					return usagef("--repo names one repository; give it without --all, --roots and --profile")
+				}
+				if asJSON {
+					u, userErr := config.LoadUser()
+					return admin.DoctorAllJSON(u, userErr, sel.selection(), out)
+				}
 				return admin.DoctorAll(loadUserWarn(cmd.ErrOrStderr()), sel.selection(), out)
 			}
 			// Lenient on purpose: a repository whose configuration is the
 			// problem is exactly the one that needs diagnosing.
 			// io.Discard: doctor reports the configuration problem itself, below.
-			ctx, err := openLenient(io.Discard)
+			dir, err := repoDir(repoPath)
 			if err != nil {
 				return err
+			}
+			ctx, err := kit.TryOpenLenient(dir, io.Discard)
+			outside := repoPath == "" && errors.Is(err, git.ErrNotRepo)
+			if err != nil && !outside {
+				return unopened(out, "doctor", dir, err, asJSON)
+			}
+			if asJSON {
+				u, userErr := config.LoadUser()
+				return admin.DoctorJSON(ctx, u, userErr, out)
 			}
 			if ctx == nil {
 				// Outside every repository, the roots and profiles are all
@@ -76,5 +105,38 @@ func newDoctorCmd() *cobra.Command {
 		},
 	}
 	sel.add(cmd, true)
+	addRepoFlag(cmd, &repoPath)
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print one object of check records")
 	return cmd
+}
+
+// addRepoFlag puts the doctors' --repo on cmd.
+func addRepoFlag(cmd *cobra.Command, path *string) {
+	cmd.Flags().StringVar(path, "repo", "", "check the repository at this path (default: the current directory)")
+	_ = cmd.MarkFlagDirname("repo")
+}
+
+// repoDir is the directory a doctor checks: --repo's, else the current one.
+func repoDir(repoPath string) (string, error) {
+	if repoPath != "" {
+		return repoPath, nil
+	}
+	return os.Getwd()
+}
+
+// unopened ends a doctor whose repository at path did not open, as a record
+// under --json: unknown where git did not answer in time.
+func unopened(out io.Writer, command, path string, err error, asJSON bool) error {
+	why := fmt.Sprintf("%s: %v", path, err)
+	if _, statErr := os.Stat(path); statErr != nil {
+		why = statErr.Error()
+	} else if errors.Is(err, git.ErrNotRepo) {
+		why = path + " is not a git repository"
+	}
+	if !asJSON {
+		return errors.New(why)
+	}
+	f := kit.NewFindings(io.Discard)
+	f.Add("repo.open", kit.StatusOf(err), why)
+	return kit.WriteDoctorJSON(out, command, f.Records(), nil)
 }

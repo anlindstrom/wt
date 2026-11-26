@@ -243,6 +243,9 @@ func Writes(args, env []string) bool {
 		return len(pos) >= 2 && pos[0] == "pr" && pos[1] == "checkout"
 	case "claude", "ps", "lsof", "docker":
 		return false
+	case "launchctl":
+		// The one launchctl run here is `print`, a look at a job.
+		return false
 	}
 	return true
 }

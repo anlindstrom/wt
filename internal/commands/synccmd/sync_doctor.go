@@ -12,7 +12,11 @@ import (
 )
 
 // DoctorOptions tunes SyncDoctor for callers and tests.
-type DoctorOptions struct{ Fix, Prune bool }
+type DoctorOptions struct {
+	Fix, Prune bool
+	// Findings, when set, is given a sync.* record per check in use here.
+	Findings *kit.Findings
+}
 
 // SyncDoctor checks what a run needs and reports it as a table. It never
 // fixes anything on its own; --fix and --prune opt into that, one check at
@@ -59,6 +63,9 @@ func SyncDoctor(ctx *kit.Context, opts DoctorOptions, w io.Writer) error {
 		plan.Detail = strings.Join(lines, "; ")
 	}
 	checks = append(checks, plan, keepstate.KeeperCheck(ctx, time.Now()))
+	if opts.Findings != nil {
+		record(opts.Findings, checks)
+	}
 	rows := [][]string{{"CHECK", "STATE", "DETAIL"}}
 	var blocking []string
 	for _, c := range checks {
@@ -91,4 +98,62 @@ func SyncDoctor(ctx *kit.Context, opts DoctorOptions, w io.Writer) error {
 		return fmt.Errorf("run is blocked by: %s", strings.Join(blocking, ", "))
 	}
 	return nil
+}
+
+// record gives f each check in use here, under sync. and the check's name.
+func record(f *kit.Findings, checks []wtsync.Check) {
+	for _, c := range checks {
+		if c.Unused && !c.Unknown {
+			continue
+		}
+		status := kit.CheckWarn
+		switch {
+		case c.Unknown:
+			status = kit.CheckUnknown
+		case c.OK:
+			status = kit.CheckOK
+		case c.Fix == nil && c.Blocking:
+			status = kit.CheckFail
+		}
+		detail := c.Detail
+		if detail == "" {
+			detail = "nothing found"
+		}
+		r := f.Add("sync."+strings.ReplaceAll(c.Name, ":", "."), status, detail)
+		switch {
+		case c.OK || c.Unknown:
+		case c.Fix != nil && c.Prune:
+			r.WithFix("wt sync doctor --prune")
+		case c.Fix != nil:
+			r.WithFix("wt sync doctor --fix")
+		case c.Name == "trunk":
+			r.WithFix("git fetch origin")
+		}
+	}
+}
+
+// RecordSync is wt sync doctor as records alone, ones that stopped it
+// included. It changes nothing.
+func RecordSync(ctx *kit.Context, f *kit.Findings) {
+	before := len(f.Records())
+	err := SyncDoctor(ctx, DoctorOptions{Findings: f}, io.Discard)
+	// A blocked run has said why in its records; any other error has none.
+	if err != nil && len(f.Records()) == before {
+		f.Add("sync.doctor", kit.StatusOf(err), err.Error())
+	}
+}
+
+// SyncDoctorJSON is wt sync doctor as one JSON object, the configuration's
+// problems among its records. It changes nothing.
+func SyncDoctorJSON(ctx *kit.Context, w io.Writer) error {
+	f := kit.NewFindings(io.Discard)
+	kit.ConfigProblems(ctx, f)
+	if ctx.UserError != nil {
+		f.Add("config.user", kit.CheckWarn, ctx.UserError.Error())
+	}
+	// No trunk is the configuration's problem, said above.
+	if ctx.Config.MainBranch != "" {
+		RecordSync(ctx, f)
+	}
+	return kit.WriteDoctorJSON(w, "sync doctor", f.Records(), nil)
 }

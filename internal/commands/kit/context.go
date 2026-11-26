@@ -252,11 +252,18 @@ func (d detectedTrunk) applyTo(c *config.Config) {
 // This exists for `wt find`: a repository with a stale or invalid worktree.conf
 // still has worktrees worth searching, and silently dropping to a repo-less
 // search makes it return a match from somewhere else with no hint why. Returns
-// nil only when cwd is not in a repository at all.
+// nil when no repository opens; TryOpenLenient says why.
 func OpenLenient(cwd string, w io.Writer) *Context {
+	c, _ := TryOpenLenient(cwd, w)
+	return c
+}
+
+// TryOpenLenient is OpenLenient keeping why no repository opened:
+// git.ErrNotRepo outside one, and otherwise what git failed with.
+func TryOpenLenient(cwd string, w io.Writer) (*Context, error) {
 	r, err := repo.Discover(cwd)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	u, userErr := config.LoadUser()
 	c, trunk, err := loadFor(r)
@@ -268,7 +275,7 @@ func OpenLenient(cwd string, w io.Writer) *Context {
 			trunk.applyTo(c)
 		}
 		fmt.Fprintf(w, "wt: using partial configuration for %s: %v\n", r.Name, err)
-		return &Context{Repo: r, Config: c, ConfigError: err, User: u, UserError: userErr, Cwd: cwd}
+		return &Context{Repo: r, Config: c, ConfigError: err, User: u, UserError: userErr, Cwd: cwd}, nil
 	}
-	return &Context{Repo: r, Config: c, User: u, UserError: userErr, Cwd: cwd}
+	return &Context{Repo: r, Config: c, User: u, UserError: userErr, Cwd: cwd}, nil
 }

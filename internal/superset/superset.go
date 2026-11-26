@@ -67,6 +67,10 @@ type Status struct {
 	PID   int
 	// Err is why the state could not be read, when it could not.
 	Err error
+	// Unanswered is a host `status` called stale that did not answer the read
+	// meant to settle it in time, so Running false is not known.
+	// WORKAROUND(superset-stale-status)
+	Unanswered bool
 }
 
 // Installed reports whether a Superset CLI was found at all.
@@ -112,6 +116,8 @@ func Probe() Status {
 	if !s.Running && s.Stale && s.PID > 0 {
 		_, err := c.Projects()
 		s.Running = err == nil
+		var none git.NoAnswer
+		s.Unanswered = errors.As(err, &none)
 	}
 	return s
 }
@@ -309,7 +315,7 @@ func (c CLI) run(deadline time.Duration, args ...string) ([]byte, error) {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	timedOut, _, err := git.RunBounded(deadline, cmd)
 	if timedOut {
-		return nil, fmt.Errorf("superset %s did not answer within %s", strings.Join(args, " "), deadline)
+		return nil, git.NoAnswer(fmt.Sprintf("superset %s did not answer within %s", strings.Join(args, " "), deadline))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("superset %s failed: %s", strings.Join(args, " "), reason(stderr.String(), err))

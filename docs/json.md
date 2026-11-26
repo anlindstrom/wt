@@ -2,7 +2,8 @@
 
 `wt config`, `wt status`, `wt up`, `wt sweep`, `wt sync` and its verbs `rebase`,
 `resume`, `undo`, `push` and `steps`, `wt new`,
-`wt checkout`, `wt remove`, `wt restore`, `wt purge`, `wt refs` and
+`wt checkout`, `wt remove`, `wt restore`, `wt purge`, `wt refs`,
+`wt doctor`, `wt sync doctor` and
 `wt session list`, `send` and `stop` print JSON on stdout when given `--json`,
 for tools that drive wt (a git client, an editor, a script). Their human output is
 unchanged without it. The `recovery.json` in the folder a removed worktree was
@@ -134,6 +135,7 @@ generating types from it:
 | `wt checkout --json` | [`schema/checkout.v1.json`](../schema/checkout.v1.json) | 1.2.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/checkout.v1.json` |
 | `wt checkout --dry-run --json` | [`schema/checkout-plan.v1.json`](../schema/checkout-plan.v1.json) | 1.3.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/checkout-plan.v1.json` |
 | `wt config --json` | [`schema/config.v1.json`](../schema/config.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/config.v1.json` |
+| `wt doctor\|sync doctor --json` | [`schema/doctor.v1.json`](../schema/doctor.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/doctor.v1.json` |
 | `wt new --json` | [`schema/new.v1.json`](../schema/new.v1.json) | 1.3.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new.v1.json` |
 | `wt new --dry-run --json` | [`schema/new-plan.v1.json`](../schema/new-plan.v1.json) | 1.3.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/new-plan.v1.json` |
 | `wt purge <dir> --yes --json` | [`schema/quarantine-purge.v1.json`](../schema/quarantine-purge.v1.json) | 1.0.1 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/quarantine-purge.v1.json` |
@@ -208,6 +210,73 @@ include user overrides exactly as the other outputs do.
 Empty lists are `[]`; an absent string is `null`. Within schema 1, the consumer
 fields `schema`, `command`, `mainRoot`, `developerConfigFiles` and
 `developerConfigDirs` keep their names and meanings.
+
+## `wt doctor --json` and `wt sync doctor --json` — check records
+
+One object with one record per finding, for a tool that checks many
+repositories: `wt doctor [--repo <path>] --json`, the repository defaulting to
+the current directory. It writes nothing. `wt doctor` exits 1 when it finds a
+problem; with `--json` the exit is 1 exactly when a record is `fail`, and
+`warn` and `unknown` leave it 0. `wt sync doctor --json` takes neither `--fix`
+nor `--prune` (a usage error, exit 2). Both run with a broken worktree.conf,
+which is then a `config.parse` record. A repository that does not open (a
+`--repo` that is no repository, a git that fails) is a lone `repo.open` record
+with git's words: `unknown` where git did not answer in time, else `fail`.
+Run outside any repository without `--repo`, `wt doctor` checks the roots and
+profiles.
+
+`unknown` means wt could not tell: gh, Superset, tmutil, Docker, launchd or
+git did not answer in time, or failed to say; a trunk git could not look up is
+`config.trunk` `unknown`. The two forms can differ there: a
+Superset that does not answer in a repository with `SUPERSET_REGISTER=on` is a
+problem in the text form and `unknown`, not `fail`, here.
+
+A check about something not in use is no record: an integration switched off, a
+repository with no GitHub remote, a platform with no Time Machine, no required
+tools, no keeper. An id may repeat, once per finding, such as one
+`worktrees.layout` per worktree.
+
+| `id` | Record of |
+|---|---|
+| `config.parse`, `config.file`, `config.user`, `config.trunk`, `config.branchSuffix`, `config.typeNames` | the repository's configuration (`config.file`: none, running on detected defaults), your own settings, and that trunk exists |
+| `tools.<name>` | each of `REQUIRED_BINS` on the PATH |
+| `superset.cli`, `superset.host`, `superset.project`, `superset.staleStatus` | the Superset integration |
+| `github.cli`, `github.login`, `github.cache` | gh, its login, and whether the pull request cache can be written |
+| `timemachine.tmutil`, `timemachine.excluded` | Time Machine exclusions |
+| `worktrees.nested`, `worktrees.layout`, `worktrees.unmanaged`, `worktrees.list` | where each worktree sits (`worktrees.list`: git could not list them) |
+| `roots.<name>`, `profiles.<name>` | your roots and profiles |
+| `sync.trunk`, `sync.declaration`, `sync.scripts`, `sync.rerere`, `sync.hooks`, `sync.submodules`, `sync.lfs`, `sync.docker`, `sync.env.<NAME>`, `sync.safety-refs`, `sync.locks`, `sync.rebases`, `sync.plan`, `sync.keeper`, `sync.doctor` | the rows of `wt sync doctor` (`sync.doctor`: it could not run) |
+| `repo.open`, `repos.select` | a repository that could not be opened; a selection that could not be made |
+
+New ids may appear within schema 1.
+
+`wt doctor --json` holds the checks of its text form, so `.wt-sync.yaml` is not
+among them: ask `wt sync doctor --json`. With `--all`, `--roots` or
+`--profile`, `repos` holds each repository's records, those of `wt sync doctor`
+where `origin/<trunk>` declares wt sync, and `checks` the roots' and profiles'.
+There a declaration that does not parse makes `sync.declaration` `fail`, one
+git cannot read (no `origin/<trunk>`, say) is a lone `unknown` record, and a
+repository that declares none has no `sync.` record. `wt sync doctor` in such a
+repository says a run is blocked: `sync.declaration` `fail`.
+
+<!-- json-docs:begin doctor -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording. |
+| `command` | `"doctor"` \| `"sync doctor"` | yes |  |
+| `checks` | array of object | yes | The findings of this run. With repos, only those of your roots and profiles, and a repos.select record when the selection failed. |
+| `checks[].id` | string, matching `^[a-z]+\..+$` | yes | Which check, dotted and stable: config.parse, tools.git, sync.declaration. Several records may carry one id, such as one per worktree. |
+| `checks[].status` | `"ok"` \| `"warn"` \| `"fail"` \| `"unknown"` | yes | ok; warn: worth knowing, never a failure; fail: breaks wt here; unknown: wt could not tell, for want of an answer. |
+| `checks[].owner` | `"wt"` | yes |  |
+| `checks[].detail` | string | yes | What was found, on one line, for a person. Its wording may change. |
+| `checks[].fix` | string \| null | yes | A command that fixes it, to run in that repository; null when wt knows none. |
+| `repos` | array of object \| null | yes | With --all, --roots or --profile: every repository the selection names, empty when it names none. Null without them. |
+| `repos[].name` | string | yes | The repository directory's name. |
+| `repos[].path` | string | yes | The absolute path of the repository, as the selection names it. |
+| `repos[].checks` | array of object | yes | wt doctor's findings there, without roots and profiles, and wt sync doctor's where trunk declares wt sync. |
+| `repos[].checks[]` | object | yes | Fields as at `checks[]`. |
+<!-- json-docs:end -->
 
 ## `wt status [<work>] --json` — the plan
 
@@ -3225,3 +3294,4 @@ change made it.
 | `sync` 1.16.0 | `likelyStops` and `reworkedOnTrunk` on each worktree: later commits that share a file with what trunk changed, and replayed commits trunk carries under the same subject and author; advice, never a verdict |
 | `sync-run` 1.26.0 | `untouched` among the `result` values of `worktrees[].layerSteps[]`: the run left the layer's tip as it was, so the step did not run (`ran` is false) |
 | `sync-run` 1.27.0 | `stack.layers[].pushCommand` is null once the run's own push sent the layer; a run's or resume's push sends the layers earlier unpushed runs of the line recorded, as [`push`](#push--a-stacks-push) says |
+| `doctor` 1.0.0 | `wt doctor --json` and `wt sync doctor --json`: one record per finding |

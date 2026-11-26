@@ -1,6 +1,7 @@
 package keepstate
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
+	"github.com/anlindstrom/wt/internal/git"
 )
 
 // HasLaunchd says whether m runs launchd, which the keeper's
@@ -65,16 +67,24 @@ type Launchctl struct {
 	Exe string
 }
 
-func (d Launchctl) run(args ...string) (string, error) {
+func (d Launchctl) command(args ...string) (*exec.Cmd, error) {
 	exe := d.Exe
 	if exe == "" {
 		var err error
 		if exe, err = exec.LookPath("launchctl"); err != nil {
-			return "", errors.New("launchctl is not on the PATH")
+			return nil, errors.New("launchctl is not on the PATH")
 		}
 	}
 	cmd := exec.Command(exe, args...)
 	cmd.Env = append(os.Environ(), "NO_COLOR=1")
+	return cmd, nil
+}
+
+func (d Launchctl) run(args ...string) (string, error) {
+	cmd, err := d.command(args...)
+	if err != nil {
+		return "", err
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		text := strings.TrimSpace(string(out))
@@ -88,10 +98,43 @@ func (d Launchctl) run(args ...string) (string, error) {
 
 func (d Launchctl) domain() string { return "gui/" + strconv.Itoa(os.Getuid()) }
 
-// Loaded asks launchd whether the job is in the user's domain.
+// probeDeadline bounds the question whether a job is loaded. launchd answers
+// in milliseconds; one that has not answered in this long is not going to.
+const probeDeadline = 10 * time.Second
+
+// noSuchService is `launchctl print`'s exit status for a service that is not
+// in the domain.
+const noSuchService = 113
+
+// Loaded asks launchd whether the job is in the user's domain, taking a
+// launchd that would not say as a no.
 func (d Launchctl) Loaded(label string) bool {
-	_, err := d.run("print", d.domain()+"/"+label)
-	return err == nil
+	loaded, err := d.Query(label)
+	return err == nil && loaded
+}
+
+// Query is Loaded keeping apart a job that is not loaded from a launchd that
+// would not say, which is the error.
+func (d Launchctl) Query(label string) (loaded bool, err error) {
+	cmd, err := d.command("print", d.domain()+"/"+label)
+	if err != nil {
+		return false, err
+	}
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	timedOut, code, err := git.RunBounded(probeDeadline, cmd)
+	switch {
+	case timedOut:
+		return false, git.NoAnswer(fmt.Sprintf("launchctl print did not answer within %s", probeDeadline))
+	case err == nil:
+		return true, nil
+	case code == noSuchService:
+		return false, nil
+	}
+	if said := strings.TrimSpace(out.String()); said != "" {
+		return false, errors.New(said)
+	}
+	return false, err
 }
 
 // Load bootstraps the plist into the user's domain, falling back to the

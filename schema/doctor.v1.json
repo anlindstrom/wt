@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/doctor.v1.json",
+  "x-version": "1.0.0",
+  "title": "wt doctor|sync doctor --json",
+  "description": "What a doctor found, one record per finding. Printed by `wt doctor --json` and `wt sync doctor --json` as the only thing on stdout; the command exits 1 when a record anywhere is fail. It changes nothing. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
+  "type": "object",
+  "required": ["schema", "schemaVersion", "command", "checks", "repos"],
+  "properties": {
+    "schema": { "const": 1, "description": "The major version: a new one only for a change that breaks readers." },
+    "schemaVersion": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$", "description": "The full semantic version of this schema that the output follows: minor for an added field or enumeration value, patch for wording." },
+    "command": { "enum": ["doctor", "sync doctor"] },
+    "checks": { "type": "array", "items": { "$ref": "#/$defs/check" }, "description": "The findings of this run. With repos, only those of your roots and profiles, and a repos.select record when the selection failed." },
+    "repos": { "type": ["array", "null"], "items": { "$ref": "#/$defs/repo" }, "description": "With --all, --roots or --profile: every repository the selection names, empty when it names none. Null without them." }
+  },
+  "$defs": {
+    "repo": {
+      "type": "object",
+      "required": ["name", "path", "checks"],
+      "properties": {
+        "name": { "type": "string", "description": "The repository directory's name." },
+        "path": { "type": "string", "description": "The absolute path of the repository, as the selection names it." },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/check" }, "description": "wt doctor's findings there, without roots and profiles, and wt sync doctor's where trunk declares wt sync." }
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "status", "owner", "detail", "fix"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z]+\\..+$", "description": "Which check, dotted and stable: config.parse, tools.git, sync.declaration. Several records may carry one id, such as one per worktree." },
+        "status": { "enum": ["ok", "warn", "fail", "unknown"], "description": "ok; warn: worth knowing, never a failure; fail: breaks wt here; unknown: wt could not tell, for want of an answer." },
+        "owner": { "const": "wt" },
+        "detail": { "type": "string", "description": "What was found, on one line, for a person. Its wording may change." },
+        "fix": { "type": ["string", "null"], "description": "A command that fixes it, to run in that repository; null when wt knows none." }
+      }
+    }
+  }
+}

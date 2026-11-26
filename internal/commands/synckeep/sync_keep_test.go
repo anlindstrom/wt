@@ -549,7 +549,7 @@ func fakeLaunchctl(t *testing.T) (exe, calls string) {
 	script := "#!/bin/sh\necho \"$@\" >> " + log + "\ncase \"$1\" in\n" +
 		"  bootstrap) touch " + loaded + "$(basename \"$3\" .plist) ;;\n" +
 		"  bootout) rm -f " + loaded + "${2##*/} ;;\n" +
-		"  print) [ -e " + loaded + "${2##*/} ] || exit 1 ;;\n" +
+		"  print) [ -e " + loaded + "${2##*/} ] || exit 113 ;;\n" +
 		"esac\nexit 0\n"
 	exe = filepath.Join(dir, "launchctl")
 	gittest.WriteExecutable(t, exe, script)

@@ -188,6 +188,8 @@ type KeeperState struct {
 	PlistPath string
 	Installed bool // the plist exists
 	Loaded    bool // launchd has it
+	// LoadedErr is why launchd would not say whether it has the job.
+	LoadedErr error
 	label     string
 	Launchd   bool // this platform has launchd
 }
@@ -217,7 +219,7 @@ func Keeper(ctx *kit.Context, loadedToo bool) (KeeperState, error) {
 		k.Installed = true
 	}
 	if loadedToo {
-		k.Loaded = job.Launchctl.Loaded(job.Label)
+		k.Loaded, k.LoadedErr = job.Launchctl.Query(job.Label)
 	}
 	return k, nil
 }
@@ -279,6 +281,12 @@ func KeeperCheck(ctx *kit.Context, now time.Time) wtsync.Check {
 func (k KeeperState) Check(now time.Time) wtsync.Check {
 	var parts []string
 	switch {
+	case k.LoadedErr != nil:
+		found := "not installed"
+		if k.Installed {
+			found = "installed"
+		}
+		parts = append(parts, found+"; launchd would not say whether it is loaded: "+k.LoadedErr.Error())
 	case k.Installed && k.Loaded:
 		parts = append(parts, "installed, every "+FmtEvery(k.St.IntervalOrDefault()))
 	case k.Installed:
@@ -304,5 +312,12 @@ func (k KeeperState) Check(now time.Time) wtsync.Check {
 	if k.Kept {
 		parts = append(parts, "log "+k.LogPath)
 	}
-	return wtsync.Check{Name: "keeper", OK: k.St.Problem == "", Detail: strings.Join(parts, "; ")}
+	unused := !k.Installed && !k.Loaded && !k.Kept && k.LoadedErr == nil
+	return wtsync.Check{
+		Name:    "keeper",
+		OK:      k.St.Problem == "" && k.LoadedErr == nil,
+		Unknown: k.St.Problem == "" && k.LoadedErr != nil,
+		Unused:  unused,
+		Detail:  strings.Join(parts, "; "),
+	}
 }

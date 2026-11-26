@@ -28,6 +28,11 @@ type Check struct {
 	// Prune marks a check --prune clears up rather than --fix: it deletes
 	// what an old run left behind rather than repairing a setting.
 	Prune bool
+	// Unknown marks a check that could not tell: git or a tool gave no
+	// answer.
+	Unknown bool
+	// Unused marks a check about something not in use here.
+	Unused bool
 }
 
 // DoctorOptions tunes Doctor for callers and tests.
@@ -149,22 +154,38 @@ func rebasesCheck(worktrees []repo.Worktree, gitDirs map[string]string) (Check, 
 // either way the next move is a fetch.
 func trunkCheck(onto string, st ontoState) Check {
 	if st.err != nil || !st.resolves {
-		return Check{Name: "trunk", OK: false, Blocking: true, Detail: "run git fetch origin"}
+		return Check{Name: "trunk", OK: false, Blocking: true, Unknown: st.err != nil, Detail: "run git fetch origin"}
 	}
 	return Check{Name: "trunk", OK: true, Blocking: true, Detail: onto + " resolves"}
+}
+
+// ReadDeclaration is LoadFromTrunk for a doctor: unreadable keeps apart a
+// declaration git could not read, for want of origin/<trunk> or of an answer,
+// from one that is not there (ErrUndeclared) or does not parse.
+func ReadDeclaration(mainRoot, trunk string) (cfg *Config, unreadable bool, err error) {
+	cfg, err = LoadFromTrunk(mainRoot, trunk)
+	if err == nil || errors.Is(err, ErrUndeclared) {
+		return cfg, false, err
+	}
+	var gitErr *git.Error
+	if errors.As(err, &gitErr) || errors.Is(err, git.ErrNotRepo) {
+		return nil, true, err
+	}
+	st := ontoAt(mainRoot, "origin/"+trunk)
+	return nil, st.err != nil || !st.resolves, err
 }
 
 // declarationCheck loads the declaration from trunk, returning it (nil on
 // any error) so the scripts and docker checks can use it too.
 func declarationCheck(mainRoot, trunk, onto string) (Check, *Config) {
-	cfg, err := LoadFromTrunk(mainRoot, trunk)
+	cfg, unreadable, err := ReadDeclaration(mainRoot, trunk)
 	if err == nil {
 		return Check{Name: "declaration", OK: true, Blocking: true, Detail: ConfigFile + " on " + onto + " parses"}, cfg
 	}
 	if errors.Is(err, ErrUndeclared) {
 		return Check{Name: "declaration", OK: false, Blocking: true, Detail: "no " + ConfigFile + " on " + onto + ": reported only, never rebased"}, nil
 	}
-	return Check{Name: "declaration", OK: false, Blocking: true, Detail: err.Error()}, nil
+	return Check{Name: "declaration", OK: false, Blocking: true, Unknown: unreadable, Detail: err.Error()}, nil
 }
 
 // scriptsCheck confirms every script strategy's run exists on trunk with
@@ -172,16 +193,19 @@ func declarationCheck(mainRoot, trunk, onto string) (Check, *Config) {
 // the declaration check above already reports why.
 func scriptsCheck(mainRoot, onto string, cfg *Config) Check {
 	if cfg == nil {
-		return Check{Name: "scripts", OK: true, Blocking: true}
+		return Check{Name: "scripts", OK: true, Blocking: true, Unused: true}
 	}
 	var bad []string
+	scripts, unread := 0, 0
 	for _, r := range cfg.Conflicts {
 		if r.Strategy != StrategyScript {
 			continue
 		}
+		scripts++
 		mode, found, err := lsTreeMode(mainRoot, onto, r.Run)
 		switch {
 		case err != nil:
+			unread++
 			bad = append(bad, r.Run+" ("+err.Error()+")")
 		case !found:
 			bad = append(bad, r.Run+" (missing)")
@@ -190,9 +214,9 @@ func scriptsCheck(mainRoot, onto string, cfg *Config) Check {
 		}
 	}
 	if len(bad) > 0 {
-		return Check{Name: "scripts", OK: false, Blocking: true, Detail: strings.Join(bad, ", ")}
+		return Check{Name: "scripts", OK: false, Blocking: true, Unknown: unread == len(bad), Detail: strings.Join(bad, ", ")}
 	}
-	return Check{Name: "scripts", OK: true, Blocking: true}
+	return Check{Name: "scripts", OK: true, Blocking: true, Unused: scripts == 0}
 }
 
 // lsTreeMode returns the mode `git ls-tree` reports for path at ref, and
@@ -229,10 +253,13 @@ func rerereCheck(mainRoot string) Check {
 	if on {
 		return Check{Name: "rerere", OK: true, Detail: "on; a run recomputes every stop from its three stages and does not pass --rerere-autoupdate, so recorded resolutions never decide a stop"}
 	}
+	var gitErr *git.Error
 	return Check{
-		Name:   "rerere",
-		OK:     false,
-		Detail: "off; enable it to remember the conflicts you resolve by hand, so the next rebase that meets one has the resolution in the working file already",
+		Name: "rerere",
+		OK:   false,
+		// Exit 1 is git config's "not set"; anything else is no answer.
+		Unknown: err != nil && (!errors.As(err, &gitErr) || gitErr.Code != 1),
+		Detail:  "off; enable it to remember the conflicts you resolve by hand, so the next rebase that meets one has the resolution in the working file already",
 		Fix: func() error {
 			_, err := git.Run(mainRoot, "config", "rerere.enabled", "true")
 			return err
@@ -248,7 +275,7 @@ func rerereCheck(mainRoot string) Check {
 func hooksCheck(mainRoot string) Check {
 	dir, err := hooksDir(mainRoot)
 	if err != nil {
-		return Check{Name: "hooks", OK: false, Detail: err.Error()}
+		return Check{Name: "hooks", OK: false, Unknown: true, Detail: err.Error()}
 	}
 	var blocking, noted []string
 	for _, name := range []string{"pre-rebase", "post-rewrite"} {
@@ -338,10 +365,10 @@ func ontoAt(mainRoot, onto string) ontoState {
 // git could not be asked about; ok is false when onto resolves.
 func ontoFailure(onto, name string, st ontoState) (c Check, ok bool) {
 	if st.err != nil {
-		return Check{Name: name, OK: false, Detail: st.err.Error()}, true
+		return Check{Name: name, OK: false, Unknown: true, Detail: st.err.Error()}, true
 	}
 	if !st.resolves {
-		return Check{Name: name, OK: false, Detail: onto + " does not resolve; run git fetch origin"}, true
+		return Check{Name: name, OK: false, Unknown: true, Detail: onto + " does not resolve; run git fetch origin"}, true
 	}
 	return Check{}, false
 }
@@ -363,7 +390,7 @@ func treeFileCheck(mainRoot, onto string, st ontoState, path, name, detail strin
 		return Check{Name: name, OK: true}
 	default:
 		// No answer at all, such as a deadline that fired: that is not "absent".
-		return Check{Name: name, OK: false, Detail: err.Error()}
+		return Check{Name: name, OK: false, Unknown: true, Detail: err.Error()}
 	}
 }
 
@@ -378,7 +405,7 @@ func lfsCheck(mainRoot, onto string, st ontoState) Check {
 	if err != nil {
 		// onto is known good and exit 1 is grep's "no match", so this is a real
 		// failure (a bad pathspec, a git the deadline cut off), not silence.
-		return Check{Name: "lfs", OK: false, Detail: err.Error()}
+		return Check{Name: "lfs", OK: false, Unknown: true, Detail: err.Error()}
 	}
 	text := strings.TrimSpace(out)
 	if code == 1 || text == "" {
@@ -403,7 +430,8 @@ func dockerCheck(probe func() error) Check {
 		probe = probeDocker
 	}
 	if err := probe(); err != nil {
-		return Check{Name: "docker", OK: false, Detail: "a run refuses the worktrees whose steps need Docker, or owes those steps with --allow-owed: " + err.Error()}
+		var none git.NoAnswer
+		return Check{Name: "docker", OK: false, Unknown: errors.As(err, &none), Detail: "a run refuses the worktrees whose steps need Docker, or owes those steps with --allow-owed: " + err.Error()}
 	}
 	return Check{Name: "docker", OK: true}
 }
