@@ -40,11 +40,13 @@ func newSyncMoveCmd() *cobra.Command {
 			"or its full id where the subject is shared.\n\n" +
 			"Before the branch moves the line is checked as the fold would take it,\n" +
 			"and a move the fold would refuse is not written: a path the source does\n" +
-			"not change, a range that splits a hunk or selects none, the whole of\n" +
-			"the source (make it a fixup! instead), a hunk another move! commit\n" +
-			"takes, a part whose context only a commit in between has, a commit in\n" +
-			"between or a fold that does not merge clean with the part moved, or a\n" +
-			"fold that would end in another tree.\n\n" +
+			"not change, a range that splits a hunk or selects none, all of the\n" +
+			"source in one move (make it a fixup! instead), a hunk another move!\n" +
+			"commit takes, a part whose context only a commit in between has or that\n" +
+			"would land elsewhere than the source has it, a commit in between or a\n" +
+			"fold that does not merge clean with the part moved, or a fold that would\n" +
+			"end in another tree. Several moves into different commits may take all\n" +
+			"of a source between them; the fold then drops it as empty.\n\n" +
 			"--json prints one object on stdout, for a commit written or refused\n" +
 			"(wt schema sync-move); a refusal still exits non-zero.",
 		Example: "  wt sync move login door/refuse.go --from 'feat: the door' --into 'feat: refusals'\n" +

@@ -455,12 +455,14 @@ Before anything moves the run replays the whole fold in the object store and
 refuses, naming the cause: a target or source that does not name one commit
 below the `move!` commit, a target not below the source, a `move!` commit that
 changes anything, a path the source does not change, a range that splits a hunk
-or selects none, every hunk of every path the source changes (make it a
-`fixup!` instead), a hunk two `move!` commits take, a part that does not apply
-at the target (naming the first commit in between that carries its context),
-any commit of the fold that does not merge clean with the part moved, a source
-whose replay would change anything but what the moves leave it, and a fold that
-would end in another tree. It needs `--each-commit=targets`, so a part that
+or selects none, one move that takes every hunk of every path the source changes
+(make it a `fixup!` instead), a hunk two `move!` commits take, a part that does
+not apply at the target (naming the first commit in between that carries its
+context), a hunk that would land elsewhere than the source has it, any commit of
+the fold that does not merge clean with the part moved, a source whose replay
+would change anything but what the moves leave it, and a fold that would end in
+another tree. Several `move!` commits into different targets may take all of a
+source between them; the fold then drops it as empty. It needs `--each-commit=targets`, so a part that
 builds only with code from a commit in between fails the check at the target's
 layer; `--onto` and `--edit` are refused for now. `wt sync <work> --stack
 --autosquash` lists each move, or the refusal, and moves nothing.

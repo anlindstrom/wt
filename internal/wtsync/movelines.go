@@ -2,6 +2,7 @@ package wtsync
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -171,6 +172,15 @@ type linesPick struct {
 	picked []bool
 }
 
+// and is p with the hunks other, a pick of the same change, takes too.
+func (p linesPick) and(other linesPick) linesPick {
+	picked := slices.Clone(p.picked)
+	for i, taken := range other.picked {
+		picked[i] = picked[i] || taken
+	}
+	return linesPick{diff: p.diff, picked: picked}
+}
+
 // pickHunks is the hunks of d that ranges, all of one path, take: every hunk a
 // range overlaps, whose changed lines it must cover whole. why is set when a
 // range cannot be taken.
@@ -211,10 +221,11 @@ func pickHunks(d fileDiff, ranges []LineRange) (linesPick, string) {
 }
 
 // patch is the source's change to the path restricted to the picked hunks. A
-// change of the path's mode stays with the source. Each hunk's new-side start
-// is moved back by what the hunks left out before it add or remove, since git
-// apply looks for a hunk from there.
-func (p linesPick) patch() string {
+// change of the path's mode stays with the source. git apply looks for a hunk
+// from its new-side start, so each one's is where the hunk sits in the file the
+// patch goes onto: ahead is how many more lines the source's parent has above
+// a line of it than that file has.
+func (p linesPick) patch(ahead func(line int) int) string {
 	var b strings.Builder
 	for _, l := range p.diff.head {
 		if !strings.HasPrefix(l, "old mode ") && !strings.HasPrefix(l, "new mode ") {
@@ -227,7 +238,7 @@ func (p linesPick) patch() string {
 			left += h.newLen - h.oldLen
 			continue
 		}
-		fmt.Fprintf(&b, "@@ -%d,%d +%d,%d @@\n", h.oldStart, h.oldLen, h.newStart-left, h.newLen)
+		fmt.Fprintf(&b, "@@ -%d,%d +%d,%d @@\n", h.oldStart, h.oldLen, max(h.newStart-left-ahead(h.oldStart), 0), h.newLen)
 		for _, l := range h.body {
 			b.WriteString(l)
 		}
@@ -235,37 +246,124 @@ func (p linesPick) patch() string {
 	return b.String()
 }
 
-// changesOf is the lines the hunks keep reports remove and add, in order.
-func changesOf(hunks []diffHunk, keep func(int) bool) (removed, added []string) {
-	for i, h := range hunks {
-		if !keep(i) {
-			continue
+// linesAhead is how many more lines d's new side has above its line than its
+// old side has.
+func (d fileDiff) linesAhead(line int) int {
+	ahead := 0
+	for _, h := range d.hunks {
+		at := h.newStart
+		if h.newLen == 0 {
+			at++
 		}
 		for _, l := range h.body {
 			switch l[0] {
-			case '-':
-				removed = append(removed, strings.TrimSuffix(l, "\n"))
 			case '+':
-				added = append(added, strings.TrimSuffix(l, "\n"))
+				if at < line {
+					ahead++
+				}
+				at++
+			case '-':
+				if at <= line {
+					ahead--
+				}
+			case ' ':
+				at++
 			}
 		}
 	}
-	return removed, added
+	return ahead
 }
 
-// keepsTheRest is whether the source's replay, which took path from the tree
-// before to the tree after, changed exactly what the moves left of it: the
-// hunks none of picks takes, and the source's own change of mode.
-func keepsTheRest(dir, before, after, path string, picks []linesPick) (bool, error) {
-	got, err := diffOfPath(dir, before, after, path)
+// withPicked is the tree of the source's parent with the picked hunks, and
+// nothing else of the source's change.
+func withPicked(dir, source string, picks map[string]linesPick) (string, error) {
+	var patch strings.Builder
+	for _, path := range slices.Sorted(maps.Keys(picks)) {
+		patch.WriteString(picks[path].patch(func(int) int { return 0 }))
+	}
+	tree, ok, err := applyPart(dir, source+"^^{tree}", patch.String())
+	if err == nil && !ok {
+		err = fmt.Errorf("the hunks of %s do not apply to its own parent", source)
+	}
+	return tree, err
+}
+
+// carried is the file ours becomes when the change from base to theirs is
+// merged onto it, as a blob id, "" for no file; ok is false when it does not
+// merge clean. Modes are not merged.
+func carried(dir string, ours, base, theirs treeEntry) (string, bool) {
+	switch {
+	case ours.oid == base.oid:
+		return theirs.oid, true
+	case base.oid == theirs.oid || ours.oid == theirs.oid:
+		return ours.oid, true
+	}
+	const mode = "100644"
+	merged, err := mergeEntries(dir, treeEntry{mode, ours.oid}, treeEntry{mode, base.oid}, treeEntry{mode, theirs.oid})
+	return merged.oid, err == nil
+}
+
+// entriesAt is path's entry in each of the trees or commits revs.
+func entriesAt(dir, path string, revs ...string) ([]treeEntry, error) {
+	entries := make([]treeEntry, len(revs))
+	for i, rev := range revs {
+		var err error
+		if entries[i], err = entryAt(dir, rev, path); err != nil {
+			return nil, err
+		}
+	}
+	return entries, nil
+}
+
+// landsAsSourced is whether the tree part, the tree onto with a move's part
+// applied, has each path moved by lines as onto becomes when exactly the
+// picked hunks of the source's change are merged onto it, wherever the lines
+// around them have shifted to.
+func landsAsSourced(dir, source string, picks map[string]linesPick, onto, part string) (bool, error) {
+	if len(picks) == 0 {
+		return true, nil
+	}
+	picked, err := withPicked(dir, source, picks)
 	if err != nil {
 		return false, err
 	}
-	d := picks[0].diff
-	wantRemoved, wantAdded := changesOf(d.hunks, func(i int) bool {
-		return !slices.ContainsFunc(picks, func(p linesPick) bool { return p.picked[i] })
-	})
-	removed, added := changesOf(got.hunks, func(int) bool { return true })
-	return !got.binary && !got.deleted && !got.retype && got.newMode == d.newMode &&
-		slices.Equal(removed, wantRemoved) && slices.Equal(added, wantAdded), nil
+	for path := range picks {
+		e, err := entriesAt(dir, path, onto, source+"^", picked, part)
+		if err != nil {
+			return false, err
+		}
+		if want, ok := carried(dir, e[0], e[1], e[2]); !ok || e[3].oid != want {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// keepsTheRest checks the source's replay, from the tree before to the tree
+// after, of the paths picks moves hunks of: before has those hunks where the
+// source has them, and the replay adds what lies between them and the source's
+// own file, its change of mode with it, and nothing else. It returns the first
+// path it does not hold for, "" when it holds for all.
+func keepsTheRest(dir, source, before, after string, picks map[string]linesPick) (string, error) {
+	picked, err := withPicked(dir, source, picks)
+	if err != nil {
+		return "", err
+	}
+	for _, path := range slices.Sorted(maps.Keys(picks)) {
+		e, err := entriesAt(dir, path, before, source+"^", picked, source, after)
+		if err != nil {
+			return "", err
+		}
+		below, parent, taken, own, got := e[0], e[1], e[2], e[3], e[4]
+		mode := below.mode
+		if newMode := picks[path].diff.newMode; newMode != "" {
+			mode = newMode
+		}
+		there, ok := carried(dir, below, parent, taken)
+		want, clean := carried(dir, below, taken, own)
+		if !ok || there != below.oid || !clean || got.oid != want || got.mode != mode {
+			return path, nil
+		}
+	}
+	return "", nil
 }
