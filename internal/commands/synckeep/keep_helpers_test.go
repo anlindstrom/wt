@@ -8,11 +8,14 @@ import (
 )
 
 // onMachine gives ctx a machine of the test's own: the platform the
-// keeper's start, stop and status see, whatever machine runs the test, and
-// an empty home, so that no plist of the person running it is found.
-func onMachine(t *testing.T, ctx *kit.Context, goos string) {
+// keeper's start, stop and status see, whatever machine runs the test, an
+// empty home, so that no plist of the person running it is found, and a
+// fakeLaunchctl, whose recorded calls are in the file returned.
+func onMachine(t *testing.T, ctx *kit.Context, goos string) (calls string) {
 	t.Helper()
 	ctx.Machine.GOOS, ctx.Machine.Home = goos, t.TempDir()
+	ctx.Machine.Launchctl, calls = fakeLaunchctl(t)
+	return calls
 }
 
 // keepFiles is the keeper's log and state file for the repository.
