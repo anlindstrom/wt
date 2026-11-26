@@ -107,39 +107,40 @@ func ExcludeFromTimeMachine(c *Context, path string, w io.Writer) {
 // a tmutil missing where the person's own file switched it on is counted as
 // a problem; a folder not yet excluded is excluded by the next worktree made
 // in it.
-func DoctorTimeMachine(c *Context, w io.Writer, report func(string, ...any)) {
-	fmt.Fprintln(w, "Time Machine:")
+func DoctorTimeMachine(c *Context, f *Findings) {
+	f.Printf("Time Machine:\n")
 	state, tm := c.TimeMachine()
 	switch state {
 	case TimeMachineNotMac:
-		fmt.Fprintln(w, "  - not macOS; wt runs no tmutil here")
+		f.Unused("not macOS; wt runs no tmutil here")
 		return
 	case TimeMachineOff:
-		fmt.Fprintf(w, "  - off in your wt config; turn it on with `wt config set %s true`\n",
+		f.Unused("off in your wt config; turn it on with `wt config set %s true`",
 			config.UserKeyTimeMachine)
-		fmt.Fprintln(w, "  - folders already excluded stay excluded; to back them up again, run `tmutil removeexclusion <folder>`")
+		f.Unused("folders already excluded stay excluded; to back them up again, run `tmutil removeexclusion <folder>`")
 		return
 	case TimeMachineNoTmutil:
 		const why = "no tmutil on the PATH; worktree folders are not excluded from Time Machine"
 		if c.UserConfig().IsSet(config.UserKeyTimeMachine) {
-			report("%s", why)
+			f.Fail("timemachine.tmutil", why)
 		} else {
-			fmt.Fprintf(w, "  - %s\n", why)
+			f.Note("timemachine.tmutil", CheckWarn, why)
 		}
 		return
 	}
-	fmt.Fprintf(w, "  ✓ %s — worktree folders wt makes are excluded\n", tm.Exe)
+	f.OK("timemachine.tmutil", "%s — worktree folders wt makes are excluded", tm.Exe)
 	dir := c.Scheme().Container()
 	if _, err := os.Stat(dir); err != nil {
 		return
 	}
 	switch excluded, err := tm.Excluded(dir); {
 	case err != nil:
-		fmt.Fprintf(w, "  - could not ask tmutil about %s: %v\n", dir, err)
+		f.Note("timemachine.excluded", CheckUnknown, "could not ask tmutil about %s: %v", dir, err)
 	case excluded:
-		fmt.Fprintf(w, "  ✓ %s is excluded\n", dir)
+		f.OK("timemachine.excluded", "%s is excluded", dir)
 	default:
-		fmt.Fprintf(w, "  - %s is not excluded; the next worktree wt makes here excludes it, or run `tmutil addexclusion %s`\n",
-			dir, ShellQuote(dir))
+		command := "tmutil addexclusion " + ShellQuote(dir)
+		f.Note("timemachine.excluded", CheckWarn, "%s is not excluded; the next worktree wt makes here excludes it, or run `%s`",
+			dir, command).WithFix(command)
 	}
 }

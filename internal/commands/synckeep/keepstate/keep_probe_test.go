@@ -1,4 +1,4 @@
-package keepstate
+package keepstate_test
 
 import (
 	"io"
@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
+	"github.com/anlindstrom/wt/internal/commands/synccmd"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 	"github.com/anlindstrom/wt/internal/gittest"
 )
 
-// When launchctl fails with an error (not "service not found"), KeeperCheck
-// must report that launchd could not be queried instead of claiming the keeper
-// is not loaded.
-func TestKeeperCheckReportsLaunchctlErrorInsteadOfNotLoaded(t *testing.T) {
-	t.Parallel()
+// keeperRecord is the sync.keeper record wt sync doctor gives on a Mac whose
+// launchctl is the script.
+func keeperRecord(t *testing.T, script string) kit.CheckRecord {
+	t.Helper()
 	main := testkit.CommittedRepo(t, testkit.MinimalConf)
 	ctx, err := kit.Open(main, io.Discard)
 	if err != nil {
@@ -25,37 +25,39 @@ func TestKeeperCheckReportsLaunchctlErrorInsteadOfNotLoaded(t *testing.T) {
 	ctx.Machine.GOOS = "darwin"
 	ctx.Machine.Home = t.TempDir()
 	fake := filepath.Join(t.TempDir(), "launchctl")
-	gittest.WriteExecutable(t, fake, "#!/bin/sh\necho 'launchd unreachable' >&2\nexit 2\n")
+	gittest.WriteExecutable(t, fake, script)
 	ctx.Machine.Launchctl = fake
 
-	c := KeeperCheck(ctx, time.Now())
-	if c.OK {
-		t.Fatalf("KeeperCheck returned OK=true on launchctl error: %+v", c)
+	f := kit.NewFindings(io.Discard)
+	synccmd.RecordSync(ctx, f)
+	for _, c := range f.Records() {
+		if c.ID == "sync.keeper" {
+			return c
+		}
 	}
-	if !strings.Contains(c.Detail, "launchd") {
-		t.Fatalf("detail %q does not mention launchd error", c.Detail)
+	t.Fatalf("no sync.keeper record in %+v", f.Records())
+	return kit.CheckRecord{}
+}
+
+// A launchctl that fails with anything but "no such service" leaves the keeper
+// unknown, never not loaded.
+func TestKeeperCheckReportsLaunchctlErrorInsteadOfNotLoaded(t *testing.T) {
+	t.Parallel()
+	c := keeperRecord(t, "#!/bin/sh\necho 'launchd unreachable' >&2\nexit 2\n")
+	if c.Status != kit.CheckUnknown || !strings.Contains(c.Detail, "launchd unreachable") {
+		t.Errorf("sync.keeper = %+v, want unknown, saying what launchctl said", c)
 	}
 }
 
-// A launchctl that hangs is given up on, and said to have given no answer.
+// A launchctl that hangs is given up on, and the keeper is unknown.
 func TestKeeperCheckGivesUpOnAHangingLaunchctl(t *testing.T) {
 	t.Parallel()
-	ctx, err := kit.Open(testkit.CommittedRepo(t, testkit.MinimalConf), io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx.Machine.GOOS = "darwin"
-	ctx.Machine.Home = t.TempDir()
-	fake := filepath.Join(t.TempDir(), "launchctl")
-	gittest.WriteExecutable(t, fake, "#!/bin/sh\nsleep 30\n")
-	ctx.Machine.Launchctl = fake
-
 	start := time.Now()
-	c := KeeperCheck(ctx, start)
+	c := keeperRecord(t, "#!/bin/sh\nsleep 30\n")
 	if took := time.Since(start); took > 20*time.Second {
-		t.Errorf("KeeperCheck waited %s for a hanging launchctl", took)
+		t.Errorf("the doctor waited %s for a hanging launchctl", took)
 	}
-	if c.OK || !strings.Contains(c.Detail, "did not answer within") {
-		t.Errorf("KeeperCheck = %+v, want not OK, saying launchctl did not answer", c)
+	if c.Status != kit.CheckUnknown || !strings.Contains(c.Detail, "did not answer within") {
+		t.Errorf("sync.keeper = %+v, want unknown, saying launchctl did not answer", c)
 	}
 }

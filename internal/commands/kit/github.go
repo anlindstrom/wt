@@ -2,7 +2,6 @@ package kit
 
 import (
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/anlindstrom/wt/internal/config"
@@ -97,27 +96,28 @@ func (g GitHub) Fail(err error) error {
 // DoctorGitHub reports whether `wt pr` would reach GitHub here, and where it
 // would stop if it would not. Nothing in this section is counted as a
 // problem: a machine without gh is an ordinary machine.
-func DoctorGitHub(ctx *Context, w io.Writer) {
-	fmt.Fprintln(w, "GitHub:")
+func DoctorGitHub(ctx *Context, f *Findings) {
+	f.Printf("GitHub:\n")
 	if !ctx.UserConfig().GitHub {
-		fmt.Fprintf(w, "  - off in your wt config; turn it on with `wt config set %s true`\n",
+		f.Unused("off in your wt config; turn it on with `wt config set %s true`",
 			config.UserKeyGitHub)
 		return
 	}
 	cli, ok := ctx.findGitHub()
 	if !ok {
-		fmt.Fprintln(w, "  - no gh on the PATH; `wt pr` is inactive and `wt list` shows no pull requests")
+		f.Note("github.cli", CheckWarn, "no gh on the PATH; `wt pr` is inactive and `wt list` shows no pull requests")
 		return
 	}
 	version := cli.Version()
+	status := CheckOK
 	if version == "" {
-		version = "version unknown"
+		version, status = "version unknown", CheckUnknown
 	}
-	fmt.Fprintf(w, "  ✓ %s (%s)\n", cli.Exe, version)
+	f.OK("github.cli", "%s (%s)", cli.Exe, version).As(status)
 
 	remote, ok := ctx.gitHubRemote()
 	if !ok {
-		fmt.Fprintf(w, "  - no GitHub remote for %s; `wt pr` is inactive here\n", ctx.Repo.Name)
+		f.Unused("no GitHub remote for %s; `wt pr` is inactive here", ctx.Repo.Name)
 		return
 	}
 	// A login gh answered about is one thing; a `gh auth status` that timed
@@ -125,18 +125,18 @@ func DoctorGitHub(ctx *Context, w io.Writer) {
 	// second as the first sends you off to log in again for nothing.
 	switch err := cli.Authenticated(remote.Host); {
 	case err == nil:
-		fmt.Fprintf(w, "  ✓ %s on %s — gh is logged in\n", remote.Slug, remote.Host)
+		f.OK("github.login", "%s on %s — gh is logged in", remote.Slug, remote.Host)
 	case github.NotLoggedIn(err):
-		fmt.Fprintf(w, "  - %s is on %s, which gh is not logged in to; run `gh auth login --hostname %s`\n",
-			remote.Slug, remote.Host, remote.Host)
+		f.Note("github.login", CheckWarn, "%s is on %s, which gh is not logged in to; run `gh auth login --hostname %s`",
+			remote.Slug, remote.Host, remote.Host).WithFix("gh auth login --hostname " + remote.Host)
 		return
 	default:
-		fmt.Fprintf(w, "  - could not check gh's login for %s: %v\n", remote.Host, err)
+		f.Note("github.login", CheckUnknown, "could not check gh's login for %s: %v", remote.Host, err)
 		return
 	}
 	if err := prCacheWritable(ctx); err != nil {
-		fmt.Fprintf(w, "  - the pull requests cannot be cached, so every listing asks GitHub again: %v\n", err)
+		f.Note("github.cache", CheckWarn, "the pull requests cannot be cached, so every listing asks GitHub again: %v", err)
 		return
 	}
-	fmt.Fprintf(w, "  ✓ pull requests cached in %s\n", PRCachePath(ctx))
+	f.OK("github.cache", "pull requests cached in %s", PRCachePath(ctx))
 }

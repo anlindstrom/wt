@@ -4,6 +4,14 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-26 10:05 — wt doctor and wt sync doctor print JSON, and write nothing
+
+`--json` on `wt doctor` (with `--all` too) and `wt sync doctor` prints one record per finding:
+id, status (ok, warn, fail or unknown), detail and fix; exit 1 on any fail. Both take
+`--repo <path>`. `wt doctor` no longer writes in `.git` to test the pull request cache,
+`wt doctor --all` counts a `.wt-sync.yaml` that does not parse, and a launchd that does
+not answer in 10 s is said so, not reported as a keeper that is not loaded.
+
 ## 2026-11-25 22:06 — Move part of a commit into an earlier one during a fold
 
 A `move!` commit moves whole paths of a later commit into an earlier one in the same

@@ -330,8 +330,17 @@ func (r *Repo) BranchAt(path string) string {
 
 // BranchExists reports whether a local branch of that name exists.
 func (r *Repo) BranchExists(name string) bool {
+	found, _ := r.LookupBranch(name)
+	return found
+}
+
+// LookupBranch is BranchExists keeping apart a branch that is not there from
+// a git that could not say, which is the error.
+func (r *Repo) LookupBranch(name string) (bool, error) {
 	_, err := git.Run(r.MainRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
-	return err == nil
+	// Exit 1 is show-ref's "no such ref".
+	code, err := git.Answer(err, 1)
+	return err == nil && code == 0, err
 }
 
 // CommitsAhead counts the commits branch has that base does not. ok is false

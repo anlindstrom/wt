@@ -22,7 +22,8 @@ refuses `wt sync rebase`, while `wt up --onto` still takes a conflict-free rebas
 
 A key wt does not know is an error, and so is a mistake in a key it does know:
 the run refuses and says which entry. `wt sync doctor` checks the file before
-the first run.
+the first run (`--json` gives its findings as records), and `wt doctor --all`
+counts a file that does not parse as a problem.
 
 ```yaml
 conflicts:
