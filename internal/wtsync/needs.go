@@ -28,7 +28,7 @@ func probeDocker() error {
 	cmd.Stderr = io.Discard
 	timedOut, _, err := git.RunBounded(dockerDeadline, cmd)
 	if timedOut {
-		return fmt.Errorf("docker info did not answer within %s", dockerDeadline)
+		return git.NoAnswer(fmt.Sprintf("docker info did not answer within %s", dockerDeadline))
 	}
 	if err != nil {
 		return fmt.Errorf("docker info: %w", err)

@@ -56,3 +56,9 @@ func Lines(dir string, args ...string) ([]string, error) {
 	}
 	return strings.Split(out, "\n"), nil
 }
+
+// NoAnswer is a command other than git given up on at its deadline, in the
+// words to report it with.
+type NoAnswer string
+
+func (e NoAnswer) Error() string { return string(e) }
