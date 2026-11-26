@@ -107,7 +107,8 @@ func TestRunFlagsRefuseFlagsThatDoNotGoTogether(t *testing.T) {
 		{runFlags{stack: true, edit: "a1b2c3d", eachCommit: "off"}, false, ""},
 		{runFlags{stack: true, autosquash: true, eachCommit: "targets"}, false, ""},
 		{runFlags{stack: true, eachCommit: "targets"}, false, wtsync.TargetsRefusal(false)},
-		{runFlags{stack: true, autosquash: true, onto: "main", eachCommit: "targets"}, false, wtsync.TargetsRefusal(false)},
+		// Onto another commit the line decides: a run takes it for a move! commit.
+		{runFlags{stack: true, autosquash: true, onto: "main", eachCommit: "targets"}, false, ""},
 		{runFlags{stack: true, edit: "a1b2c3d", eachCommit: "targets"}, false, wtsync.TargetsRefusal(true)},
 	} {
 		if got := errString(tc.flags.check(tc.look)); got != tc.err {

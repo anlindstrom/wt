@@ -232,6 +232,9 @@ type FoldGuard struct {
 	// passed.
 	Outcome string  `json:"outcome"`
 	Reason  *string `json:"reason"`
+	// replayed says Onto's side of the comparison was the line replayed onto
+	// it without its move! commits, not merged.
+	replayed bool
 }
 
 // StackContextGap is one hunk of a fixup a fold moves ahead of its
@@ -624,7 +627,12 @@ func FinishStack(ctx *kit.Context, w io.Writer, in StackFinish) (s *Stack, failu
 		return f.refuse(why)
 	}
 	s.Fold = FoldOf(rec)
-	if why := f.guardFold(); why != "" {
+	if why := f.guardFold(); f.unchecked != nil {
+		// The record stays: nothing moved, and undo reads it.
+		s.declined = "the content check of the fold could not be made; wt sync undo " + rec.Work + " puts the line back"
+		sidesNotMoved(w, s, "no layer moved, and no side branch")
+		return s, "", fmt.Errorf("the content check of the fold could not be made, and no layer moved: %w; wt sync undo %s puts the line back", f.unchecked, rec.Work)
+	} else if why != "" {
 		return f.refuse(why)
 	}
 	forks := f.followDrops(rec.Forks)
@@ -652,6 +660,8 @@ type stackFinisher struct {
 	rec  *wtsync.StackRecord
 	in   StackFinish
 	s    *Stack
+	// unchecked is why the fold's content check could not be made.
+	unchecked error
 }
 
 // refuse ends the finish with no layer moved. An edit run is never left
@@ -698,13 +708,14 @@ func (f *stackFinisher) guardEdit() string {
 }
 
 // guardFold holds a fold's result to the line's content, the tree guard, and
-// records it as fold.guard; the reason it failed, "" for passed or no fold.
+// records it as fold.guard; the reason it failed, "" for passed or no fold. A
+// check that could not be made fails, and sets f.unchecked.
 func (f *stackFinisher) guardFold() string {
 	w, s, rec, main, in := f.w, f.s, f.rec, f.main, f.in
 	if (!rec.Autosquash && !rec.InPlace) || rec.Edit != nil {
 		return ""
 	}
-	res := wtsync.TreeGuard(main, wtsync.GuardInput{Base: rec.Line.Base, Onto: in.Onto, OldTip: in.OldTip, NewTip: in.NewTip,
+	res := wtsync.TreeGuard(main, wtsync.GuardInput{Base: rec.Line.Base, Onto: in.Onto, Upstream: rec.Upstream, OldTip: in.OldTip, NewTip: in.NewTip,
 		Folds: in.Folds, Stopped: in.Stopped, Resolved: in.Resolved, Fixes: in.Fixed})
 	g := &FoldGuard{OldTip: in.OldTip, NewTip: in.NewTip, ExcludedGlobs: nonNil(res.Excluded),
 		ConflictAllowed: nonNil(res.ConflictAllowed), ResolvedAtStop: res.AtStop, Outcome: "passed"}
@@ -714,8 +725,10 @@ func (f *stackFinisher) guardFold() string {
 	s.Fold.Guard = g
 	if res.Why != "" {
 		g.Outcome, g.Reason = "failed", jsonout.Strp(res.Why)
+		f.unchecked = res.Err
 		return fmt.Sprintf("the fold changed the line's content (%s); the line is folded, wt sync undo %s puts it back", res.Why, rec.Work)
 	}
+	g.replayed = res.Replayed
 	fmt.Fprintf(w, "  ✓ %s\n", guardPassed(g))
 	return ""
 }
@@ -982,11 +995,15 @@ func foldCheck(main, base, onto, oldTip, newTip string, folds, stopped []string)
 
 // guardPassed is what a passed tree guard compared, as one line: the old
 // tip, or for a fold that moved the line the old line merged onto its
-// target; the step paths it left out, apart from the conflicted files it
-// held only to keeping the merge's lines outside the conflict.
+// target, replayed onto it for a line with move! commits; the step paths it
+// left out, apart from the conflicted files it held only to keeping the
+// merge's lines outside the conflict.
 func guardPassed(g *FoldGuard) string {
 	line := "tip tree equal to " + git.ShortID(g.OldTip, 7)
-	if g.Onto != nil {
+	switch {
+	case g.Onto != nil && g.replayed:
+		line = "tip tree equal to the old line replayed onto " + git.ShortID(*g.Onto, 7) + " without the move! commits"
+	case g.Onto != nil:
 		line = "tip tree equal to the old line merged onto " + git.ShortID(*g.Onto, 7)
 	}
 	if len(g.ExcludedGlobs) > 0 {

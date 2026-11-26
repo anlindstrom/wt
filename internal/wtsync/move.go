@@ -1,6 +1,7 @@
 package wtsync
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -95,18 +96,22 @@ func (m PartMove) Line() string {
 }
 
 // MoveRunRefusal is why a run with move! commits cannot take them, "" when
-// it can: they fold in place only, with the checks at their targets and
-// sources (--each-commit=targets).
-func MoveRunRefusal(inPlace, edit bool, eachCommit string) string {
+// it can: they fold with the checks at their targets and sources
+// (--each-commit=targets).
+func MoveRunRefusal(edit bool, eachCommit string) string {
 	switch {
-	case !inPlace:
-		return "a move! commit folds in place only: run it without --onto, then move the line onto the target"
 	case edit:
 		return "a move! commit cannot be folded by an --edit run: run --autosquash without --edit"
 	case eachCommit != EachTargets:
 		return "a run with a move! commit checks at each target and source: add --each-commit=targets"
 	}
 	return ""
+}
+
+// HasMoves is whether any of commits, a line's, is a move! commit.
+func HasMoves(dir string, commits []string) (bool, error) {
+	all, err := readMoveCommits(dir, commits)
+	return slices.ContainsFunc(all, func(c moveCommit) bool { return isMove(c.subject) }), err
 }
 
 // moveCommit is a commit of the line read for PlanMoves.
@@ -127,34 +132,52 @@ type moveCommit struct {
 // other than what no move takes or ends in another tree than the line's tip.
 // Nothing but objects in the store is written.
 func PlanMoves(dir string, commits []string) ([]PartMove, string, error) {
-	if len(commits) == 0 {
-		return nil, "", nil
-	}
 	all, err := readMoveCommits(dir, commits)
 	if err != nil {
 		return nil, "", err
 	}
+	moves, why, err := readMoves(dir, all, nil)
+	if err != nil || why != "" || len(moves) == 0 {
+		return nil, why, err
+	}
+	start, err := gitEnv(dir, nil, nil, "rev-parse", all[0].sha+"^^{tree}")
+	if err != nil {
+		return nil, "", err
+	}
+	tip, err := gitEnv(dir, nil, nil, "rev-parse", all[len(all)-1].sha+"^{tree}")
+	if err != nil {
+		return nil, "", err
+	}
+	got, why, err := replayLine(dir, all, moves, replayFrom{
+		tree:     start,
+		conflict: func(i int, _ []Conflict) string { return moveConflict(all, moves, i) },
+		between:  func(sha string) string { return sha + "^{tree}" },
+	})
+	if err != nil || why != "" {
+		return nil, why, err
+	}
+	if got.tree != tip {
+		return nil, fmt.Sprintf("the fold with the move would end in another tree than the line's tip %s: nothing is moved", git.ShortID(all[len(all)-1].sha, 7)), nil
+	}
+	return moves, "", nil
+}
+
+// readMoves is every move! commit of all, each resolved and checked on its
+// own and against the others. unnamed, when not nil, says why a name that
+// finds no commit of the line does not, "" to keep the general reason.
+func readMoves(dir string, all []moveCommit, unnamed func(name string) (string, error)) ([]PartMove, string, error) {
 	var moves []PartMove
 	for i, c := range all {
 		if !isMove(c.subject) {
 			continue
 		}
-		m, why, err := planMove(dir, all, i)
+		m, why, err := planMove(dir, all, i, unnamed)
 		if err != nil || why != "" {
 			return nil, why, err
 		}
 		moves = append(moves, m)
 	}
-	if len(moves) == 0 {
-		return nil, "", nil
-	}
-	if why := sharedParts(moves); why != "" {
-		return nil, why, nil
-	}
-	if why, err := replayMoves(dir, all, moves); err != nil || why != "" {
-		return nil, why, err
-	}
-	return moves, "", nil
+	return moves, sharedParts(moves), nil
 }
 
 // readMoveCommits is commits with their subjects and bodies, in order.
@@ -178,7 +201,7 @@ func readMoveCommits(dir string, commits []string) ([]moveCommit, error) {
 
 // planMove reads, resolves and checks the move! commit all[i], and builds
 // its part.
-func planMove(dir string, all []moveCommit, i int) (PartMove, string, error) {
+func planMove(dir string, all []moveCommit, i int, unnamed func(string) (string, error)) (PartMove, string, error) {
 	c := all[i]
 	m := PartMove{Commit: c.sha, Subject: c.subject}
 	refuse := func(format string, a ...any) (PartMove, string, error) {
@@ -219,20 +242,25 @@ func planMove(dir string, all []moveCommit, i int) (PartMove, string, error) {
 			return refuse("%s is named by %s and by %s: a path is moved whole or by lines, not both", r.Path, movePathKey, moveLinesKey)
 		}
 	}
-	t, why, err := resolveOnLine(dir, all[:i], into)
-	if err != nil {
-		return PartMove{}, "", err
+	var at [2]int
+	for k, end := range []struct{ what, name string }{{"target", into}, {moveFromKey, from[0]}} {
+		j, why, err := resolveOnLine(dir, all[:i], end.name)
+		if err != nil {
+			return PartMove{}, "", err
+		}
+		if why != "" && unnamed != nil {
+			carried, err := unnamed(end.name)
+			if err != nil {
+				return PartMove{}, "", err
+			}
+			why = cmp.Or(carried, why)
+		}
+		if why != "" {
+			return refuse("its %s %s", end.what, why)
+		}
+		at[k] = j
 	}
-	if why != "" {
-		return refuse("its target %s", why)
-	}
-	s, why, err := resolveOnLine(dir, all[:i], from[0])
-	if err != nil {
-		return PartMove{}, "", err
-	}
-	if why != "" {
-		return refuse("its %s %s", moveFromKey, why)
-	}
+	t, s := at[0], at[1]
 	target, source := all[t], all[s]
 	m.Target, m.TargetSubject, m.Source, m.SourceSubject = target.sha, target.subject, source.sha, source.subject
 	switch {
@@ -397,16 +425,42 @@ func applyPart(dir, tree, patch string) (string, bool, error) {
 	return out, err == nil, err
 }
 
-// replayMoves replays the fold in the object store as the run will make it:
+// replayFrom is where replayLine replays a line, and how it words what it
+// finds there.
+type replayFrom struct {
+	// tree is what the line's first commit is replayed onto.
+	tree string
+	// skip is the commits the rebase leaves out of its list.
+	skip map[string]bool
+	// conflict is why the commit all[i], which does not merge clean, refuses.
+	conflict func(i int, conflicts []Conflict) string
+	// between is the tree a commit lying between a move's target and its
+	// source leaves, for naming the one that carries a part's context; "" for
+	// a commit that leaves none.
+	between func(sha string) string
+}
+
+// replayedLine is what replayLine came to: the tip's tree, the tree each
+// replayed commit left before its folds, and the commits that came out empty
+// though they change something.
+type replayedLine struct {
+	tree    string
+	after   map[string]string
+	emptied map[string]bool
+}
+
+// replayLine replays the fold in the object store as the run will make it:
 // the line's commits in order, each fixup!, squash! and amend! right behind
 // the commit it folds into (and a fold of a fold behind that one), each
 // move's part last in its target's group, and the move! commits left out.
-// why is set when any of them does not merge clean, when a part does not
-// apply at its target as the target's fixups leave it, when a source's
-// replay changes a path moved whole, when a path moved by lines does not have
-// its hunks where the source has them or the replay adds other than the rest,
-// or when the tip's tree is not the line's. Each move's Part is built there (buildPart).
-func replayMoves(dir string, all []moveCommit, moves []PartMove) (string, error) {
+// With no moves it is the same rebase without them. why is set when any of
+// the commits does not merge clean, when a part does not apply at its target
+// as the target's fixups leave it, when a source's replay changes a path
+// moved whole, or when a path moved by lines does not have its hunks where
+// the source has them or the replay adds other than the rest. Each move's
+// Part is built there (buildPart).
+func replayLine(dir string, all []moveCommit, moves []PartMove, from replayFrom) (replayedLine, string, error) {
+	res := replayedLine{after: map[string]string{}, emptied: map[string]bool{}}
 	lc := make([]lineCommit, len(all))
 	index := map[string]int{}
 	for i, c := range all {
@@ -430,25 +484,32 @@ func replayMoves(dir string, all []moveCommit, moves []PartMove) (string, error)
 		parts[m.Target] = append(parts[m.Target], n)
 		sources[m.Source] = append(sources[m.Source], m)
 	}
-	cur, err := gitEnv(dir, nil, nil, "rev-parse", all[0].sha+"^^{tree}")
-	if err != nil {
-		return "", err
-	}
-	step := func(rev string) (bool, error) {
+	cur := from.tree
+	step := func(rev string) ([]Conflict, bool, error) {
 		parent, err := gitEnv(dir, nil, nil, "rev-parse", rev+"^^{tree}")
 		if err != nil {
-			return false, err
+			return nil, false, err
 		}
-		tree, clean, _, _, err := mergeTree(dir, parent, cur, rev)
+		tree, clean, conflicts, _, err := mergeTree(dir, parent, cur, rev)
 		if err != nil || !clean {
-			return false, err
+			return conflicts, false, err
+		}
+		if tree == cur {
+			own, err := gitEnv(dir, nil, nil, "rev-parse", rev+"^{tree}")
+			if err != nil {
+				return nil, false, err
+			}
+			res.emptied[rev] = own != parent
 		}
 		cur = tree
-		return true, nil
+		return nil, true, nil
 	}
 	var group func(i int) (string, error)
 	group = func(i int) (string, error) {
 		c := all[i]
+		if from.skip[c.sha] {
+			return "", nil
+		}
 		// A path moved whole is there already, so the replay must leave it as
 		// it is; one moved by lines keeps the hunks no move takes.
 		var whole []string
@@ -468,11 +529,12 @@ func replayMoves(dir string, all []moveCommit, moves []PartMove) (string, error)
 			before = append(before, e)
 		}
 		below := cur
-		if ok, err := step(c.sha); err != nil {
+		if conflicts, ok, err := step(c.sha); err != nil {
 			return "", err
 		} else if !ok {
-			return moveConflict(all, moves, i), nil
+			return from.conflict(i, conflicts), nil
 		}
+		res.after[c.sha] = cur
 		for k, p := range whole {
 			got, err := entryAt(dir, cur, p)
 			if err != nil {
@@ -495,7 +557,7 @@ func replayMoves(dir string, all []moveCommit, moves []PartMove) (string, error)
 			}
 		}
 		for _, n := range parts[c.sha] {
-			why, err := buildPart(dir, all, index, &moves[n], cur)
+			why, err := buildPart(dir, all, index, &moves[n], cur, from.between)
 			if err != nil || why != "" {
 				return why, err
 			}
@@ -510,17 +572,11 @@ func replayMoves(dir string, all []moveCommit, moves []PartMove) (string, error)
 			continue
 		}
 		if why, err := group(i); err != nil || why != "" {
-			return why, err
+			return res, why, err
 		}
 	}
-	tip, err := gitEnv(dir, nil, nil, "rev-parse", all[len(all)-1].sha+"^{tree}")
-	if err != nil {
-		return "", err
-	}
-	if cur != tip {
-		return fmt.Sprintf("the fold with the move would end in another tree than the line's tip %s: nothing is moved", git.ShortID(all[len(all)-1].sha, 7)), nil
-	}
-	return "", nil
+	res.tree = cur
+	return res, "", nil
 }
 
 // buildPart builds m.Part where the fold applies it: on folded, the target's
@@ -528,8 +584,8 @@ func replayMoves(dir string, all []moveCommit, moves []PartMove) (string, error)
 // fallback. The part's parent is a commit on the target with folded as its
 // tree, so the fold's fixup of it brings exactly the part. why is set when
 // it does not apply, naming the first commit between target and source
-// whose tree carries its context.
-func buildPart(dir string, all []moveCommit, index map[string]int, m *PartMove, folded string) (string, error) {
+// whose tree, as between gives it, carries its context.
+func buildPart(dir string, all []moveCommit, index map[string]int, m *PartMove, folded string, between func(string) string) (string, error) {
 	patch, err := m.patchOnto(dir, folded)
 	if err != nil {
 		return "", err
@@ -541,11 +597,15 @@ func buildPart(dir string, all []moveCommit, index map[string]int, m *PartMove, 
 	if !ok {
 		why := fmt.Sprintf("%s %q: the part does not apply at the target %s as its fixups leave it", git.ShortID(m.Commit, 7), oneLinePlan(m.Subject), git.ShortID(m.Target, 7))
 		for k := index[m.Target] + 1; k < index[m.Source]; k++ {
-			patch, err := m.patchOnto(dir, all[k].sha+"^{tree}")
+			at := between(all[k].sha)
+			if at == "" {
+				continue
+			}
+			patch, err := m.patchOnto(dir, at)
 			if err != nil {
 				return "", err
 			}
-			if _, ok, err := applyPart(dir, all[k].sha+"^{tree}", patch); err != nil {
+			if _, ok, err := applyPart(dir, at, patch); err != nil {
 				return "", err
 			} else if ok {
 				why += fmt.Sprintf(": its context comes from %s %q, which lies between; name that commit, or one above it, as the target", git.ShortID(all[k].sha, 7), oneLinePlan(all[k].subject))

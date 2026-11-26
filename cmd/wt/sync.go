@@ -281,7 +281,7 @@ func (f runFlags) check(look bool) error {
 		return usagef("--edit and --onto are two runs: edit in place first (--stack --edit <rev>), then move (--stack --onto <ref>)")
 	case f.eachCommit != "" && !validEachCommit(f.eachCommit):
 		return usagef("--each-commit takes all, tips, targets or off, not %q", f.eachCommit)
-	case f.eachCommit == wtsync.EachTargets && (!f.autosquash || f.onto != "" || f.edit != ""):
+	case f.eachCommit == wtsync.EachTargets && (!f.autosquash || f.edit != ""):
 		return usagef("%s", wtsync.TargetsRefusal(f.edit != ""))
 	case f.eachCommit == wtsync.EachTips && f.edit != "":
 		return usagef("--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after")

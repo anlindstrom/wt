@@ -214,10 +214,15 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	}
 	var stack *syncrun.Stack
 	var fold *FoldLook
-	if foldsInPlace(look, target) {
-		if stack, fold, err = foldLookAt(ctx, base, onto, cfg, look, listed); err != nil {
+	if look != nil && look.Autosquash {
+		if stack, fold, err = foldLookAt(ctx, base, onto, cfg, target, look, listed); err != nil {
+			if target != nil {
+				printDetail(w, work, a)
+			}
 			return err
 		}
+	}
+	if fold != nil {
 		printFoldDetail(w, work, a, fold)
 	} else {
 		printDetail(w, work, a)

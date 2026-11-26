@@ -327,7 +327,15 @@ func (r *RunPlan) ontoPrecheck(works []string) error {
 	if why := r.target.onLine(ctx, line, r.trunkSHA, kit.BranchWorkName(ctx, named[0])); why != "" {
 		return errors.New(why + "; nothing is rebased")
 	}
-	return nil
+	if r.eachCommit != wtsync.EachTargets || r.opts.Steps != nil {
+		return nil
+	}
+	// Onto another commit, targets is for a fold with a move! commit only.
+	moves, err := wtsync.HasMoves(ctx.Repo.MainRoot, line.Commits)
+	if err != nil || moves {
+		return err
+	}
+	return errors.New(wtsync.TargetsRefusal(false))
 }
 
 // printFollowUps lists, for each worktree the run moved onto --onto's

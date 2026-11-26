@@ -54,3 +54,40 @@ func TestPlacingAMovedHunkReportsABlobGitCannotRead(t *testing.T) {
 		t.Fatalf("an unreadable blob answered %v with no error", ok)
 	}
 }
+
+// A content check that cannot run is an error, still failing the fold: a blob
+// git cannot read is not a difference in the line.
+func TestTreeGuardReportsAMergeItCannotMakeAsAnError(t *testing.T) {
+	t.Parallel()
+	g := newGuardRepo(t, true)
+	resolution := tText("trunk mine", "last")
+	rec := g.resolvedAt(t, g.oldTip, resolution)
+	rec.Order = 1
+	stopped := g.rewritten(t, g.onto, map[string]string{"t.txt": resolution})
+	fixed := g.rewritten(t, stopped, map[string]string{"t.txt": strings.Replace(resolution, "mid", "fixed", 1)})
+	fix := g.fixAt(t, stopped, fixed, 2)
+	in := GuardInput{Base: g.base, Onto: g.onto, OldTip: g.oldTip, NewTip: fixed, Stopped: []string{"t.txt"},
+		Resolved: []StopResolution{rec}, Fixes: []CheckFix{fix}}
+	// The fix starts from other content than the resolution, so the two are
+	// merged; the resolution's blob is then gone.
+	in.Resolved[0].Blob = strings.Repeat("1", 40)
+	if res := TreeGuard(g.dir, in); res.Err == nil || res.Why == "" {
+		t.Fatalf("%+v", res)
+	}
+}
+
+// A rebase takes --each-commit=targets onto another commit only for a line
+// with a move! commit: any other is refused before anything is read or written.
+func TestRebaseRefusesTargetsOntoAnotherCommitWithoutAMove(t *testing.T) {
+	t.Parallel()
+	g := newGuardRepo(t, false)
+	line := Line{Branch: "line", Base: g.base, Head: g.oldTip, Commits: []string{g.oldTip}}
+	_, err := Rebase(g.dir, &Config{}, Request{Path: g.dir, Branch: "line", Onto: g.onto, EachCommit: EachTargets,
+		Stack: &StackRequest{Line: line, Autosquash: true}}, nil)
+	if err == nil || err.Error() != TargetsRefusal(false) {
+		t.Fatalf("err %v", err)
+	}
+	if got := gittest.Git(t, g.dir, "for-each-ref", "refs/wt-sync/"); got != "" {
+		t.Errorf("refs written: %s", got)
+	}
+}
