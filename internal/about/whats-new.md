@@ -4,6 +4,11 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-27 12:20 — `wt sync --help` shows a stack look
+
+The examples include a stack held on one line:
+`wt sync top --stack --autosquash --layer 'feat/*'`.
+
 ## 2026-11-26 11:53 — A `move!` commit folds with `--onto`
 
 `wt sync rebase <work> --stack --autosquash --onto <ref> --each-commit=targets` moves
