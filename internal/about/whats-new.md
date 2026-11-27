@@ -4,6 +4,13 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-27 22:33 — An in-place fold no longer replays onto trunk
+
+`wt sync <work> --stack --autosquash` is faster: neither the look nor the run replays the line
+onto trunk. A line divergent from trunk can now be folded in place. A run given `--if-ready` or
+`--expect` still replays, and refuses as before. The look now also refuses a line with no layer,
+and warns of a need that only a commit below a checked-out layer has, as the run does.
+
 ## 2026-11-27 12:30 — Default repository roots no longer name one person's folders
 
 - With no `WT_ROOTS` and no `[roots]` in the user config, commands across

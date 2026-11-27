@@ -36,7 +36,7 @@ func (r *RunPlan) readStack() error {
 		}
 	}
 	if len(line.Layers) == 0 {
-		return fmt.Errorf("no layer branch is on the line of %s: nothing for --stack to move; wt sync rebase %s rebases it alone", r.parts[b].work, r.parts[b].work)
+		return noLayerRefusal(r.parts[b].work)
 	}
 	if rev := r.opts.Stack.Edit; rev != "" {
 		e, err := editOnLine(r.ctx.Repo.MainRoot, rev, line, r.parts[b].work)
@@ -84,6 +84,12 @@ func (r *RunPlan) readStack() error {
 		}
 	})
 	return nil
+}
+
+// noLayerRefusal refuses --stack for the line of work when no layer branch is
+// on it.
+func noLayerRefusal(work string) error {
+	return fmt.Errorf("no layer branch is on the line of %s: nothing for --stack to move; wt sync rebase %s rebases it alone", work, work)
 }
 
 // foldHeader is what the header of a fold in place says, apart from the

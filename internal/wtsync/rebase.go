@@ -107,6 +107,9 @@ func Preflight(a Assessment) (Verdict, string) {
 	if a.Own.Refuses() {
 		return RefuseRun, a.Own.Refusal()
 	}
+	if a.InPlace {
+		return Proceed, ""
+	}
 	switch a.Class {
 	case Divergent:
 		reason := "divergent"

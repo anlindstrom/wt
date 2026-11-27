@@ -149,13 +149,27 @@ func TestFoldLookProceedsWhereTheLineIsCurrentWithTrunk(t *testing.T) {
 	}
 }
 
-// A line behind its own remote is refused by a stack run: the look says so,
-// where it would otherwise promise the fold.
+// A line behind its own remote is refused by a stack run, on trunk's tip or
+// behind it: the look says so, where it would otherwise promise the fold.
 func TestFoldLookRefusesALineBehindItsOwnRemote(t *testing.T) {
 	t.Parallel()
 	skipShort(t)
+	for name, behindTrunk := range map[string]bool{"on trunk's tip": false, "behind trunk": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			refusedBehindOwnRemote(t, behindTrunk)
+		})
+	}
+}
+
+func refusedBehindOwnRemote(t *testing.T, behindTrunk bool) {
+	t.Helper()
 	ctx, tmp := lowLine(t)
 	main := ctx.Repo.MainRoot
+	if behindTrunk {
+		testkit.GitIn(t, main, "commit", "-q", "--no-verify", "--allow-empty", "-m", "feat: trunk's own")
+		testkit.GitIn(t, main, "fetch", "-q", "origin")
+	}
 	gittest.WriteFile(t, filepath.Join(tmp, "c.txt"), "c\n")
 	testkit.GitIn(t, tmp, "add", "-A")
 	testkit.GitIn(t, tmp, "commit", "-q", "--no-verify", "-m", "feat: c")

@@ -17,12 +17,30 @@ import (
 	"github.com/anlindstrom/wt/internal/gittest"
 )
 
+// phaseWriter keeps what is written to it, and runs then once, at the first
+// write that has phase.
+type phaseWriter struct {
+	bytes.Buffer
+	phase string
+	then  func()
+}
+
+func onPhase(phase string, then func()) *phaseWriter { return &phaseWriter{phase: phase, then: then} }
+
+func (w *phaseWriter) Write(p []byte) (int, error) {
+	if w.then != nil && bytes.Contains(p, []byte(w.phase)) {
+		w.then()
+		w.then = nil
+	}
+	return w.Buffer.Write(p)
+}
+
 // divergedLine is a line on tmp/low that is behind trunk: feat: x, feat: a, a
 // commit subject second with the layer low1 at it, extra more commits, and a
 // fixup of feat: a. Trunk has changed trunkFile since. A script on trunk claims
 // x.txt, which the line's first commit changes: with x.txt as trunkFile that
-// commit stops the replay, where the script runs the shell lines of then.
-func divergedLine(t *testing.T, trunkFile, second string, extra int, then string) (ctx *kit.Context, tmp string) {
+// commit stops the replay.
+func divergedLine(t *testing.T, trunkFile, second string, extra int) (ctx *kit.Context, tmp string) {
 	t.Helper()
 	ctx, _ = synccmdtest.OpenLine(t, func(main, wtDir string) {
 		write := func(rel, content string) { gittest.WriteFile(t, filepath.Join(main, rel), content) }
@@ -32,7 +50,7 @@ func divergedLine(t *testing.T, trunkFile, second string, extra int, then string
 		}
 		write("x.txt", "base\n")
 		write(".wt-sync.yaml", "conflicts:\n  - paths: [x.txt]\n    strategy: script\n    run: tools/own.sh\neach_commit:\n  - run: 'true'\n")
-		write("tools/own.sh", "#!/bin/sh\n"+then)
+		write("tools/own.sh", "#!/bin/sh\n")
 		if err := os.Chmod(filepath.Join(main, "tools/own.sh"), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -74,28 +92,31 @@ func replayStarted(t *testing.T, trace string) bool {
 }
 
 // noticeWriter keeps each write that names the fixup, and notes whether it
-// came ahead of the replay.
+// came ahead of the replay and of the reading of the stack.
 type noticeWriter struct {
 	t       *testing.T
 	trace   string
+	read    bool
 	notices []string
 	early   []bool
 }
 
 func (w *noticeWriter) Write(p []byte) (int, error) {
+	w.read = w.read || bytes.Contains(p, []byte("reading side branches"))
 	if bytes.Contains(p, []byte("fixup! feat: a")) {
 		w.notices = append(w.notices, string(p))
-		w.early = append(w.early, !replayStarted(w.t, w.trace))
+		w.early = append(w.early, !w.read && !replayStarted(w.t, w.trace))
 	}
 	return len(p), nil
 }
 
 // A fixup the run would refuse is named on the progress writer before the
-// assessment starts its replay, in the words the run refuses with;
-// where the run stops for something else first, it is not named.
+// look's slow phases and any replay, in the words the run refuses with; where
+// the run stops for something else first, it is not named. A fold in place
+// replays nothing onto trunk; a fold with --onto replays onto its target.
 //
 // Not parallel: GIT_TRACE is set for the whole process.
-func TestFoldLookNamesAnAmbiguousFixupBeforeTheReplay(t *testing.T) {
+func TestFoldLookNamesAnAmbiguousFixupAhead(t *testing.T) {
 	skipShort(t)
 	for _, c := range []struct {
 		name, second, onto string
@@ -103,11 +124,17 @@ func TestFoldLookNamesAnAmbiguousFixupBeforeTheReplay(t *testing.T) {
 		notice             bool
 		// refusal is what the run says, "" where the case does not run it.
 		refusal string
+		// noLook is a look that ends with the run's refusal.
+		noLook bool
 	}{
 		{name: "ambiguous", second: "feat: a", notice: true, refusal: "names more than one commit"},
 		{name: "one target", second: "feat: b"},
 		{name: "onto with no move", second: "feat: a", onto: "main"},
-		{name: "no layer", second: "feat: a", refusal: "no layer branch", prepare: func(t *testing.T, main, _ string) {
+		{name: "onto with a move", second: "feat: a", onto: "main", notice: true, refusal: "names more than one commit",
+			prepare: func(t *testing.T, _, tmp string) {
+				testkit.GitIn(t, tmp, "commit", "-q", "--no-verify", "--allow-empty", "-m", "move! feat: x")
+			}},
+		{name: "no layer", second: "feat: a", refusal: "no layer branch", noLook: true, prepare: func(t *testing.T, main, _ string) {
 			testkit.GitIn(t, main, "branch", "-q", "-D", "low1")
 		}},
 		{name: "dirty", second: "feat: a", refusal: "tracked changes", prepare: func(t *testing.T, _, tmp string) {
@@ -115,7 +142,7 @@ func TestFoldLookNamesAnAmbiguousFixupBeforeTheReplay(t *testing.T) {
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			ctx, tmp := divergedLine(t, "x.txt", c.second, 0, "")
+			ctx, tmp := divergedLine(t, "x.txt", c.second, 0)
 			if c.prepare != nil {
 				c.prepare(t, ctx.Repo.MainRoot, tmp)
 			}
@@ -125,20 +152,21 @@ func TestFoldLookNamesAnAmbiguousFixupBeforeTheReplay(t *testing.T) {
 			var look bytes.Buffer
 			opts := synccmd.SyncOptions{NoFetch: true, Onto: c.onto, Progress: progress,
 				Stack: &synccmd.StackLook{Work: "tmp/low", Autosquash: true}}
-			if err := synccmd.SyncWorktree(ctx, "tmp/low", opts, &look); err != nil {
-				t.Fatalf("%v\n%s", err, look.String())
+			lookErr := synccmd.SyncWorktree(ctx, "tmp/low", opts, &look)
+			if c.noLook != (lookErr != nil) || c.noLook && !strings.Contains(lookErr.Error(), c.refusal) {
+				t.Fatalf("the look: %v\n%s", lookErr, look.String())
 			}
 			var want []bool
 			if c.notice {
 				want = []bool{true}
 			}
-			if !replayStarted(t, trace) {
-				t.Fatalf("the look never replayed the line:\n%s", look.String())
+			if replayStarted(t, trace) != (c.onto != "") {
+				t.Errorf("the look replayed the line: %v, want %v\n%s", c.onto == "", c.onto != "", look.String())
 			}
 			if fmt.Sprint(progress.early) != fmt.Sprint(want) {
 				t.Errorf("notices ahead of the replay: %v, want %v", progress.early, want)
 			}
-			refused := c.second == "feat: a" && c.onto == ""
+			refused := c.second == "feat: a" && !c.noLook && (c.onto == "" || c.notice)
 			if strings.Contains(look.String(), "names more than one commit") != refused {
 				t.Errorf("the look's stdout refuses the fixup: %v, want %v\n%s", !refused, refused, look.String())
 			}
@@ -146,6 +174,7 @@ func TestFoldLookNamesAnAmbiguousFixupBeforeTheReplay(t *testing.T) {
 				return
 			}
 			run := synccmdtest.NoAgents()
+			run.Onto = c.onto
 			run.Stack = &synccmd.StackOptions{Autosquash: true}
 			_, human, err := synccmdtest.StackRun(t, ctx, "tmp/low", run)
 			if err == nil {
@@ -165,32 +194,61 @@ func TestFoldLookNamesAnAmbiguousFixupBeforeTheReplay(t *testing.T) {
 	}
 }
 
-// A layer that leaves the line while the assessment replays is not promised a
-// move: the fold look reads the line as it is afterwards.
-func TestFoldLookReadsTheLayersAfterTheReplay(t *testing.T) {
-	t.Parallel()
+// The same line's plain look replays it onto trunk, which the look of its
+// fold in place does not (TestFoldLookNamesAnAmbiguousFixupAhead).
+//
+// Not parallel: GIT_TRACE is set for the whole process.
+func TestPlainLookReplaysTheLineOntoTrunk(t *testing.T) {
 	skipShort(t)
-	ctx, _ := divergedLine(t, "x.txt", "feat: b", 0, "git branch -q -f low1 main\n")
+	ctx, _ := divergedLine(t, "x.txt", "feat: b", 0)
+	trace := filepath.Join(t.TempDir(), "trace")
+	t.Setenv("GIT_TRACE", trace)
 	var look bytes.Buffer
-	opts := synccmd.SyncOptions{NoFetch: true, Stack: &synccmd.StackLook{Work: "tmp/low", Autosquash: true}}
-	if err := synccmd.SyncWorktree(ctx, "tmp/low", opts, &look); err != nil {
+	if err := synccmd.SyncWorktree(ctx, "tmp/low", synccmd.SyncOptions{NoFetch: true}, &look); err != nil {
 		t.Fatalf("%v\n%s", err, look.String())
 	}
-	if !strings.Contains(look.String(), "re-pointed: none") || strings.Contains(look.String(), "low1") {
-		t.Errorf("the look still has the layer that left the line:\n%s", look.String())
+	if !replayStarted(t, trace) {
+		t.Errorf("the plain look never replayed the line:\n%s", look.String())
 	}
 }
 
-// A fixup that gets its target while the assessment replays is not refused:
-// the look checks the targets again afterwards, and the run takes it.
-func TestFoldLookChecksTheTargetsAfterTheReplay(t *testing.T) {
+// The last layer leaving the line after the early look at the fixup targets is
+// seen: the look reads the line as it is afterwards, and refuses it as the run
+// does.
+func TestFoldLookReadsTheLayersAfterTheEarlyRead(t *testing.T) {
 	t.Parallel()
 	skipShort(t)
-	// The script names feat: a, two below the tip, as the fixup's target.
-	ctx, tmp := divergedLine(t, "x.txt", "feat: b", 0, "git tag -f release-point tmp/low~3 >/dev/null\n")
+	ctx, _ := divergedLine(t, "x.txt", "feat: b", 0)
+	var look bytes.Buffer
+	progress := onPhase("assessing the worktree", func() {
+		testkit.GitIn(t, ctx.Repo.MainRoot, "branch", "-q", "-f", "low1", "main")
+	})
+	opts := synccmd.SyncOptions{NoFetch: true, Progress: progress, Stack: &synccmd.StackLook{Work: "tmp/low", Autosquash: true}}
+	lookErr := synccmd.SyncWorktree(ctx, "tmp/low", opts, &look)
+	if lookErr == nil {
+		t.Fatalf("the look promises a fold of a line with no layer:\n%s", look.String())
+	}
+	run := synccmdtest.NoAgents()
+	run.Stack = &synccmd.StackOptions{Autosquash: true}
+	_, human, err := synccmdtest.StackRun(t, ctx, "tmp/low", run)
+	if err == nil || err.Error() != lookErr.Error() || !strings.Contains(err.Error(), "no layer branch") {
+		t.Errorf("the look refuses with %q, the run with %v\n%s", lookErr, err, human)
+	}
+}
+
+// A fixup that gets its target after the early look at the targets is not
+// refused: the look checks them again afterwards, and the run takes it.
+func TestFoldLookChecksTheTargetsAfterTheEarlyRead(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx, tmp := divergedLine(t, "x.txt", "feat: b", 0)
 	fixup(t, tmp, "a.txt", "release-point")
-	var look, progress bytes.Buffer
-	opts := synccmd.SyncOptions{NoFetch: true, Progress: &progress, Stack: &synccmd.StackLook{Work: "tmp/low", Autosquash: true}}
+	var look bytes.Buffer
+	// The tag names feat: a, two below the tip, as the fixup's target.
+	progress := onPhase("assessing the worktree", func() {
+		testkit.GitIn(t, ctx.Repo.MainRoot, "tag", "-f", "release-point", "tmp/low~3")
+	})
+	opts := synccmd.SyncOptions{NoFetch: true, Progress: progress, Stack: &synccmd.StackLook{Work: "tmp/low", Autosquash: true}}
 	if err := synccmd.SyncWorktree(ctx, "tmp/low", opts, &look); err != nil {
 		t.Fatalf("%v\n%s", err, look.String())
 	}
@@ -207,38 +265,45 @@ func TestFoldLookChecksTheTargetsAfterTheReplay(t *testing.T) {
 	}
 }
 
-// A look says what it is doing on the progress writer, in plain lines with a
-// replay count every tenth commit, and prints the same on stdout as without
-// one.
+// A look says what it is doing on the progress writer, in plain lines, and
+// prints the same on stdout as without one: a look that replays the line has
+// a replay count every tenth commit, and a fold in place names no replay.
 func TestLookWritesProgressApartFromStdout(t *testing.T) {
 	t.Parallel()
 	skipShort(t)
-	ctx, _ := divergedLine(t, "t.txt", "feat: b", 40, "")
-	look := func(opts synccmd.SyncOptions) string {
-		opts.Stack = &synccmd.StackLook{Work: "tmp/low", Autosquash: true}
+	ctx, _ := divergedLine(t, "t.txt", "feat: b", 40)
+	look := func(autosquash bool, opts synccmd.SyncOptions) string {
+		opts.Stack = &synccmd.StackLook{Work: "tmp/low", Autosquash: autosquash}
 		var out bytes.Buffer
 		if err := synccmd.SyncWorktree(ctx, "tmp/low", opts, &out); err != nil {
 			t.Fatalf("%v\n%s", err, out.String())
 		}
 		return out.String()
 	}
-	var progress bytes.Buffer
 	// A clock that stands still: no count is written for time passed.
 	frozen := time.Now()
-	watched := look(synccmd.SyncOptions{Progress: &progress, Clock: func() time.Time { return frozen }})
-	if silent := look(synccmd.SyncOptions{}); watched != silent {
-		t.Errorf("stdout with a progress writer:\n%s\nwithout:\n%s", watched, silent)
-	}
-	got := progress.String()
-	rest := got
-	for _, phase := range []string{"fetching", "resolving fixup targets", "assessing a rebase onto origin/main",
-		"replaying onto origin/main", "reading side branches", "analysing fixup context", "each_commit"} {
-		_, after, ok := strings.Cut(rest, phase)
-		if !ok {
-			t.Fatalf("progress lacks %q, or has it out of order:\n%s", phase, got)
+	watch := func(autosquash bool, phases ...string) string {
+		var progress bytes.Buffer
+		watched := look(autosquash, synccmd.SyncOptions{Progress: &progress, Clock: func() time.Time { return frozen }})
+		if silent := look(autosquash, synccmd.SyncOptions{}); watched != silent {
+			t.Errorf("stdout with a progress writer:\n%s\nwithout:\n%s", watched, silent)
 		}
-		rest = after
+		got := progress.String()
+		rest := got
+		for _, phase := range phases {
+			_, after, ok := strings.Cut(rest, phase)
+			if !ok {
+				t.Fatalf("progress lacks %q, or has it out of order:\n%s", phase, got)
+			}
+			rest = after
+		}
+		if strings.Contains(got, "\r") {
+			t.Errorf("a carriage return in the progress:\n%q", got)
+		}
+		return got
 	}
+	got := watch(false, "fetching", "assessing a rebase onto origin/main",
+		"replaying onto origin/main", "reading side branches", "each_commit")
 	var counts []string
 	for _, m := range regexp.MustCompile(`replaying onto origin/main (\S+)`).FindAllStringSubmatch(got, -1) {
 		counts = append(counts, m[1])
@@ -246,7 +311,11 @@ func TestLookWritesProgressApartFromStdout(t *testing.T) {
 	if want := "0/44 10/44 20/44 30/44 40/44"; strings.Join(counts, " ") != want {
 		t.Errorf("replay counts %v, want %s", counts, want)
 	}
-	if strings.Contains(got, "\r") {
-		t.Errorf("a carriage return in the progress:\n%q", got)
+	got = watch(true, "fetching", "resolving fixup targets", "assessing the worktree",
+		"reading side branches", "analysing fixup context", "each_commit")
+	for _, bad := range []string{"assessing a rebase", "replaying"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("a fold in place says %q:\n%s", bad, got)
+		}
 	}
 }

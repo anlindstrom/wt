@@ -225,11 +225,16 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 			NoSideBranches: opts.Stack.NoSideBranches, Alone: opts.Alone || opts.Stack.Alone}
 	}
 	remote := syncrun.OwnStateOf(own, wt.Branch)
-	// Ahead of the assessment, which is slow, so a refusal is known at once.
+	// Ahead of the slow phases, so a refusal is known at once.
 	if look != nil && look.Autosquash {
 		noticeFixupRefusal(ctx, base, onto, cfg, target, look, listed, remote, progress)
 	}
-	progress.phase("assessing a rebase onto %s", against)
+	tgt.InPlace = look != nil && foldAssessedInPlace(look.Autosquash, opts.Onto)
+	if tgt.InPlace {
+		progress.phase("assessing the worktree")
+	} else {
+		progress.phase("assessing a rebase onto %s", against)
+	}
 	a := wtsync.AssessTo(ctx.Repo.MainRoot, tgt, cfg, wt, listed, remote, progress.replay(against))
 	var stack *syncrun.Stack
 	var fold *FoldLook
@@ -240,6 +245,11 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 				printDetail(w, work, a)
 			}
 			return err
+		}
+		// The run refuses a line with no layer after the declaration and
+		// before anything it assesses.
+		if tgt.InPlace && cfg != nil && cfg.StackFoldRefusal() == "" && len(stack.Layers) == 0 {
+			return noLayerRefusal(kit.BranchWorkName(ctx, wt.Branch))
 		}
 	}
 	if fold != nil {
@@ -274,7 +284,9 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	}
 	if len(cfg.EachCommitOrNeeds()) > 0 {
 		progress.phase("reading each_commit checks and needs")
-		if target == nil {
+		// A fold in place checks its whole line, whatever worktrees hold the
+		// layers.
+		if target == nil && !tgt.InPlace {
 			parents = parentsOf(ctx, onto)
 		}
 		due := stepsDue(tgt, cfg, parents, wt, a)

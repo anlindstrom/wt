@@ -388,10 +388,15 @@ marked as the top, with its commits from the line's base.
 
 `--autosquash` alone folds in place, onto the line's own base, and says so at
 the top of its output (`folds <work> in place on its own base <sha>`, then the
-trunk commit the declaration and its scripts are read from); a conflict with
-trunk, which an in-place fold never meets, is not shown as contested. When the
-content check at the end passes it prints `✓ tip tree equal to <old tip>`,
-naming the step paths it left out. The replayed
+trunk commit the declaration and its scripts are read from). An in-place fold
+never meets trunk, so neither the look (`wt sync <work> --stack --autosquash`)
+nor the run without `--expect` or `--if-ready` replays the line onto it: a
+conflict with trunk is not shown, and a line divergent from trunk folds. A run
+given either does replay, and refuses as a plain run does. The `--json` look
+still surveys every worktree against trunk, so it can say divergent; the
+`--expect` token comes from that survey.
+When the content check at the end passes it prints
+`✓ tip tree equal to <old tip>`, naming the step paths it left out. The replayed
 trees can predate a script trunk declared since. A step whose `run` starts
 with a repository path (`bin/check.sh`, `./gradlew`) that is not in the
 replayed commit's tree is not run there and does not stop the rebase with

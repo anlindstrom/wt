@@ -104,12 +104,14 @@ func newSyncRebaseCmd() *cobra.Command {
 			"Refused, and never touched: a worktree with tracked changes, one a busy\n" +
 			"agent session is in, Claude's or Codex's, class divergent, one whose\n" +
 			"branch has diverged from its own remote, one an earlier run already\n" +
-			"left waiting on you, and any repository whose\n" +
-			"trunk declares no .wt-sync.yaml. An idle agent session is named before\n" +
-			"anything moves under it, whether or not anyone is asked, and a finished\n" +
-			"rebase ends with a wt: line to pass on to it. Sessions are listed again\n" +
-			"at the lock: one busy by then, or new since, is refused. The session wt\n" +
-			"itself runs under is not counted.\n\n" +
+			"left waiting on you, and any repository whose trunk declares no\n" +
+			".wt-sync.yaml. A fold in place (--stack --autosquash without --onto,\n" +
+			"--if-ready or --expect) never meets trunk, so no class refuses it.\n\n" +
+			"An idle agent session is named before anything moves under it, whether\n" +
+			"or not anyone is asked, and a finished rebase ends with a wt: line to\n" +
+			"pass on to it. Sessions are listed again at the lock: one busy by then,\n" +
+			"or new since, is refused. The session wt itself runs under is not\n" +
+			"counted.\n\n" +
 			"--force (-f) takes a named worktree past an agent session in it, busy or\n" +
 			"idle: the session is named and told at the finish, and the run goes\n" +
 			"ahead. It lifts nothing else, and a run with nothing named refuses it.\n\n" +
