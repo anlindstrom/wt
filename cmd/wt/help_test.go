@@ -103,14 +103,26 @@ func exampleWords(line string) []string {
 	return words
 }
 
-// fleet is names from the real fleet: worktrees, repositories, a Superset id.
-var fleet = []string{"webkey", "idiotthings", "local-gecko", "controller_stats",
-	"axis_acc", "new_vapix", "statepush", "telcred", "dedd5f22", "server_wt",
-	"accessmanager", "personal-v"}
+// fleetNames is names from a real fleet: worktrees, repositories, ids. They
+// are private, so the test reads them from WT_FLEET_NAMES (comma-separated)
+// on the machine that knows them, and the repository names none.
+func fleetNames() []string {
+	var out []string
+	for _, n := range strings.Split(os.Getenv("WT_FLEET_NAMES"), ",") {
+		if n = strings.ToLower(strings.TrimSpace(n)); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
 
 // Help is read by people who have never seen this fleet. Names from it teach
 // nothing and date badly.
 func TestHelpUsesIllustrativeNames(t *testing.T) {
+	fleet := fleetNames()
+	if len(fleet) == 0 {
+		t.Skip("WT_FLEET_NAMES is not set") //skip-ok: the names are private and live only on the machine that knows them
+	}
 	for _, c := range reachable(newRootCmd()) {
 		text := strings.ToLower(c.Long + "\n" + c.Example + "\n" + c.Short)
 		for _, name := range fleet {
@@ -154,6 +166,10 @@ func TestMoveToIsNotTheMoveCommand(t *testing.T) {
 // The README and the docs beside it are read by the same people, and their
 // examples date the same way.
 func TestDocsUseIllustrativeNames(t *testing.T) {
+	fleet := fleetNames()
+	if len(fleet) == 0 {
+		t.Skip("WT_FLEET_NAMES is not set") //skip-ok: the names are private and live only on the machine that knows them
+	}
 	root := filepath.Join("..", "..")
 	docs, err := filepath.Glob(filepath.Join(root, "docs", "*.md"))
 	if err != nil {

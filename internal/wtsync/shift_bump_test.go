@@ -393,7 +393,7 @@ func TestCollapseOwnedShiftBumpNeedsOneOwnedLineInTheBase(t *testing.T) {
 }
 
 // The server's stack, shaped like its openapi: block: the first pick bumps
-// main 2.46.0 → 2.47.0 and adds the mobile API, a later one adds webaccess,
+// main 2.46.0 → 2.47.0 and adds the mobile API, a later one adds billing,
 // and the rest bump main on as in the six-bump table. Trunk took 2.47.0.
 func TestRebaseCarriesAStackThatAddsVersionLines(t *testing.T) {
 	t.Parallel()
@@ -411,12 +411,12 @@ func TestRebaseCarriesAStackThatAddsVersionLines(t *testing.T) {
 				[]map[string]string{
 					pick("2.47.0", "b1\n", "mobile"),
 					{"c.txt": "between\n"},
-					pick("2.48.0", "b2\n", "mobile", "webaccess"),
-					pick("2.49.0", "b3\n", "mobile", "webaccess"),
+					pick("2.48.0", "b2\n", "mobile", "billing"),
+					pick("2.49.0", "b3\n", "mobile", "billing"),
 					{"c.txt": "between again\n"},
-					pick("2.49.1", "b4\n", "mobile", "webaccess"),
-					pick("2.49.2", "b5\n", "mobile", "webaccess"),
-					pick("2.49.3", "b6\n", "mobile", "webaccess"),
+					pick("2.49.1", "b4\n", "mobile", "billing"),
+					pick("2.49.2", "b5\n", "mobile", "billing"),
+					pick("2.49.3", "b6\n", "mobile", "billing"),
 				})
 			decl := "conflicts:\n  - paths: [app.yaml]\n    strategy: owned-line\n    line: '^    version:'\n    rule: " + rule + "\n"
 			if err := os.WriteFile(filepath.Join(dir, ".wt-sync.yaml"), []byte(decl), 0o644); err != nil {
@@ -446,13 +446,13 @@ func TestRebaseCarriesAStackThatAddsVersionLines(t *testing.T) {
 			if res.Left != nil || res.Restored || res.Replayed != 8 {
 				t.Fatalf("result %+v", res)
 			}
-			apis := [][]string{{"mobile"}, {"mobile", "webaccess"}, {"mobile", "webaccess"}, {"mobile", "webaccess"}, {"mobile", "webaccess"}, {"mobile", "webaccess"}}
+			apis := [][]string{{"mobile"}, {"mobile", "billing"}, {"mobile", "billing"}, {"mobile", "billing"}, {"mobile", "billing"}, {"mobile", "billing"}}
 			for i, back := range []string{"~7", "~5", "~4", "~2", "~1", ""} {
 				if got := gitIn(t, wt, "show", "HEAD"+back+":app.yaml"); got != strings.TrimRight(openapiBlock(want[i], apis[i]...), "\n") {
 					t.Errorf("HEAD%s:app.yaml = %q, want main at %s beside %v at 0.1.0", back, got, want[i], apis[i])
 				}
 			}
-			last := strings.TrimRight(openapiBlock(want[len(want)-1], "mobile", "webaccess"), "\n")
+			last := strings.TrimRight(openapiBlock(want[len(want)-1], "mobile", "billing"), "\n")
 			if got := gitIn(t, dir, "show", sim.Tree+":app.yaml"); got != last {
 				t.Errorf("the simulation ends on %q", got)
 			}

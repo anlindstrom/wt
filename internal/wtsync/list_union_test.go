@@ -41,7 +41,7 @@ func TestListUnionUnionsTrunkOrderFirst(t *testing.T) {
 
 func TestListUnionKeepsTheRestOfTheFileFromGit(t *testing.T) {
 	t.Parallel()
-	out, err := includes().Resolve(conflict(inc("'a'"), strings.Replace(inc("'a', 'pins'"), "1.0.0", "2.0.0", 1), inc("'a', 'nbix'")))
+	out, err := includes().Resolve(conflict(inc("'a'"), strings.Replace(inc("'a', 'pins'"), "1.0.0", "2.0.0", 1), inc("'a', 'bus'")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestListUnionRefusesAConflictOffTheListLine(t *testing.T) {
 
 func TestListUnionUnionsASecondListLineFoldedIntoTheBlock(t *testing.T) {
 	t.Parallel()
-	out, err := includes().Resolve(conflict(inc("'a', 'b'"), inc("'a', 'pins', 'b'"), inc("'a', 'b', 'nbix'")+"include 'nbix-devtools'\n"))
+	out, err := includes().Resolve(conflict(inc("'a', 'b'"), inc("'a', 'pins', 'b'"), inc("'a', 'b', 'bus'")+"include 'devtools'\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestListUnionUnionsASecondListLineFoldedIntoTheBlock(t *testing.T) {
 			}
 		}
 	}
-	if strings.Join(items, " ") != "'a' 'pins' 'b' 'nbix' 'nbix-devtools'" {
+	if strings.Join(items, " ") != "'a' 'pins' 'b' 'bus' 'devtools'" {
 		t.Errorf("items = %v", items)
 	}
 	if strings.Contains(string(out), "<<<<<<<") {
@@ -122,7 +122,7 @@ func TestListUnionUnionsASecondListLineFoldedIntoTheBlock(t *testing.T) {
 
 func TestListUnionRefusesAnItemItCannotParse(t *testing.T) {
 	t.Parallel()
-	_, err := includes().Resolve(conflict(inc("'a', 'b'"), inc("'a', 'pins', 'b'"), inc("'a', 'b', 'nbix'include 'x'")))
+	_, err := includes().Resolve(conflict(inc("'a', 'b'"), inc("'a', 'pins', 'b'"), inc("'a', 'b', 'bus'include 'x'")))
 	if !IsRefusal(err) || !strings.Contains(err.Error(), "cannot parse") {
 		t.Errorf("err = %v", err)
 	}

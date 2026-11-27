@@ -600,7 +600,7 @@ func TestRunVerdictSaysItAsksFirstUnderAnIdleSession(t *testing.T) {
 // list alike, saying what it did and what trunk had.
 func TestSyncShowsALiftedVersionBesideTheResolvedFiles(t *testing.T) {
 	t.Parallel()
-	lifted := wtsync.FileOutcome{Path: "accessmanagement/src/main/resources/application.yaml", Strategy: "owned-line", Resolved: true, Lifted: true, Note: "lifted the version to 1.2.4: trunk took 1.2.3"}
+	lifted := wtsync.FileOutcome{Path: "app/src/main/resources/application.yaml", Strategy: "owned-line", Resolved: true, Lifted: true, Note: "lifted the version to 1.2.4: trunk took 1.2.3"}
 	a := wtsync.Assessment{
 		Branch: "feat_wt/api", Path: "/src/demo_wt/feat_wt/api", Class: wtsync.Recipe, Behind: 3, Ahead: 2,
 		Replay: wtsync.Replay{Commits: 2, Stops: []wtsync.Stop{{Index: 1, Total: 2, Subject: "bump the api", Files: []wtsync.FileOutcome{lifted}, Resolved: true}}},
@@ -611,7 +611,7 @@ func TestSyncShowsALiftedVersionBesideTheResolvedFiles(t *testing.T) {
 	out := buf.String()
 	for _, want := range []string{
 		"\n  1/2  bump the api\n",
-		"\n    ✓ accessmanagement/src/main/resources/application.yaml  owned-line lifted the version to 1.2.4: trunk took 1.2.3\n",
+		"\n    ✓ app/src/main/resources/application.yaml  owned-line lifted the version to 1.2.4: trunk took 1.2.3\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("want %q in:\n%s", want, out)

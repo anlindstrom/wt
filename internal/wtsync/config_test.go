@@ -49,7 +49,7 @@ func commitOnOrigin(t *testing.T, local, origin, path, content string) {
 
 const serverYAML = `
 conflicts:
-  - paths: [accessmanagement/src/main/resources/application.yaml]
+  - paths: [app/src/main/resources/application.yaml]
     strategy: owned-line
     line: '^\s*version:'
     rule: max-plus-patch
@@ -132,7 +132,7 @@ func TestMatchGlob(t *testing.T) {
 		{"settings.gradle", "sub/settings.gradle", false},
 		{"etc/openapi/apidocs/*.json", "etc/openapi/apidocs/openapi_v3.json", true},
 		{"etc/openapi/apidocs/*.json", "etc/openapi/apidocs/deep/x.json", false},
-		{"apps/*/package.json", "apps/access-manager/package.json", true},
+		{"apps/*/package.json", "apps/web-app/package.json", true},
 		{"apps/*/package.json", "apps/a/b/package.json", false},
 		{"**/package.json", "package.json", true},
 		{"**/package.json", "apps/a/b/package.json", true},

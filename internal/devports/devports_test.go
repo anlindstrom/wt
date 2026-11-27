@@ -15,16 +15,16 @@ import (
 // twoApps is what a devports that reports domains says of a repository with
 // two apps that have one and one that has none.
 var twoApps = devportstest.ConfigDoc(
-	[2]string{"access-manager", "am.telcred.locally"},
+	[2]string{"web-app", "web.example.localhost"},
 	[2]string{"api", ""},
-	[2]string{"account-manager", "acm.telcred.locally"})
+	[2]string{"admin-app", "admin.example.localhost"})
 
 func TestAddressesOneForEachAppWithADomain(t *testing.T) {
-	(&devportstest.Fake{Name: "sites-live", Config: twoApps}).Install(t)
+	(&devportstest.Fake{Name: "login-fix", Config: twoApps}).Install(t)
 	got := devports.Addresses(t.TempDir())
 	want := []devports.Address{
-		{App: "access-manager", URL: "https://sites-live.am.telcred.locally"},
-		{App: "account-manager", URL: "https://sites-live.acm.telcred.locally"},
+		{App: "web-app", URL: "https://login-fix.web.example.localhost"},
+		{App: "admin-app", URL: "https://login-fix.admin.example.localhost"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
@@ -35,10 +35,10 @@ func TestAddressesOneForEachAppWithADomain(t *testing.T) {
 // wt does not read the file itself to make up for it.
 func TestAddressesNoneFromADevportsThatDoesNotReportDomains(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev-ports.yaml"), []byte("apps:\n  access-manager:\n    domain: am.telcred.locally\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".dev-ports.yaml"), []byte("apps:\n  web-app:\n    domain: web.example.localhost\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f := &devportstest.Fake{Name: "x", Config: devportstest.OldConfigDoc("access-manager")}
+	f := &devportstest.Fake{Name: "x", Config: devportstest.OldConfigDoc("web-app")}
 	f.Install(t)
 	if got := devports.Addresses(dir); len(got) != 0 {
 		t.Errorf("got %+v", got)
@@ -115,10 +115,10 @@ func TestAddressesShareOneDeadlineAcrossTheirCalls(t *testing.T) {
 
 func TestLiveReadsTheRoutesInOneCall(t *testing.T) {
 	f := &devportstest.Fake{Routes: devportstest.RouteDoc(
-		[4]string{"https://x.am.telcred.locally", "x", "/r_wt/feat_wt/x", "1"})}
+		[4]string{"https://x.web.example.localhost", "x", "/r_wt/feat_wt/x", "1"})}
 	f.Install(t)
 	routes, ok := devports.Live()
-	if !ok || len(routes) != 1 || routes[0].Checkout != "/r_wt/feat_wt/x" || routes[0].URL != "https://x.am.telcred.locally" {
+	if !ok || len(routes) != 1 || routes[0].Checkout != "/r_wt/feat_wt/x" || routes[0].URL != "https://x.web.example.localhost" {
 		t.Fatalf("ok %v routes %+v", ok, routes)
 	}
 	if calls := f.Calls(); len(calls) != 1 || calls[0] != "route list --json" {

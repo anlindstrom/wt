@@ -54,8 +54,8 @@ func TestListShowsTheAddressOfAWorktreeWithALiveRoute(t *testing.T) {
 		return filepath.Join(parent, "demo_wt", "feat_wt", "thing")
 	})
 	f := &devportstest.Fake{Routes: devportstest.RouteDoc(
-		routeOf("https://thing.am.telcred.locally", "thing", wt),
-		routeOf("https://thing.acm.telcred.locally", "thing", wt))}
+		routeOf("https://thing.web.example.localhost", "thing", wt),
+		routeOf("https://thing.admin.example.localhost", "thing", wt))}
 	f.Install(t)
 	ctx, _ := kit.Open(main, io.Discard)
 	var buf bytes.Buffer
@@ -67,7 +67,7 @@ func TestListShowsTheAddressOfAWorktreeWithALiveRoute(t *testing.T) {
 		t.Errorf("no ADDRESS column:\n%s", out)
 	}
 	row := rowOf(t, out, "feat_wt/thing")
-	if !strings.Contains(row, "https://thing.am.telcred.locally") || !strings.Contains(row, "https://thing.acm.telcred.locally") {
+	if !strings.Contains(row, "https://thing.web.example.localhost") || !strings.Contains(row, "https://thing.admin.example.localhost") {
 		t.Errorf("row lacks its addresses: %q", row)
 	}
 	if calls := f.Calls(); len(calls) != 1 || calls[0] != "route list --json" {
@@ -84,7 +84,7 @@ func TestListDoesNotShowARouteOwnedByAnotherCheckoutOfTheSameName(t *testing.T) 
 	})
 	other := filepath.Join(t.TempDir(), "demo_wt", "fix_wt", "thing")
 	(&devportstest.Fake{Routes: devportstest.RouteDoc(
-		routeOf("https://thing.am.telcred.locally", "thing", other))}).Install(t)
+		routeOf("https://thing.web.example.localhost", "thing", other))}).Install(t)
 	ctx, _ := kit.Open(main, io.Discard)
 	var buf bytes.Buffer
 	if err := List(ctx, ListOptions{NoPR: true, NoSessions: true}, &buf, 0); err != nil {
@@ -99,7 +99,7 @@ func TestListDoesNotShowAStaleRoute(t *testing.T) {
 	main, wt := testkit.RepoWithWorktree(t, func(parent string) string {
 		return filepath.Join(parent, "demo_wt", "feat_wt", "thing")
 	})
-	stale := [4]string{"https://thing.am.telcred.locally", "thing", wt, "2147483646"}
+	stale := [4]string{"https://thing.web.example.localhost", "thing", wt, "2147483646"}
 	(&devportstest.Fake{Routes: devportstest.RouteDoc(stale)}).Install(t)
 	ctx, _ := kit.Open(main, io.Discard)
 	var buf bytes.Buffer
@@ -138,7 +138,7 @@ func TestListUsesTheRoutesItIsHanded(t *testing.T) {
 	main, wt := testkit.RepoWithWorktree(t, func(parent string) string {
 		return filepath.Join(parent, "demo_wt", "feat_wt", "thing")
 	})
-	f := &devportstest.Fake{Routes: devportstest.RouteDoc(routeOf("https://thing.am.telcred.locally", "thing", wt))}
+	f := &devportstest.Fake{Routes: devportstest.RouteDoc(routeOf("https://thing.web.example.localhost", "thing", wt))}
 	f.Install(t)
 	routes := devports.Take()
 	f2 := &devportstest.Fake{Exit: 1}
@@ -148,7 +148,7 @@ func TestListUsesTheRoutesItIsHanded(t *testing.T) {
 	if err := List(ctx, ListOptions{NoPR: true, NoSessions: true, Routes: routes}, &buf, 0); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(buf.String(), "https://thing.am.telcred.locally") {
+	if !strings.Contains(buf.String(), "https://thing.web.example.localhost") {
 		t.Errorf("the handed route is not shown:\n%s", buf.String())
 	}
 	if calls := f2.Calls(); len(calls) != 0 {
@@ -162,7 +162,7 @@ func TestListLeavesTheAddressColumnOutWhereItDoesNotFit(t *testing.T) {
 	main, wt := testkit.RepoWithWorktree(t, func(parent string) string {
 		return filepath.Join(parent, "demo_wt", "feat_wt", "thing")
 	})
-	(&devportstest.Fake{Routes: devportstest.RouteDoc(routeOf("https://thing.am.telcred.locally", "thing", wt))}).Install(t)
+	(&devportstest.Fake{Routes: devportstest.RouteDoc(routeOf("https://thing.web.example.localhost", "thing", wt))}).Install(t)
 	ctx, _ := kit.Open(main, io.Discard)
 	list := func(opts ListOptions, width int) string {
 		opts.NoPR, opts.NoSessions = true, true
@@ -179,10 +179,10 @@ func TestListLeavesTheAddressColumnOutWhereItDoesNotFit(t *testing.T) {
 	if !strings.Contains(narrow, "addresses left out at this width — `wt list --wide` shows them") {
 		t.Errorf("no line saying so:\n%s", narrow)
 	}
-	if out := list(ListOptions{Wide: true}, 70); !strings.Contains(out, "https://thing.am.telcred.locally") || strings.Contains(out, "left out") {
+	if out := list(ListOptions{Wide: true}, 70); !strings.Contains(out, "https://thing.web.example.localhost") || strings.Contains(out, "left out") {
 		t.Errorf("--wide:\n%s", out)
 	}
-	if out := list(ListOptions{}, 400); !strings.Contains(out, "https://thing.am.telcred.locally") || strings.Contains(out, "left out") {
+	if out := list(ListOptions{}, 400); !strings.Contains(out, "https://thing.web.example.localhost") || strings.Contains(out, "left out") {
 		t.Errorf("400 columns:\n%s", out)
 	}
 }

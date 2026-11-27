@@ -2,6 +2,12 @@
 
 Before changing code you have not worked in, read `docs/architecture.md`: the package layers, the main flows by function, the on-disk state and the safety invariants a change keeps.
 
+## This repository is public
+
+anlindstrom/wt is public: its code, tests, docs, commit messages, issues, pull requests and releases can be read by anyone. Nothing in any of them may say who uses wt or where: no person's name or email, no employer, no private repository, branch, module, class, domain or host name, no home-directory path, and no product detail from the work wt was run on.
+
+When a bug report, test fixture or example comes from a real repository, rewrite it with neutral stand-ins (`acme/server`, `web.example.localhost`, `tmp/line`, `layer-a`, `feature-a`, `src/main/java/.../Result.java`) that keep what the case needs. Check before you post or push: `git grep -i <name>` over the change, and reread an issue or PR body as a stranger would. GitHub keeps every edit of an issue or PR body in a public history, so a leak fixed later is still there.
+
 ## Safety rules
 
 - Record every state change before the mutation it describes, and make every decision from state read under the lock: a run interrupted at any point resumes or undoes from what it wrote, never from what it meant to do.

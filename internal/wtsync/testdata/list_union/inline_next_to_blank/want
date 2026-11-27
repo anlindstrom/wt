@@ -3,6 +3,6 @@ plugins {
 }
 
 rootProject.name = 'server'
-include 'accessmanagement', 'pins', 'core', 'database', 'worker-clients', 'vapix-client', 'gui', 'o3c', 'remote-api', 'scim', 'listener', 'processor', 'webapp', 'common', 'tests-e2e', 'main-api-cli', 'nbix-client', 'nbix-cli', 'nbix-sync', 'nbix-integration-tests'
+include 'app', 'pins', 'core', 'database', 'worker-clients', 'device-client', 'gui', 'relay', 'remote-api', 'scim', 'listener', 'processor', 'webapp', 'common', 'tests-e2e', 'main-api-cli', 'bus-client', 'bus-cli', 'bus-sync', 'bus-integration-tests'
 
-include 'metrics-collector'
+include 'metrics'

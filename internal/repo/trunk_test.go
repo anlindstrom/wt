@@ -51,10 +51,10 @@ func TestDetectTrunkPrefersOriginHead(t *testing.T) {
 func TestDetectTrunkTakesOriginHeadOverMain(t *testing.T) {
 	t.Parallel()
 	dir := gittest.NewRepo(t, resolved(t, t.TempDir()), "demo")
-	run(t, dir, "branch", "residential_development")
+	run(t, dir, "branch", "billing_development")
 	withOriginNoHead(t, dir)
-	run(t, dir, "remote", "set-head", "origin", "residential_development")
-	wantTrunk(t, dir, "residential_development", config.TrunkFromOriginHead)
+	run(t, dir, "remote", "set-head", "origin", "billing_development")
+	wantTrunk(t, dir, "billing_development", config.TrunkFromOriginHead)
 }
 
 // A clone that never recorded origin/HEAD, its main checkout on a feature

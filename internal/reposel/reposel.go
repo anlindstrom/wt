@@ -15,9 +15,9 @@ import (
 	"github.com/anlindstrom/wt/internal/repo"
 )
 
-// defaultRoots is where repositories live on this machine when WT_ROOTS says
+// defaultRoots is where repositories commonly live when WT_ROOTS says
 // nothing. Colon-separated, so a path containing spaces survives.
-const defaultRoots = "programmering/telcred:programmering/private:Git"
+const defaultRoots = "src:code:Git"
 
 // Root is a directory repositories sit in, one level down, and the name
 // --roots selects it by — or a repository on its own, such as ~/dotfiles: a

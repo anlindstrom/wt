@@ -141,7 +141,7 @@ func TestRenderPlanSaysWhichSideOfTheMarkersIsTrunk(t *testing.T) {
 	out, err := RenderPlan(PlanInput{
 		MainRoot: dir, Work: "w", Branch: "feat_wt/w", TrunkRef: "origin/main", Base: base, Trunk: "main",
 		Handover: Handover{
-			Index: 7, Total: 23, Subject: "feat: administering webkeys",
+			Index: 7, Total: 23, Subject: "feat: rotating api keys",
 			Files: []FileOutcome{{Path: "a.txt", Note: "unclaimed"}},
 			Left:  []string{"a.txt"},
 		},
@@ -150,7 +150,7 @@ func TestRenderPlanSaysWhichSideOfTheMarkersIsTrunk(t *testing.T) {
 		t.Fatal(err)
 	}
 	yours := yoursSection(t, out)
-	want := "<<<<<<< HEAD is trunk, >>>>>>> <sha> (feat: administering webkeys) is the branch's commit being replayed"
+	want := "<<<<<<< HEAD is trunk, >>>>>>> <sha> (feat: rotating api keys) is the branch's commit being replayed"
 	if !strings.Contains(yours, want) {
 		t.Fatalf("the yours section does not say which side is which; want %q in:\n%s", want, out)
 	}

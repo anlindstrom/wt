@@ -18,7 +18,7 @@ func TestRebaseListUnionResolvesTheServerGradleShapes(t *testing.T) {
 	read := func(dir, name string) string { return string(readFixture(t, dir, name)) }
 	main := func(s string) string { // the include line, for an edit
 		for _, l := range strings.Split(s, "\n") {
-			if strings.HasPrefix(l, "include 'accessmanagement'") {
+			if strings.HasPrefix(l, "include 'app'") {
 				return l
 			}
 		}
@@ -27,11 +27,11 @@ func TestRebaseListUnionResolvesTheServerGradleShapes(t *testing.T) {
 	}
 	base := read("inline_next_to_blank", "base")
 	baseLine := main(base)
-	trunk1 := read("inline_next_to_blank", "trunk") // adds blank + metrics-collector
-	trunk2 := strings.Replace(trunk1, "'vapix-client', 'gui'", "'vapix-client', 'trunk-extra', 'gui'", 1)
+	trunk1 := read("inline_next_to_blank", "trunk") // adds blank + metrics
+	trunk2 := strings.Replace(trunk1, "'device-client', 'gui'", "'device-client', 'trunk-extra', 'gui'", 1)
 	b1 := read("inline_next_to_blank", "branch")
-	b2 := b1 + "include 'nbix-devtools'\n"
-	b3 := strings.Replace(b2, "'o3c'", "'o3c', 'acc-client'", 1)
+	b2 := b1 + "include 'devtools'\n"
+	b3 := strings.Replace(b2, "'relay'", "'relay', 'sdk-client'", 1)
 
 	dir := repoWith(t, map[string]string{"settings.gradle": base},
 		[]map[string]string{{"settings.gradle": trunk1}, {"settings.gradle": trunk2}},
@@ -71,9 +71,9 @@ func TestRebaseListUnionResolvesTheServerGradleShapes(t *testing.T) {
 		t.Fatal("rebase still in progress")
 	}
 	got, _ := os.ReadFile(filepath.Join(wt, "settings.gradle"))
-	line := strings.Replace(baseLine, "'vapix-client', 'gui'", "'vapix-client', 'trunk-extra', 'gui'", 1)
-	line = strings.TrimSuffix(line, "'main-api-cli'") + "'main-api-cli', 'nbix-client', 'nbix-cli', 'nbix-sync', 'nbix-integration-tests', 'acc-client'"
-	want := strings.Replace(trunk2, main(trunk2), line, 1) + "include 'nbix-devtools'\n"
+	line := strings.Replace(baseLine, "'device-client', 'gui'", "'device-client', 'trunk-extra', 'gui'", 1)
+	line = strings.TrimSuffix(line, "'main-api-cli'") + "'main-api-cli', 'bus-client', 'bus-cli', 'bus-sync', 'bus-integration-tests', 'sdk-client'"
+	want := strings.Replace(trunk2, main(trunk2), line, 1) + "include 'devtools'\n"
 	if string(got) != want {
 		t.Errorf("settings.gradle:\n%s\nwant:\n%s", got, want)
 	}

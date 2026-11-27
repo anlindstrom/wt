@@ -52,7 +52,7 @@ GH
 }
 
 # fake_gh writes a gh answering for one open pull request, #12 on
-# residential_fixes, and doing `pr checkout` by creating that branch where it
+# portal_fixes, and doing `pr checkout` by creating that branch where it
 # is run. Nothing here reaches github.com.
 fake_gh() {
     cat > "$FAKEBIN/gh" <<GH
@@ -60,8 +60,8 @@ fake_gh() {
 printf '%s\n' "\$*" >> "$GH_ARGV"
 GH
     cat >> "$FAKEBIN/gh" <<'GH'
-pr='{"number":12,"title":"Residents keep their doors","headRefName":"residential_fixes","baseRefName":"main","isDraft":false,"state":"OPEN","reviewDecision":"","isCrossRepository":false,"author":{"login":"someone"},"headRepositoryOwner":{"login":"demo"},"url":"https://github.com/demo/myrepo/pull/12"}'
-head_nodes() { case "$1" in residential_fixes) printf '%s' "$pr" ;; esac; }
+pr='{"number":12,"title":"Invoices keep their totals","headRefName":"portal_fixes","baseRefName":"main","isDraft":false,"state":"OPEN","reviewDecision":"","isCrossRepository":false,"author":{"login":"someone"},"headRepositoryOwner":{"login":"demo"},"url":"https://github.com/demo/myrepo/pull/12"}'
+head_nodes() { case "$1" in portal_fixes) printf '%s' "$pr" ;; esac; }
 open_prs() { printf '%s' "$pr"; }
 GH
     gh_graphql_shim >> "$FAKEBIN/gh"
@@ -72,7 +72,7 @@ case "$1 $2" in
   'api graphql') graphql "$@" ;;
   'pr list') printf '[%s]\n' "$pr" ;;
   'pr view') [ "$3" = 12 ] && printf '%s\n' "$pr" || { echo 'no pull requests found' >&2; exit 1; } ;;
-  'pr checkout') [ "$3" = 12 ] && git checkout -q -b residential_fixes || exit 1 ;;
+  'pr checkout') [ "$3" = 12 ] && git checkout -q -b portal_fixes || exit 1 ;;
 esac
 GH
     chmod +x "$FAKEBIN/gh"
@@ -86,9 +86,9 @@ GH
     run wt pr checkout 12
     [ "$status" -eq 0 ]
     wtpath="${lines[${#lines[@]}-1]}"
-    [[ "$wtpath" == */demo_wt/feat_wt/pr-12-residential_fixes ]]
+    [[ "$wtpath" == */demo_wt/feat_wt/pr-12-portal_fixes ]]
     [ -d "$wtpath" ]
-    [ "$(git -C "$wtpath" symbolic-ref --short HEAD)" = residential_fixes ]
+    [ "$(git -C "$wtpath" symbolic-ref --short HEAD)" = portal_fixes ]
 }
 
 @test "wt pr checkout works in a repository with no configuration" {
@@ -97,7 +97,7 @@ GH
     cd "$REPO"
     run wt pr checkout 12
     [ "$status" -eq 0 ]
-    [[ "${lines[${#lines[@]}-1]}" == */demo_wt/feat_wt/pr-12-residential_fixes ]]
+    [[ "${lines[${#lines[@]}-1]}" == */demo_wt/feat_wt/pr-12-portal_fixes ]]
     [ ! -e "$REPO/bin" ]
 }
 
@@ -110,12 +110,12 @@ GH
     [ "$status" -eq 0 ]
     [[ "$output" == *"PR"* ]]
     [[ "$output" == *"#12 open"* ]]
-    [[ "$output" == *"pr-12-residential_fixes"* ]]
+    [[ "$output" == *"pr-12-portal_fixes"* ]]
 
     run wt pr list
     [ "$status" -eq 0 ]
     [[ "$output" == *"demo/demo, 1 open pull request"* ]]
-    [[ "$output" == *"pr-12-residential_fixes"* ]]
+    [[ "$output" == *"pr-12-portal_fixes"* ]]
 }
 
 @test "a second checkout of the same pull request prints the worktree it has" {
@@ -137,19 +137,19 @@ GH
     head=$(git commit-tree -p "$base" -m "the pull request's" "$base^{tree}")
     mine=$(git commit-tree -p "$base" -m "mine" "$base^{tree}")
     mine=$(git commit-tree -p "$mine" -m "mine too" "$mine^{tree}")
-    git update-ref refs/heads/residential_fixes "$mine"
+    git update-ref refs/heads/portal_fixes "$mine"
     sed -i.bak "s/\"headRefName\"/\"headRefOid\":\"$head\",\"headRefName\"/" "$FAKEBIN/gh"
 
     run --separate-stderr wt pr checkout 12
     [ "$status" -ne 0 ]
     [ -z "$output" ]
-    [[ "$stderr" == *"#12 is on residential_fixes, and a local branch of that name has diverged from it: 2 ahead, 1 behind"* ]]
+    [[ "$stderr" == *"#12 is on portal_fixes, and a local branch of that name has diverged from it: 2 ahead, 1 behind"* ]]
     [[ "$stderr" == *"it carries 2 commits of its own"* ]]
-    [[ "$stderr" == *"git branch -D residential_fixes"* ]]
-    [[ "$stderr" == *"git branch -m residential_fixes residential_fixes-old"* ]]
+    [[ "$stderr" == *"git branch -D portal_fixes"* ]]
+    [[ "$stderr" == *"git branch -m portal_fixes portal_fixes-old"* ]]
     ! grep -q '^pr checkout' "$GH_ARGV"
     [ ! -e "$BATS_TEST_TMPDIR/demo_wt" ]
-    [ "$(git rev-parse residential_fixes)" = "$mine" ]
+    [ "$(git rev-parse portal_fixes)" = "$mine" ]
 }
 
 @test "a gh that fails the checkout reports git's error and the cleanup" {
@@ -159,7 +159,7 @@ GH
     # git's notices and above gh's own last line.
     cat > "$BATS_TEST_TMPDIR/gh-stderr" <<'ERR'
 Previous HEAD position was b6b69e2 Merge pull request #66
-Switched to branch 'residential_fixes'
+Switched to branch 'portal_fixes'
 hint: Diverging branches can't be fast-forwarded, you need to either:
 fatal: Not possible to fast-forward, aborting.
 failed to run git: exit status 128
@@ -171,8 +171,8 @@ ERR
     [ -z "$output" ]
     [[ "$stderr" == *"wt: gh pr checkout 12 failed: fatal: Not possible to fast-forward, aborting."* ]]
     [[ "$stderr" != *"Previous HEAD position"* ]]
-    [[ "$stderr" == *"the half-made worktree at "*"/demo_wt/feat_wt/pr-12-residential_fixes was removed; a retry starts clean"* ]]
-    [ ! -e "$BATS_TEST_TMPDIR/demo_wt/feat_wt/pr-12-residential_fixes" ]
+    [[ "$stderr" == *"the half-made worktree at "*"/demo_wt/feat_wt/pr-12-portal_fixes was removed; a retry starts clean"* ]]
+    [ ! -e "$BATS_TEST_TMPDIR/demo_wt/feat_wt/pr-12-portal_fixes" ]
 }
 
 @test "with no terminal the picker prints the list and asks for a number" {
@@ -322,7 +322,7 @@ GH
     cd "$wtpath"
     run wt pr open
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Opening #12 open · Residents keep their doors"* ]]
+    [[ "$output" == *"Opening #12 open · Invoices keep their totals"* ]]
     grep -q -- 'pr view 12 --web' "$GH_ARGV"
 }
 

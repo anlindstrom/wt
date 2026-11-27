@@ -9,18 +9,18 @@ import (
 func TestParseURL(t *testing.T) {
 	t.Parallel()
 	for url, want := range map[string]struct{ host, slug string }{
-		"git@github.com:Telcred/ai-tooling.git":        {"github.com", "Telcred/ai-tooling"},
-		"git@github.com:Telcred/ai-tooling":            {"github.com", "Telcred/ai-tooling"},
-		"https://github.com/Telcred/ai-tooling.git":    {"github.com", "Telcred/ai-tooling"},
-		"https://anders@github.com/Telcred/ai-tooling": {"github.com", "Telcred/ai-tooling"},
-		"ssh://git@github.com/Telcred/ai-tooling.git":  {"github.com", "Telcred/ai-tooling"},
-		"ssh://git@github.com:2222/Telcred/ai-tooling": {"github.com", "Telcred/ai-tooling"},
-		"git@github.acme.example:Team/thing.git":       {"github.acme.example", "Team/thing"},
-		"https://GitHub.com/Telcred/ai-tooling":        {"github.com", "Telcred/ai-tooling"},
-		"https://gitlab.com/Telcred/ai-tooling":        {"gitlab.com", "Telcred/ai-tooling"},
-		"/srv/git/mirror.git":                          {"", ""},
-		"https://github.com/Telcred":                   {"", ""},
-		"git@github.com:":                              {"", ""},
+		"git@github.com:acme/tooling.git":         {"github.com", "acme/tooling"},
+		"git@github.com:acme/tooling":             {"github.com", "acme/tooling"},
+		"https://github.com/acme/tooling.git":     {"github.com", "acme/tooling"},
+		"https://someone@github.com/acme/tooling": {"github.com", "acme/tooling"},
+		"ssh://git@github.com/acme/tooling.git":   {"github.com", "acme/tooling"},
+		"ssh://git@github.com:2222/acme/tooling":  {"github.com", "acme/tooling"},
+		"git@github.acme.example:Team/thing.git":  {"github.acme.example", "Team/thing"},
+		"https://GitHub.com/acme/tooling":         {"github.com", "acme/tooling"},
+		"https://gitlab.com/acme/tooling":         {"gitlab.com", "acme/tooling"},
+		"/srv/git/mirror.git":                     {"", ""},
+		"https://github.com/acme":                 {"", ""},
+		"git@github.com:":                         {"", ""},
 	} {
 		t.Run(url, func(t *testing.T) {
 			host, slug, ok := parseURL(url)
@@ -88,9 +88,9 @@ func TestRemoteOfHonoursGhRepoSetDefault(t *testing.T) {
 
 	// The other spelling: a repository that need not be a remote here.
 	gittest.Git(t, dir, "config", "--unset", "remote.origin.gh-resolved")
-	gittest.Git(t, dir, "config", "remote.origin.gh-resolved", "Telcred/server")
-	if r, _ := RemoteOf(dir); r.Slug != "Telcred/server" || r.Host != "github.com" {
-		t.Errorf("RemoteOf() = %+v, want Telcred/server", r)
+	gittest.Git(t, dir, "config", "remote.origin.gh-resolved", "acme/server")
+	if r, _ := RemoteOf(dir); r.Slug != "acme/server" || r.Host != "github.com" {
+		t.Errorf("RemoteOf() = %+v, want acme/server", r)
 	}
 }
 
