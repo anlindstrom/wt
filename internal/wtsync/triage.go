@@ -178,8 +178,8 @@ func AssessOwn(mainRoot, onto string, cfg *Config, wt repo.Worktree, listed []ag
 
 // AssessTo is AssessOwn against t: classified by what a rebase onto t.Onto
 // of the commits above t's cutoff would do, with the scripts read from t's
-// trunk.
-func AssessTo(mainRoot string, t Target, cfg *Config, wt repo.Worktree, listed []agents.Agent, own OwnRemote) Assessment {
+// trunk. progress follows the simulation, when there is one to run.
+func AssessTo(mainRoot string, t Target, cfg *Config, wt repo.Worktree, listed []agents.Agent, own OwnRemote, progress ...ReplayProgress) Assessment {
 	a := Assessment{Path: wt.Path, Branch: wt.Branch, NoConfig: cfg == nil, Sessions: agents.SessionsAt(listed, wt.Path), Own: own, Target: t.Name}
 	if wt.Detached || wt.Branch == "" {
 		a.Class = Detached
@@ -271,7 +271,7 @@ func AssessTo(mainRoot string, t Target, cfg *Config, wt repo.Worktree, listed [
 		return a
 	}
 
-	a.Replay, err = SimulateRebaseTo(mainRoot, t, tip, cfg)
+	a.Replay, err = SimulateRebaseTo(mainRoot, t, tip, cfg, progress...)
 	if err != nil {
 		a.Err = err
 		return a

@@ -75,10 +75,54 @@ type FoldLookMove struct {
 	Lines         []wtsync.LineRange `json:"lines"`
 }
 
+// noticeFixupRefusal says on progress that a fixup's target refuses the fold
+// of look's line, unless the run is known to stop before it checks them. It
+// runs ahead of the look's slow phases and decides nothing the look prints: a
+// line it cannot read is reported, and the targets are checked again, when
+// the look reads the stack.
+func noticeFixupRefusal(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent, own wtsync.OwnRemote, progress lookProgress) {
+	progress.phase("resolving fixup targets")
+	line, path, err := readLookLine(ctx, base, trunkSHA, target, look)
+	if err != nil || runStopsAhead(cfg, line, path, listed, own) {
+		return
+	}
+	main := ctx.Repo.MainRoot
+	onto, upstream := line.Base, ""
+	if target != nil {
+		if moves, err := wtsync.HasMoves(main, line.Commits); err != nil || !moves {
+			return
+		}
+		onto, upstream = target.SHA, target.Upstream
+	}
+	if why, err := wtsync.FixupOfCarried(main, onto, upstream, line.Branch, line.Commits); err == nil && why != "" {
+		progress.line("wt: unless something else stops it first, the run will refuse the fold: %s", kit.OneLine(why))
+	}
+}
+
+// runStopsAhead is whether the run of the fold of line, checked out at path,
+// is refused before it checks the fixups' targets, as far as that is known
+// without the assessment: no declaration or one that refuses the fold, no
+// layer, a handover, a rebase, tracked changes, a busy session, or its own
+// remote.
+func runStopsAhead(cfg *wtsync.Config, line wtsync.Line, path string, listed []agents.Agent, own wtsync.OwnRemote) bool {
+	if cfg == nil || cfg.StackFoldRefusal() != "" || len(line.Layers) == 0 || own.State == wtsync.OwnBehind || own.FetchFailed != "" {
+		return true
+	}
+	gitDir, err := wtsync.GitDir(path)
+	if err != nil {
+		return true
+	}
+	if paused, err := wtsync.HasPlan(gitDir); err != nil || paused {
+		return true
+	}
+	s := wtsync.Recheck(path, gitDir, listed)
+	return s.Err != nil || s.Rebasing || s.Dirty || len(s.Sessions.Busy()) > 0
+}
+
 // foldLookAt reads the stack of look and the fold a run of it makes; a nil
 // fold for a run onto target with no move! commit on the line.
-func foldLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent) (*syncrun.Stack, *FoldLook, error) {
-	s, err := stackLookAt(ctx, base, trunkSHA, target, look, listed)
+func foldLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent, progress lookProgress) (*syncrun.Stack, *FoldLook, error) {
+	s, err := stackLookAt(ctx, base, trunkSHA, target, look, listed, progress)
 	if err != nil {
 		return nil, nil, err
 	}

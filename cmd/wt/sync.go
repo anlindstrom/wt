@@ -205,7 +205,8 @@ func newSyncCmd() *cobra.Command {
 		if ctx == nil {
 			return kit.ErrNotInRepo
 		}
-		opts := synccmd.SyncOptions{NoFetch: noFetch, Onto: onto, Upstream: upstream, Alone: alone}
+		opts := synccmd.SyncOptions{NoFetch: noFetch, Onto: onto, Upstream: upstream, Alone: alone,
+			Progress: cmd.ErrOrStderr()}
 		if f.stack {
 			opts.Stack = &synccmd.StackLook{Work: args[0], Layers: layers, Autosquash: autosquash, NoSideBranches: noSides}
 		}

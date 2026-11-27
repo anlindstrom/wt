@@ -102,30 +102,41 @@ func aloneSides(alone bool) string {
 // sweep's and the ones it keeps.
 func backupPatterns(ctx *kit.Context) []string { return ctx.UserConfig().BackupPatterns() }
 
-// stackLookAt is the look at the stack held on the line of the worktree
-// look names, read from base (trunk, or where a rebase onto target starts):
-// its layers, bottom first, and what holds each. A target on the line is
-// refused.
-func stackLookAt(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, look *StackLook, listed []agents.Agent) (*syncrun.Stack, error) {
+// readLookLine reads the line of the worktree look names from base (trunk,
+// or where a rebase onto target starts), and the path of that worktree. A
+// target on the line is refused.
+func readLookLine(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, look *StackLook) (wtsync.Line, string, error) {
 	wt, err := kit.Locate(ctx, look.Work)
 	if err != nil {
-		return nil, err
+		return wtsync.Line{}, "", err
 	}
 	line, err := readLine(ctx, wt.Branch, base, look.Layers)
 	if err != nil {
-		return nil, err
+		return wtsync.Line{}, "", err
 	}
 	if target != nil {
 		if why := target.onLine(ctx, line, trunkSHA, kit.WorktreeName(ctx, wt.Branch, wt.Path)); why != "" {
-			return nil, errors.New(why)
+			return wtsync.Line{}, "", errors.New(why)
 		}
+	}
+	return line, wt.Path, nil
+}
+
+// stackLookAt is the look at the stack held on the line of the worktree
+// look names, read as readLookLine reads it: its layers, bottom first, and
+// what holds each.
+func stackLookAt(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, look *StackLook, listed []agents.Agent, progress lookProgress) (*syncrun.Stack, error) {
+	line, path, err := readLookLine(ctx, base, trunkSHA, target, look)
+	if err != nil {
+		return nil, err
 	}
 	holders, err := syncrun.ReadHolders(ctx, line, listed)
 	if err != nil {
 		return nil, err
 	}
-	s := syncrun.StackOf(line, look.Autosquash, holders, wt.Path)
+	s := syncrun.StackOf(line, look.Autosquash, holders, path)
 	if !look.NoSideBranches {
+		progress.phase("reading side branches")
 		sides, err := readSides(ctx, line, trunkSHA, target)
 		if err != nil {
 			return nil, err
@@ -137,6 +148,7 @@ func stackLookAt(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, lo
 		syncrun.SetSides(s, sides, sideHolders, aloneSides(look.Alone))
 	}
 	if look.Autosquash {
+		progress.phase("analysing fixup context")
 		syncrun.ContextGaps(ctx.Repo.MainRoot, line, s)
 	}
 	return s, nil
