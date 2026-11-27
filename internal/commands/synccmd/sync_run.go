@@ -495,7 +495,7 @@ func (r *RunPlan) declare(works []string) error {
 		return err
 	}
 	r.onto, r.trunkSHA = onto, trunkSHA
-	r.tgt = wtsync.Target{Onto: trunkSHA}
+	r.tgt = wtsync.Target{Onto: trunkSHA, InPlace: r.assessesInPlace()}
 	r.opts.Journal.Repo(ctx.Repo.MainRoot)
 	// onto is the target's commit, recorded once the target resolves.
 	recorded := trunkSHA
@@ -554,6 +554,19 @@ func (r *RunPlan) declare(works []string) error {
 	}
 	r.cfg = cfg
 	return nil
+}
+
+// foldAssessedInPlace is the rule a look and a run share: a fold with no
+// --onto stays on the line's own base, so it is assessed without a replay
+// onto trunk.
+func foldAssessedInPlace(autosquash bool, onto string) bool { return autosquash && onto == "" }
+
+// assessesInPlace is foldAssessedInPlace for the run. --if-ready asks whether
+// a rebase onto trunk would go through, and --expect's token is read from the
+// overview's replays onto trunk, so a run given either replays.
+func (r *RunPlan) assessesInPlace() bool {
+	st := r.opts.Stack
+	return st != nil && foldAssessedInPlace(st.Autosquash, r.opts.Onto) && !r.opts.IfReady && r.opts.Expect == ""
 }
 
 // syncTrunk brings local trunk to the trunk the run fetched, when it did,
@@ -1357,7 +1370,7 @@ func (r *RunPlan) request(b string, p *participant) (req wtsync.Request, ontoLab
 			req.Onto, req.Upstream, ontoLabel = pp.head, pp.result.OldTip, pp.work
 		}
 	}
-	// The assessment replays onto trunk, which an in-place fold never meets.
+	// A replay onto trunk says nothing of a rebase in place.
 	if !inPlace && p.a.Class == wtsync.Contested && p.a.Replay.Stop != nil {
 		what := "the run stops there and writes a plan"
 		if req.Stacked {

@@ -22,6 +22,10 @@ type Target struct {
 	// Name is what a person calls Onto, for the reasons a verdict gives;
 	// empty is trunk.
 	Name string
+	// InPlace assesses a fold on the line's own base, which never meets
+	// Onto: nothing is replayed onto it and no divergence from it is read.
+	// Onto still counts behind and ahead, and says current or stale.
+	InPlace bool
 }
 
 // cutoff is where the replayed range starts, in the form every reader of

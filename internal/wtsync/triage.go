@@ -16,7 +16,7 @@ type Class int
 // assessment that returns early on an error before any class is decided
 // reads "unknown" rather than misreporting the worktree as Detached.
 const (
-	Unknown   Class = iota // Err is set and no class was decided
+	Unknown   Class = iota // no class was decided: Err is set, or InPlace
 	Detached               // no branch: skipped, reported
 	Current                // behind 0: nothing to do
 	Stale                  // ahead 0: nothing of its own; a lifecycle question
@@ -142,7 +142,10 @@ type Assessment struct {
 	Own OwnRemote
 	// Target names what it was assessed against when that is not trunk.
 	Target string
-	Err    error
+	// InPlace is Target.InPlace for a worktree with a rebase to assess:
+	// there is no replay, and the class stays Unknown.
+	InPlace bool
+	Err     error
 }
 
 // Way is where a paused worktree's handover stands, for WayOut: waiting at
@@ -178,7 +181,8 @@ func AssessOwn(mainRoot, onto string, cfg *Config, wt repo.Worktree, listed []ag
 
 // AssessTo is AssessOwn against t: classified by what a rebase onto t.Onto
 // of the commits above t's cutoff would do, with the scripts read from t's
-// trunk. progress follows the simulation, when there is one to run.
+// trunk. With t.InPlace it stops short of that replay. progress follows the
+// simulation, when there is one to run.
 func AssessTo(mainRoot string, t Target, cfg *Config, wt repo.Worktree, listed []agents.Agent, own OwnRemote, progress ...ReplayProgress) Assessment {
 	a := Assessment{Path: wt.Path, Branch: wt.Branch, NoConfig: cfg == nil, Sessions: agents.SessionsAt(listed, wt.Path), Own: own, Target: t.Name}
 	if wt.Detached || wt.Branch == "" {
@@ -268,6 +272,10 @@ func AssessTo(mainRoot string, t Target, cfg *Config, wt repo.Worktree, listed [
 		if a.Own.Blocks == OwnBlockDiverged {
 			a.Own.Blocks = ""
 		}
+		return a
+	}
+	if t.InPlace {
+		a.InPlace = true
 		return a
 	}
 
