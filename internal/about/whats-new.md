@@ -4,6 +4,23 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-27 12:20 — `wt sync` says what it is doing while it looks
+
+A look prints a line on stderr for each phase, from the fetch to the `each_commit` checks,
+and for one worktree counts the commits as it replays them (`replaying onto origin/main
+60/121`). stdout is unchanged. `--json` and `--all` looks stay silent.
+
+## 2026-11-27 12:20 — A fold look names a refused fixup at once
+
+`wt sync <work> --stack --autosquash` now checks the fixup targets before the slow replay and
+context analysis. A target the run would refuse is named on stderr straight away (`wt: unless
+something else stops it first, the run will refuse the fold: …`); the look then finishes as before.
+
+## 2026-11-27 12:20 — `wt sync --help` shows a stack look
+
+The examples include a stack held on one line:
+`wt sync top --stack --autosquash --layer 'feat/*'`.
+
 ## 2026-11-26 11:53 — A `move!` commit folds with `--onto`
 
 `wt sync rebase <work> --stack --autosquash --onto <ref> --each-commit=targets` moves

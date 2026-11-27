@@ -91,9 +91,14 @@ func SimulateRebase(mainRoot, onto, branch string, cfg *Config) (Replay, error) 
 	return SimulateRebaseTo(mainRoot, Target{Onto: onto}, branch, cfg)
 }
 
+// ReplayProgress is told, before each commit a simulation replays, how many
+// of the total are done.
+type ReplayProgress func(done, total int)
+
 // SimulateRebaseTo is SimulateRebase against t: the commits above t's
-// cutoff replayed onto t.Onto, with the scripts read from t's trunk.
-func SimulateRebaseTo(mainRoot string, t Target, branch string, cfg *Config) (Replay, error) {
+// cutoff replayed onto t.Onto, with the scripts read from t's trunk. Each
+// of progress follows it commit by commit.
+func SimulateRebaseTo(mainRoot string, t Target, branch string, cfg *Config, progress ...ReplayProgress) (Replay, error) {
 	onto, scripts := t.Onto, t.scripts()
 	var rep Replay
 	// The same selection and order the run's rebase uses: right side only,
@@ -138,6 +143,9 @@ func SimulateRebaseTo(mainRoot string, t Target, branch string, cfg *Config) (Re
 		return rep, err
 	}
 	for i, cp := range commits {
+		for _, report := range progress {
+			report(i, len(commits))
+		}
 		c := cp.SHA
 		tree, clean, conflicts, messages, err := mergeTree(mainRoot, c+"^", base, c)
 		if err != nil {

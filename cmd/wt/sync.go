@@ -165,6 +165,7 @@ func newSyncCmd() *cobra.Command {
 			"  wt sync login-crash           # that worktree in full\n" +
 			"  wt sync rebase . --if-ready   # rebase it only if it needs nothing from you\n" +
 			"  wt sync login-crash --onto test_wt/integration  # against another branch\n" +
+			"  wt sync top --stack --autosquash --layer 'feat/*'  # a stack held on one line\n" +
 			"  wt sync rebase --all --if-ready  # every ready worktree, every repository\n" +
 			"  wt sync --profile api         # the overview of a profile's repositories",
 		ValidArgsFunction: completeWork,
@@ -204,7 +205,8 @@ func newSyncCmd() *cobra.Command {
 		if ctx == nil {
 			return kit.ErrNotInRepo
 		}
-		opts := synccmd.SyncOptions{NoFetch: noFetch, Onto: onto, Upstream: upstream, Alone: alone}
+		opts := synccmd.SyncOptions{NoFetch: noFetch, Onto: onto, Upstream: upstream, Alone: alone,
+			Progress: cmd.ErrOrStderr()}
 		if f.stack {
 			opts.Stack = &synccmd.StackLook{Work: args[0], Layers: layers, Autosquash: autosquash, NoSideBranches: noSides}
 		}

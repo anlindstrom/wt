@@ -51,7 +51,14 @@ type SyncOptions struct {
 	// Alone looks at the one worktree as wt sync rebase --alone would run
 	// it: the others stacked on its history are named as left alone.
 	Alone bool
+	// Progress is where a text look says what it is doing while it works;
+	// nil is silent.
+	Progress io.Writer
+	// Clock is what the progress counts are timed by; nil is time.Now.
+	Clock func() time.Time
 }
+
+func (o SyncOptions) progress() lookProgress { return lookProgress{w: o.Progress, now: o.Clock} }
 
 // StackLook is the look at one line's stack.
 type StackLook struct {
@@ -92,6 +99,8 @@ func Sync(ctx *kit.Context, opts SyncOptions, w io.Writer) error {
 	if line := keepstate.KeptLine(ctx, time.Now()); line != "" {
 		fmt.Fprintln(w, line)
 	}
+	progress := opts.progress()
+	progress.phase("assessing a rebase of %s onto %s", kit.Count(len(worktrees), "worktree"), onto)
 	assessments := assessAll(ctx.Repo.MainRoot, onto, cfg, worktrees, listed, own, assessWorkers)
 	entries := make([]syncEntry, 0, len(worktrees))
 	var parents map[string]string
@@ -99,6 +108,9 @@ func Sync(ctx *kit.Context, opts SyncOptions, w io.Writer) error {
 		parents = parentsOf(ctx, onto)
 	}
 	var dues []wtsync.Due
+	if len(cfg.EachCommitOrNeeds()) > 0 {
+		progress.phase("reading each_commit checks and needs")
+	}
 	for i, wt := range worktrees {
 		e := syncEntry{work: kit.WorktreeName(ctx, wt.Branch, wt.Path), a: assessments[i]}
 		if len(cfg.EachCommitOrNeeds()) > 0 {
@@ -198,24 +210,32 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		return err
 	}
 	work := kit.WorktreeName(ctx, wt.Branch, wt.Path)
-	tgt, base := wtsync.Target{Onto: onto}, onto
+	tgt, base, against := wtsync.Target{Onto: onto}, onto, onto
 	var parents map[string]string
 	if target != nil {
 		if why := target.refuseFor(ctx, work, wt.Branch); why != "" {
 			return errors.New(why)
 		}
-		tgt, base = target.Target(onto), target.cutoff()
+		tgt, base, against = target.Target(onto), target.cutoff(), target.Short()
 	}
-	a := wtsync.AssessTo(ctx.Repo.MainRoot, tgt, cfg, wt, listed, syncrun.OwnStateOf(own, wt.Branch))
+	progress := opts.progress()
 	var look *StackLook
 	if opts.Stack != nil {
 		look = &StackLook{Work: arg, Layers: opts.Stack.Layers, Autosquash: opts.Stack.Autosquash,
 			NoSideBranches: opts.Stack.NoSideBranches, Alone: opts.Alone || opts.Stack.Alone}
 	}
+	remote := syncrun.OwnStateOf(own, wt.Branch)
+	// Ahead of the assessment, which is slow, so a refusal is known at once.
+	if look != nil && look.Autosquash {
+		noticeFixupRefusal(ctx, base, onto, cfg, target, look, listed, remote, progress)
+	}
+	progress.phase("assessing a rebase onto %s", against)
+	a := wtsync.AssessTo(ctx.Repo.MainRoot, tgt, cfg, wt, listed, remote, progress.replay(against))
 	var stack *syncrun.Stack
 	var fold *FoldLook
 	if look != nil && look.Autosquash {
-		if stack, fold, err = foldLookAt(ctx, base, onto, cfg, target, look, listed); err != nil {
+		stack, fold, err = foldLookAt(ctx, base, onto, cfg, target, look, listed, progress)
+		if err != nil {
 			if target != nil {
 				printDetail(w, work, a)
 			}
@@ -243,7 +263,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	}
 	if opts.Stack != nil {
 		if stack == nil {
-			if stack, err = stackLookAt(ctx, base, onto, target, look, listed); err != nil {
+			if stack, err = stackLookAt(ctx, base, onto, target, look, listed, progress); err != nil {
 				return err
 			}
 		}
@@ -253,6 +273,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		}
 	}
 	if len(cfg.EachCommitOrNeeds()) > 0 {
+		progress.phase("reading each_commit checks and needs")
 		if target == nil {
 			parents = parentsOf(ctx, onto)
 		}
@@ -333,6 +354,7 @@ func syncInputsTo(ctx *kit.Context, opts SyncOptions, w io.Writer, branches []st
 	if opts.NoFetch {
 		own = wtsync.ReadOwnOrUnknown(ctx.Repo.MainRoot, ctx.Config.MainBranch)
 	} else {
+		opts.progress().phase("fetching")
 		own, fetchErr = syncrun.FetchRemotes(ctx, syncFetchTimeout, branches)
 	}
 	onto, sha, cfg, err := SyncDeclaration(ctx)
