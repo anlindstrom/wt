@@ -19,8 +19,8 @@ import (
 
 // twoDomains is what a devports that reports domains says of two apps with one.
 var twoDomains = devportstest.ConfigDoc(
-	[2]string{"access-manager", "am.telcred.locally"},
-	[2]string{"account-manager", "acm.telcred.locally"})
+	[2]string{"web-app", "web.example.localhost"},
+	[2]string{"admin-app", "admin.example.localhost"})
 
 // repoWith is a repository to make a worktree in.
 func repoWith(t *testing.T) *kit.Context {
@@ -35,7 +35,7 @@ func repoWith(t *testing.T) *kit.Context {
 func newText(t *testing.T, ctx *kit.Context) (path, human string) {
 	t.Helper()
 	var buf bytes.Buffer
-	path, err := New(ctx, "fix/sites-live", NewOptions{NoSetup: true}, &buf)
+	path, err := New(ctx, "fix/login-fix", NewOptions{NoSetup: true}, &buf)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -43,9 +43,9 @@ func newText(t *testing.T, ctx *kit.Context) (path, human string) {
 }
 
 func TestNewPrintsTheAddressOfEachAppWithADomain(t *testing.T) {
-	(&devportstest.Fake{Name: "sites-live", Config: twoDomains}).Install(t)
+	(&devportstest.Fake{Name: "login-fix", Config: twoDomains}).Install(t)
 	_, human := newText(t, repoWith(t))
-	for _, want := range []string{"https://sites-live.am.telcred.locally\n", "https://sites-live.acm.telcred.locally\n"} {
+	for _, want := range []string{"https://login-fix.web.example.localhost\n", "https://login-fix.admin.example.localhost\n"} {
 		if !strings.Contains(human, want) {
 			t.Errorf("missing %q in:\n%s", want, human)
 		}
@@ -53,7 +53,7 @@ func TestNewPrintsTheAddressOfEachAppWithADomain(t *testing.T) {
 }
 
 func TestNewPrintsNoAddressWithoutADomain(t *testing.T) {
-	f := &devportstest.Fake{Name: "sites-live", Config: devportstest.ConfigDoc([2]string{"api", ""})}
+	f := &devportstest.Fake{Name: "login-fix", Config: devportstest.ConfigDoc([2]string{"api", ""})}
 	f.Install(t)
 	_, human := newText(t, repoWith(t))
 	if strings.Contains(human, "https://") {
@@ -86,7 +86,7 @@ func TestNewIsUnchangedWhenDevportsIsAbsentFailingOrSlow(t *testing.T) {
 }
 
 func TestNewPrintsNoAddressFromADevportsThatDoesNotReportDomains(t *testing.T) {
-	(&devportstest.Fake{Name: "sites-live", Config: devportstest.OldConfigDoc("access-manager")}).Install(t)
+	(&devportstest.Fake{Name: "login-fix", Config: devportstest.OldConfigDoc("web-app")}).Install(t)
 	_, human := newText(t, repoWith(t))
 	if strings.Contains(human, "https://") {
 		t.Errorf("an address guessed:\n%s", human)
@@ -94,9 +94,9 @@ func TestNewPrintsNoAddressFromADevportsThatDoesNotReportDomains(t *testing.T) {
 }
 
 func TestNewJSONHasTheAddresses(t *testing.T) {
-	(&devportstest.Fake{Name: "sites-live", Config: twoDomains}).Install(t)
+	(&devportstest.Fake{Name: "login-fix", Config: twoDomains}).Install(t)
 	var out, human bytes.Buffer
-	err := NewJSON(repoWith(t), "fix/sites-live", NewOptions{NoSetup: true}, "", NewCreateJournal(&out, "new"), &human)
+	err := NewJSON(repoWith(t), "fix/login-fix", NewOptions{NoSetup: true}, "", NewCreateJournal(&out, "new"), &human)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,8 +108,8 @@ func TestNewJSONHasTheAddresses(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []devports.Address{
-		{App: "access-manager", URL: "https://sites-live.am.telcred.locally"},
-		{App: "account-manager", URL: "https://sites-live.acm.telcred.locally"},
+		{App: "web-app", URL: "https://login-fix.web.example.localhost"},
+		{App: "admin-app", URL: "https://login-fix.admin.example.localhost"},
 	}
 	if !reflect.DeepEqual(got.Addresses, want) {
 		t.Errorf("addresses %+v", got.Addresses)

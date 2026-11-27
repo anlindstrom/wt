@@ -73,18 +73,18 @@ func TestPRCheckoutMakesAWorktreeOnThePullRequestsBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log := testkit.FakeGitHub(t, ctx, testkit.OpenPR(12, "residential_fixes", "Residents no longer rewrite a door"))
+	log := testkit.FakeGitHub(t, ctx, testkit.OpenPR(12, "portal_fixes", "Invoices no longer drop a line"))
 
 	var errs bytes.Buffer
 	path, err := PRCheckout(ctx, 12, PROptions{}, &errs)
 	if err != nil {
 		t.Fatalf("PRCheckout: %v", err)
 	}
-	want := ctx.Scheme().Dir("feat", "pr-12-residential_fixes")
+	want := ctx.Scheme().Dir("feat", "pr-12-portal_fixes")
 	if path != want {
 		t.Errorf("path = %q, want %q", path, want)
 	}
-	if got := ctx.Repo.BranchAt(path); got != "residential_fixes" {
+	if got := ctx.Repo.BranchAt(path); got != "portal_fixes" {
 		t.Errorf("worktree is on %q, want the pull request's head branch", got)
 	}
 	// The pull request is read by number and gh does the checkout. Nothing
@@ -163,14 +163,14 @@ func TestPRCheckoutLeavesNothingBehindWhenGhFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	testkit.FakeGitHubWith(t, ctx, `[ "$1 $2" = 'pr checkout' ] && { echo 'fetch failed' >&2; exit 1; }`,
-		testkit.OpenPR(12, "residential_fixes", "Fixes"))
+		testkit.OpenPR(12, "portal_fixes", "Fixes"))
 
 	var errs bytes.Buffer
 	_, err = PRCheckout(ctx, 12, PROptions{}, &errs)
 	if err == nil {
 		t.Fatal("PRCheckout succeeded with a gh that failed")
 	}
-	path := ctx.Scheme().Dir("feat", "pr-12-residential_fixes")
+	path := ctx.Scheme().Dir("feat", "pr-12-portal_fixes")
 	want := "gh pr checkout 12 failed: fetch failed\n" +
 		"  the half-made worktree at " + path + " was removed; a retry starts clean"
 	if err.Error() != want {
@@ -197,7 +197,7 @@ func TestPRCheckoutWithoutANumberAsks(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := testkit.FakeGitHub(t, ctx,
-		testkit.OpenPR(12, "residential_fixes", "Fixes"),
+		testkit.OpenPR(12, "portal_fixes", "Fixes"),
 		testkit.OpenPR(7, "fix_wt/login-crash", "Login crash"))
 
 	var offered []PRChoice
@@ -371,7 +371,7 @@ func TestPRWorkName(t *testing.T) {
 			testkit.OpenPR(7, "banana_wt/thing", "x"), "feat", "pr-7-thing",
 		},
 		"somebody else's branch": {
-			testkit.OpenPR(12, "residential_fixes", "x"), "feat", "pr-12-residential_fixes",
+			testkit.OpenPR(12, "portal_fixes", "x"), "feat", "pr-12-portal_fixes",
 		},
 		"a type in a path prefix": {
 			testkit.OpenPR(12, "fix/login", "x"), "fix", "pr-12-fix-login",
@@ -655,12 +655,12 @@ func TestPRCheckoutRefusesALocalBranchThatDiverged(t *testing.T) {
 	t.Parallel()
 	main := testkit.CommittedRepo(t, testkit.MinimalConf)
 	head := prHead(t, main, 12, "HEAD")
-	tip := localCommits(t, main, "residential_fixes", "HEAD", 2)
+	tip := localCommits(t, main, "portal_fixes", "HEAD", 2)
 	ctx, err := kit.Open(main, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pr := testkit.OpenPR(12, "residential_fixes", "Fixes")
+	pr := testkit.OpenPR(12, "portal_fixes", "Fixes")
 	pr.HeadRefOid = head
 	log := testkit.FakeGitHub(t, ctx, pr)
 
@@ -669,12 +669,12 @@ func TestPRCheckoutRefusesALocalBranchThatDiverged(t *testing.T) {
 	if err == nil {
 		t.Fatal("PRCheckout went ahead on a branch gh cannot fast-forward")
 	}
-	want := "#12 is on residential_fixes, and a local branch of that name has diverged from it: " +
+	want := "#12 is on portal_fixes, and a local branch of that name has diverged from it: " +
 		"2 ahead, 1 behind\n" +
 		"  gh can only fast-forward a branch that exists; nothing was made\n" +
 		"  it carries 2 commits of its own: check that nothing is lost, then either\n" +
-		"    rename it:  git branch -m residential_fixes residential_fixes-old\n" +
-		"    delete it:  git branch -D residential_fixes\n" +
+		"    rename it:  git branch -m portal_fixes portal_fixes-old\n" +
+		"    delete it:  git branch -D portal_fixes\n" +
 		"  and run `wt pr checkout 12` again"
 	if err.Error() != want {
 		t.Errorf("err = %v\nwant  %s", err, want)
@@ -684,15 +684,15 @@ func TestPRCheckoutRefusesALocalBranchThatDiverged(t *testing.T) {
 			t.Errorf("gh was asked to check it out anyway: %q", call)
 		}
 	}
-	if _, err := os.Stat(ctx.Scheme().Dir("feat", "pr-12-residential_fixes")); err == nil {
+	if _, err := os.Stat(ctx.Scheme().Dir("feat", "pr-12-portal_fixes")); err == nil {
 		t.Error("a worktree was made")
 	}
-	if got, _, err := ctx.Repo.ResolveRef("refs/heads/residential_fixes"); err != nil || got != tip {
+	if got, _, err := ctx.Repo.ResolveRef("refs/heads/portal_fixes"); err != nil || got != tip {
 		t.Errorf("the local branch moved: %s, want %s", got, tip)
 	}
 	// Looking brought the pull request's commits and nothing else.
 	if refs := testkit.GitOut(t, main, "for-each-ref", "--format=%(refname)"); refs !=
-		"refs/heads/main\nrefs/heads/residential_fixes" {
+		"refs/heads/main\nrefs/heads/portal_fixes" {
 		t.Errorf("refs = %q", refs)
 	}
 	if _, err := os.Stat(filepath.Join(main, ".git", "FETCH_HEAD")); err == nil {
@@ -705,10 +705,10 @@ func TestPRCheckoutRefusesALocalBranchThatDiverged(t *testing.T) {
 func TestPRCheckoutLeavesAFastForwardToGh(t *testing.T) {
 	t.Parallel()
 	for name, local := range map[string]func(t *testing.T, main, head string){
-		"behind": func(t *testing.T, main, _ string) { localCommits(t, main, "residential_fixes", "HEAD", 0) },
+		"behind": func(t *testing.T, main, _ string) { localCommits(t, main, "portal_fixes", "HEAD", 0) },
 		"ahead": func(t *testing.T, main, head string) {
 			testkit.GitIn(t, main, "fetch", "-q", "origin", "refs/pull/12/head")
-			localCommits(t, main, "residential_fixes", head, 2)
+			localCommits(t, main, "portal_fixes", head, 2)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -719,17 +719,17 @@ func TestPRCheckoutLeavesAFastForwardToGh(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pr := testkit.OpenPR(12, "residential_fixes", "Fixes")
+			pr := testkit.OpenPR(12, "portal_fixes", "Fixes")
 			pr.HeadRefOid = head
 			log := testkit.FakeGitHubWith(t, ctx,
-				`[ "$1 $2" = 'pr checkout' ] && { git checkout -q residential_fixes; exit; }`, pr)
+				`[ "$1 $2" = 'pr checkout' ] && { git checkout -q portal_fixes; exit; }`, pr)
 
 			var errs bytes.Buffer
 			path, err := PRCheckout(ctx, 12, PROptions{}, &errs)
 			if err != nil {
 				t.Fatalf("PRCheckout: %v", err)
 			}
-			if got := ctx.Repo.BranchAt(path); got != "residential_fixes" {
+			if got := ctx.Repo.BranchAt(path); got != "portal_fixes" {
 				t.Errorf("worktree is on %q", got)
 			}
 			if argv := testkit.ArgvOf(t, log); argv[len(argv)-1] != "pr checkout 12" {
@@ -754,16 +754,16 @@ func TestPRCheckoutDoesNotSecondGuessWhatItCannotKnow(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			main := testkit.CommittedRepo(t, testkit.MinimalConf)
 			head := prHead(t, main, 12, "HEAD")
-			localCommits(t, main, "residential_fixes", "HEAD", 2)
+			localCommits(t, main, "portal_fixes", "HEAD", 2)
 			ctx, err := kit.Open(main, io.Discard)
 			if err != nil {
 				t.Fatal(err)
 			}
-			pr := testkit.OpenPR(12, "residential_fixes", "Fixes")
+			pr := testkit.OpenPR(12, "portal_fixes", "Fixes")
 			pr.HeadRefOid = head
 			change(&pr)
 			log := testkit.FakeGitHubWith(t, ctx,
-				`[ "$1 $2" = 'pr checkout' ] && { git checkout -q residential_fixes; exit; }`, pr)
+				`[ "$1 $2" = 'pr checkout' ] && { git checkout -q portal_fixes; exit; }`, pr)
 
 			var errs bytes.Buffer
 			if _, err := PRCheckout(ctx, 12, PROptions{}, &errs); err != nil {
@@ -786,14 +786,14 @@ func TestPRCheckoutSaysWhenTheHalfMadeWorktreeIsStillThere(t *testing.T) {
 		t.Fatal(err)
 	}
 	testkit.FakeGitHubWith(t, ctx, `[ "$1 $2" = 'pr checkout' ] && { git worktree lock . ; echo 'fatal: no' >&2; exit 1; }`,
-		testkit.OpenPR(12, "residential_fixes", "Fixes"))
+		testkit.OpenPR(12, "portal_fixes", "Fixes"))
 
 	var errs bytes.Buffer
 	_, err = PRCheckout(ctx, 12, PROptions{}, &errs)
 	if err == nil {
 		t.Fatal("PRCheckout succeeded with a gh that failed")
 	}
-	path := ctx.Scheme().Dir("feat", "pr-12-residential_fixes")
+	path := ctx.Scheme().Dir("feat", "pr-12-portal_fixes")
 	for _, want := range []string{
 		"gh pr checkout 12 failed: fatal: no\n",
 		"  the half-made worktree at " + path + " could not be removed: ",

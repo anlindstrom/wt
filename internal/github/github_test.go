@@ -123,7 +123,7 @@ func TestOpenWithChecksParsesPullRequests(t *testing.T) {
 	t.Parallel()
 	c, _ := fake(t, `echo '[{"number":12,"title":"Tidy","headRefName":"fix_wt/tidy","isDraft":false,`+
 		`"state":"OPEN","reviewDecision":"APPROVED","isCrossRepository":false,`+
-		`"author":{"login":"anders"},"headRepositoryOwner":{"login":"Telcred"},"url":"u"}]'`)
+		`"author":{"login":"someone"},"headRepositoryOwner":{"login":"acme"},"url":"u"}]'`)
 	prs, err := c.OpenWithChecks(t.TempDir(), 5)
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestOpenWithChecksParsesPullRequests(t *testing.T) {
 		t.Fatalf("got %d pull requests", len(prs))
 	}
 	p := prs[0]
-	if p.Number != 12 || p.HeadRefName != "fix_wt/tidy" || p.AuthorLogin() != "anders" {
+	if p.Number != 12 || p.HeadRefName != "fix_wt/tidy" || p.AuthorLogin() != "someone" {
 		t.Errorf("PR = %+v", p)
 	}
 	if p.StateLabel() != "approved" {

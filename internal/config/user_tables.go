@@ -37,7 +37,7 @@ type Profile struct {
 }
 
 // tableKeys maps the dotted spelling `wt config` takes to the table it
-// writes: root.telcred is telcred in [roots].
+// writes: root.work is work in [roots].
 var tableKeys = map[string]string{"root": tableRoots, "profile": tableProfiles}
 
 // tableEntryName is what a name in either table may be: a bare TOML key, so
@@ -104,7 +104,7 @@ func decodeTables(u *User, md toml.MetaData, doc map[string]toml.Primitive, keys
 	if prim, ok := doc[tableRoots]; ok {
 		var roots map[string]string
 		if err := md.PrimitiveDecode(prim, &roots); err != nil {
-			problems = append(problems, fmt.Sprintf(`[roots] in %s is not a table of paths (write telcred = "~/src/telcred")`, u.Path))
+			problems = append(problems, fmt.Sprintf(`[roots] in %s is not a table of paths (write work = "~/src/work")`, u.Path))
 		} else {
 			for _, name := range tableOrder(keys, tableRoots) {
 				u.Roots = append(u.Roots, NamedRoot{Name: name, Path: roots[name]})

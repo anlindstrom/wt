@@ -15,7 +15,7 @@ func rows() []admin.PRChoice {
 	return []admin.PRChoice{
 		{PR: github.PR{Number: 206, Title: "Arch", HeadRefName: "feat_wt/arch", State: "OPEN"},
 			ReviewRequested: true},
-		{PR: github.PR{Number: 12, Title: "Residents keep their doors", HeadRefName: "residential_fixes",
+		{PR: github.PR{Number: 12, Title: "Invoices keep their totals", HeadRefName: "portal_fixes",
 			State: "OPEN", Author: github.Account{Login: "someone"}}},
 		{PR: github.PR{Number: 40, Title: "Draft of the thing", HeadRefName: "feat_wt/thing",
 			State: "OPEN", IsDraft: true}, Worktree: "/src/demo_wt/feat_wt/thing"},
@@ -100,7 +100,7 @@ func TestPickerNarrows(t *testing.T) {
 	if !strings.Contains(out.String(), `Open pull requests matching "feat_wt" (2)`) {
 		t.Errorf("the heading does not say what it matched:\n%s", out.String())
 	}
-	if strings.Contains(out.String(), "residential_fixes") {
+	if strings.Contains(out.String(), "portal_fixes") {
 		t.Errorf("a row that does not match was still printed:\n%s", out.String())
 	}
 	// Row 2 of the narrowed list, not of the original one.
@@ -113,7 +113,7 @@ func TestPickerNarrows(t *testing.T) {
 // Enough text to leave one row is a way of picking: it is shown, then taken.
 func TestPickerTakesASingleMatchAfterShowingIt(t *testing.T) {
 	var out bytes.Buffer
-	pr, err := newPicker(&out).answer("Residents")
+	pr, err := newPicker(&out).answer("Invoices")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestPickerTakesASingleMatchAfterShowingIt(t *testing.T) {
 
 // Matching is on everything a person would look for, case ignored.
 func TestPickerMatchesEverythingOnARow(t *testing.T) {
-	for _, text := range []string{"RESIDENTS", "residential", "someone"} {
+	for _, text := range []string{"INVOICES", "portal", "someone"} {
 		var out bytes.Buffer
 		pk := newPicker(&out)
 		if _, err := pk.answer(text); err != nil {
@@ -188,7 +188,7 @@ func TestPickerRowsCarryTheirMarks(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"  1  #206  open", "your review",
-		"  2  #12   open", "someone", "residential_fixes",
+		"  2  #12   open", "someone", "portal_fixes",
 		"  3  #40   draft", "has a worktree",
 	} {
 		if !strings.Contains(got, want) {

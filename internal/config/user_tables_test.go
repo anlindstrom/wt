@@ -56,18 +56,18 @@ func TestSetAndUnsetATableEntryKeepTheFilesShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, kv := range [][2]string{
-		{"root.telcred", "~/src/telcred"},
+		{"root.work", "~/src/work"},
 		{"root.dotfiles", "~/dotfiles"},
-		{"profile.backend", "~/src/telcred/server ~/src/telcred/api"},
-		{"root.telcred", "~/work/telcred"},
+		{"profile.backend", "~/src/work/server ~/src/work/api"},
+		{"root.work", "~/code/work"},
 		{"github", "false"},
 	} {
 		if _, _, err := SetUser(kv[0], kv[1]); err != nil {
 			t.Fatalf("SetUser(%s): %v", kv[0], err)
 		}
 	}
-	want := "# mine\nsuperset = true\ngithub = false\n\n[roots]\ntelcred = \"~/work/telcred\"\n" +
-		"dotfiles = \"~/dotfiles\"\n\n[profiles]\nbackend = [\"~/src/telcred/server\", \"~/src/telcred/api\"]\n"
+	want := "# mine\nsuperset = true\ngithub = false\n\n[roots]\nwork = \"~/code/work\"\n" +
+		"dotfiles = \"~/dotfiles\"\n\n[profiles]\nbackend = [\"~/src/work/server\", \"~/src/work/api\"]\n"
 	if got := readBack(t, path); got != want {
 		t.Fatalf("file:\n%s\nwant:\n%s", got, want)
 	}
@@ -77,7 +77,7 @@ func TestSetAndUnsetATableEntryKeepTheFilesShape(t *testing.T) {
 	if _, removed, _ := UnsetUser("root.dotfiles"); removed {
 		t.Error("a second unset found something to remove")
 	}
-	if got := readBack(t, path); strings.Contains(got, "dotfiles") || !strings.Contains(got, "telcred = ") {
+	if got := readBack(t, path); strings.Contains(got, "dotfiles") || !strings.Contains(got, "work = ") {
 		t.Errorf("unset took the wrong line:\n%s", got)
 	}
 }

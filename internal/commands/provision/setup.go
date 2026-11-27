@@ -186,7 +186,7 @@ func copyConfigFiles(ctx *kit.Context, src, target string, w io.Writer) (failed 
 
 // runProvision executes the repository's own setup step, if it declares one.
 // This is what AWS_SETUP_ENABLED became: repo-declared behaviour rather than a
-// Telcred-shaped flag in a generic tool. Its failure IS fatal — a worktree
+// one-company flag in a generic tool. Its failure IS fatal — a worktree
 // without decrypted secrets is not usable.
 func runProvision(ctx *kit.Context, target string, w io.Writer, j *CreateJournal) error {
 	if !ctx.HasProvisionScript() {

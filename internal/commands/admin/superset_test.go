@@ -250,7 +250,7 @@ func TestPRCheckoutRegistersWithSuperset(t *testing.T) {
 		t.Fatal(err)
 	}
 	testkit.OptIn(ctx)
-	testkit.FakeGitHub(t, ctx, testkit.OpenPR(12, "residential_fixes", "Residents keep their doors"))
+	testkit.FakeGitHub(t, ctx, testkit.OpenPR(12, "portal_fixes", "Invoices keep their totals"))
 	log := provisiontest.FakeSuperset(t, ctx, ctx.Repo.MainRoot, true)
 
 	var errs bytes.Buffer
@@ -258,7 +258,7 @@ func TestPRCheckoutRegistersWithSuperset(t *testing.T) {
 		t.Fatalf("PRCheckout: %v", err)
 	}
 	got := testkit.ArgvOf(t, log)
-	if len(got) != 2 || !strings.Contains(got[1], "--branch residential_fixes") {
+	if len(got) != 2 || !strings.Contains(got[1], "--branch portal_fixes") {
 		t.Errorf("argv = %q, want the pull request's own branch registered", got)
 	}
 }

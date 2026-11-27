@@ -1,4 +1,4 @@
-# How offload (~/programmering/private/offload) runs wt's checks on another machine,
+# How offload runs wt's checks on another machine,
 # so the suite's minutes of CPU and thousands of temporary repositories stay off the
 # Mac being worked at. `offload commands` lists these; docs/testing.md says which to run.
 name = "wt"

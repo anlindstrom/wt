@@ -123,15 +123,15 @@ func TestListAcrossRepositoriesAsksDevportsOnce(t *testing.T) {
 	t.Setenv("WT_ROOTS", root)
 	demoWT := filepath.Join(root, "demo_wt", "fix_wt", "login-crash")
 	f := &devportstest.Fake{Routes: devportstest.RouteDoc(
-		[4]string{"https://login-crash.am.telcred.locally", "login-crash", demoWT, strconv.Itoa(os.Getpid())},
-		[4]string{"https://other.am.telcred.locally", "other", betaWT, strconv.Itoa(os.Getpid())})}
+		[4]string{"https://login-crash.web.example.localhost", "login-crash", demoWT, strconv.Itoa(os.Getpid())},
+		[4]string{"https://other.web.example.localhost", "other", betaWT, strconv.Itoa(os.Getpid())})}
 	f.Install(t)
 
 	out, err := runCmd(t, "list", "--all", "--no-sessions", "--wide")
 	if err != nil {
 		t.Fatalf("list --all: %v\n%s", err, out)
 	}
-	for _, want := range []string{"https://login-crash.am.telcred.locally", "https://other.am.telcred.locally"} {
+	for _, want := range []string{"https://login-crash.web.example.localhost", "https://other.web.example.localhost"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %s:\n%s", want, out)
 		}

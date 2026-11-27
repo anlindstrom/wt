@@ -81,12 +81,12 @@ GH
     [[ "$stderr" == *"not registered"* ]]
 }
 
-# fake_gh answers for one open pull request, #12 on residential_fixes, and
+# fake_gh answers for one open pull request, #12 on portal_fixes, and
 # does `pr checkout` by creating that branch where it is run.
 fake_gh() {
     cat > "$FAKEBIN/gh" <<'GH'
 #!/bin/sh
-pr='{"number":12,"title":"Residents keep their doors","headRefName":"residential_fixes","baseRefName":"main","isDraft":false,"state":"OPEN","reviewDecision":"","isCrossRepository":false,"author":{"login":"someone"},"headRepositoryOwner":{"login":"demo"},"url":"https://github.com/demo/demo/pull/12"}'
+pr='{"number":12,"title":"Invoices keep their totals","headRefName":"portal_fixes","baseRefName":"main","isDraft":false,"state":"OPEN","reviewDecision":"","isCrossRepository":false,"author":{"login":"someone"},"headRepositoryOwner":{"login":"demo"},"url":"https://github.com/demo/demo/pull/12"}'
 case "$1 $2" in
   'auth status') exit 0 ;;
   'pr list') printf '[%s]\n' "$pr" ;;
@@ -96,7 +96,7 @@ case "$1 $2" in
       *) printf '{"data":{"repository":{"b0":{"nodes":[%s]}}}}\n' "$pr" ;;
     esac ;;
   'pr view') [ "$3" = 12 ] && printf '%s\n' "$pr" || { echo 'no pull requests found' >&2; exit 1; } ;;
-  'pr checkout') [ "$3" = 12 ] && git checkout -q -b residential_fixes || exit 1 ;;
+  'pr checkout') [ "$3" = 12 ] && git checkout -q -b portal_fixes || exit 1 ;;
 esac
 GH
     chmod +x "$FAKEBIN/gh"
@@ -111,7 +111,7 @@ GH
     run --separate-stderr wt pr checkout 12 --no-build
     [ "$status" -eq 0 ]
     only_path
-    [[ "$output" == */demo_wt/feat_wt/pr-12-residential_fixes ]]
+    [[ "$output" == */demo_wt/feat_wt/pr-12-portal_fixes ]]
     first="$output"
 
     # The worktree is already there: stdout is still that path and nothing

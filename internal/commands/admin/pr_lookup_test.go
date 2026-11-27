@@ -45,15 +45,15 @@ func TestPRCheckoutRemovesABranchGhLeftBehind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.FakeGitHubWith(t, ctx, `[ "$1 $2" = 'pr checkout' ] && { git checkout -q -b residential_fixes; `+
+	testkit.FakeGitHubWith(t, ctx, `[ "$1 $2" = 'pr checkout' ] && { git checkout -q -b portal_fixes; `+
 		`echo 'could not set up the remote' >&2; exit 1; }`,
-		testkit.OpenPR(12, "residential_fixes", "Fixes"))
+		testkit.OpenPR(12, "portal_fixes", "Fixes"))
 
 	var errs bytes.Buffer
 	if _, err := PRCheckout(ctx, 12, PROptions{}, &errs); err == nil {
 		t.Fatal("PRCheckout succeeded with a gh that failed")
 	}
-	if _, ok, err := ctx.Repo.ResolveRef("refs/heads/residential_fixes"); err != nil || ok {
+	if _, ok, err := ctx.Repo.ResolveRef("refs/heads/portal_fixes"); err != nil || ok {
 		t.Error("the branch gh half-made was left behind")
 	}
 }
@@ -66,15 +66,15 @@ func TestPRCheckoutKeepsABranchItDidNotMake(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.GitIn(t, ctx.Repo.MainRoot, "branch", "residential_fixes")
+	testkit.GitIn(t, ctx.Repo.MainRoot, "branch", "portal_fixes")
 	testkit.FakeGitHubWith(t, ctx, `[ "$1 $2" = 'pr checkout' ] && { echo 'fetch failed' >&2; exit 1; }`,
-		testkit.OpenPR(12, "residential_fixes", "Fixes"))
+		testkit.OpenPR(12, "portal_fixes", "Fixes"))
 
 	var errs bytes.Buffer
 	if _, err := PRCheckout(ctx, 12, PROptions{}, &errs); err == nil {
 		t.Fatal("PRCheckout succeeded with a gh that failed")
 	}
-	if _, ok, err := ctx.Repo.ResolveRef("refs/heads/residential_fixes"); err != nil || !ok {
+	if _, ok, err := ctx.Repo.ResolveRef("refs/heads/portal_fixes"); err != nil || !ok {
 		t.Error("a branch that was here before was deleted")
 	}
 }

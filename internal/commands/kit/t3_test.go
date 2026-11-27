@@ -25,7 +25,7 @@ func TestT3WorktreesDirReadsT3Settings(t *testing.T) {
 		setting, want string
 	}{
 		{`""`, filepath.Join(data, "worktrees")},
-		{`"~/programmering/t3_wt"`, filepath.Join(home, "programmering", "t3_wt")},
+		{`"~/src/t3_wt"`, filepath.Join(home, "src", "t3_wt")},
 		{`"/abs/t3_wt/"`, "/abs/t3_wt"},
 		{`"relative/t3_wt"`, ""},
 		{`"/"`, ""},

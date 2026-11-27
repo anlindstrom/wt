@@ -3,4 +3,4 @@ plugins {
 }
 
 rootProject.name = 'server'
-include 'accessmanagement', 'pins', 'core', 'database', 'worker-clients', 'vapix-client', 'gui', 'o3c', 'remote-api', 'scim', 'listener', 'processor', 'webapp', 'common', 'tests-e2e', 'main-api-cli'
+include 'app', 'pins', 'core', 'database', 'worker-clients', 'device-client', 'gui', 'relay', 'remote-api', 'scim', 'listener', 'processor', 'webapp', 'common', 'tests-e2e', 'main-api-cli'

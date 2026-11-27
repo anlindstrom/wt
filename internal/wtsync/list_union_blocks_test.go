@@ -20,7 +20,7 @@ func readFixture(t *testing.T, dir, name string) []byte {
 // The three conflicts the server's settings.gradle raised in a stack rebase.
 // Blobs are the server repo's own, trimmed to nothing: only
 // inline_trunk_changed_line's trunk is a fixture of the same shape (trunk
-// added 'nbix-cli' to the line the branch added 'acc-client' to).
+// added 'bus-cli' to the line the branch added 'sdk-client' to).
 func TestListUnionRealSettingsGradleConflicts(t *testing.T) {
 	t.Parallel()
 	for _, dir := range []string{"inline_next_to_blank", "own_line_next_to_blank", "inline_trunk_changed_line"} {

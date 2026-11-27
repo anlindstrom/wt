@@ -136,7 +136,7 @@ Every key, and how the two files decide between them:
      1  #41  open   alice   fix-login          Login fails on Safari          your review
      2  #38  draft  bob     feat_wt/pr-lookup  Look pull requests up by …     has a worktree
      …
-    10  #12  open   carol   residential_fixes  Residents keep their doors
+    10  #12  open   carol   portal_fixes  Invoices keep their totals
 
     24 more — `all` shows them, or type part of a title, branch or author to narrow the list.
 

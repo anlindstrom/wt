@@ -84,7 +84,7 @@ func TestMigrateDryRunRunsNoTmutil(t *testing.T) {
 // wt pr checkout puts its worktree under <repo>_wt/.
 func TestPRCheckoutExcludesTheWorktreeFolderFromTimeMachine(t *testing.T) {
 	ctx, tm, _ := testkit.TMRepo(t, false)
-	testkit.FakeGitHub(t, ctx, testkit.OpenPR(12, "residential_fixes", "Residents no longer rewrite a door"))
+	testkit.FakeGitHub(t, ctx, testkit.OpenPR(12, "portal_fixes", "Invoices no longer drop a line"))
 	if _, err := PRCheckout(ctx, 12, PROptions{}, io.Discard); err != nil {
 		t.Fatalf("PRCheckout: %v", err)
 	}

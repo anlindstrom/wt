@@ -4,6 +4,12 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-27 12:30 — Default repository roots no longer name one person's folders
+
+- With no `WT_ROOTS` and no `[roots]` in the user config, commands across
+  repositories now look in `~/src`, `~/code` and `~/Git`. Set `[roots]` (`wt
+  config`) to name your own.
+
 ## 2026-11-27 12:20 — `wt sync` says what it is doing while it looks
 
 A look prints a line on stderr for each phase, from the fetch to the `each_commit` checks,
@@ -1285,8 +1291,8 @@ publishing with --dry-run.
 
 - The overview used to simulate one worktree's rebase after another; it now
   runs up to four side by side, so it takes about as long as the slowest
-  worktree rather than the sum of them. On accessmanager (4 worktrees) that is
-  1.15 s → 0.8 s, on server (8 worktrees, most current) 0.54 s → 0.39 s.
+  worktree rather than the sum of them. On a repo with 4 worktrees that is
+  1.15 s → 0.8 s, on one with 8 (most current) 0.54 s → 0.39 s.
 - The rows and their order are exactly as before, and Ctrl-C during the
   overview now stops every git it started and says `interrupted`.
 

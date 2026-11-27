@@ -201,18 +201,18 @@ BUILD_INIT_ENABLED=false
 DEVELOPER_CONFIG_DIRS=(.cursor .claude .run .vscode .idea)
 DEVELOPER_CONFIG_FILES=(
     "override.properties"
-    "accessmanagement/override.properties"
+    "app/override.properties"
     "webapp/override.properties"
     "etc/ai-tooling/local-overrides/config.yaml"
-    "accessmanagement/src/main/resources/application-local-secret.yaml"
+    "app/src/main/resources/application-local-secret.yaml"
 )
 `)
 	// Present in the source — must be copied, including four levels deep.
 	present := []string{
-		"accessmanagement/override.properties",
+		"app/override.properties",
 		"webapp/override.properties",
 		"etc/ai-tooling/local-overrides/config.yaml",
-		"accessmanagement/src/main/resources/application-local-secret.yaml",
+		"app/src/main/resources/application-local-secret.yaml",
 	}
 	for _, f := range present {
 		testkit.MustWrite(t, filepath.Join(main, f), "value-of-"+f)
