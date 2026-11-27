@@ -54,7 +54,51 @@ func GapsAt(gaps []ContextGap, c string) []ContextGap {
 	return out
 }
 
-// ContextGaps is every hunk of the line's fixups that lacks its context at
+// FixupState is what the analysis found of one fixup.
+type FixupState string
+
+const (
+	// FixupApplies means the fold reaches the fixup, and it merges clean there.
+	FixupApplies FixupState = "applies"
+	// FixupAheadOfContext means a hunk needs a later commit of the line (a
+	// ContextGap).
+	FixupAheadOfContext FixupState = "ahead-of-context"
+	// FixupConflicts means the fold stops at the fixup, and no later commit
+	// explains why.
+	FixupConflicts FixupState = "conflicts"
+	// FixupNotAnalysed means wt cannot say, for the reason in Why.
+	FixupNotAnalysed FixupState = "not-analysed"
+)
+
+// FixupOutcome is what the analysis found of one fixup!, squash! or amend!
+// commit of the line.
+type FixupOutcome struct {
+	Fixup, Subject string
+	// Target is the commit it folds into, "" when its subject names no one
+	// commit.
+	Target string
+	State  FixupState
+	// Why is set for FixupNotAnalysed.
+	Why string
+}
+
+// FixupAnalysis is what AnalyseFixups found of a line.
+type FixupAnalysis struct {
+	// Gaps is every hunk of a fixup that lacks its context at its target.
+	Gaps []ContextGap
+	// Unchecked is, one line per fixup, what of the gaps could not be told.
+	Unchecked []string
+	// Fixups is every fixup of the line, in line order.
+	Fixups []FixupOutcome
+}
+
+// ContextGaps is the gaps AnalyseFixups finds, and its notes.
+func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
+	a, err := AnalyseFixups(dir, commits, nil)
+	return a.Gaps, a.Unchecked, err
+}
+
+// AnalyseFixups is every hunk of the line's fixups that lacks its context at
 // its target. commits is the line, oldest first. Each fixup is merged, in
 // the object store, onto its target's tree with the fixups of the same
 // target before it already folded, from its own parent, as the rebase will
@@ -64,13 +108,14 @@ func GapsAt(gaps []ContextGap, c string) []ContextGap {
 // commit explains is not a gap. The trees are the line's own, before any
 // move onto another base. Nothing but objects in the store is written: no
 // ref, no index and no worktree.
-func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
+func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, error) {
+	var none FixupAnalysis
 	if len(commits) == 0 {
-		return nil, nil, nil
+		return none, nil
 	}
 	out, err := gitEnv(dir, nil, nil, append([]string{"log", "--no-walk=unsorted", "--format=%H%x00%s"}, commits...)...)
 	if err != nil {
-		return nil, nil, err
+		return none, err
 	}
 	var all []lineCommit
 	for _, l := range strings.Split(out, "\n") {
@@ -107,16 +152,16 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 		cur, ok := folded[j]
 		if !ok {
 			if cur, err = gitEnv(dir, nil, nil, "rev-parse", all[j].sha+"^{tree}"); err != nil {
-				return nil, nil, err
+				return none, err
 			}
 		}
 		parent, err := gitEnv(dir, nil, nil, "rev-parse", e.sha+"^^{tree}")
 		if err != nil {
-			return nil, nil, err
+			return none, err
 		}
 		tree, clean, conflicts, _, err := mergeTree(dir, parent, cur, e.sha)
 		if err != nil {
-			return nil, nil, err
+			return none, err
 		}
 		if clean {
 			folded[j] = tree
@@ -148,14 +193,14 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 		for _, c := range conflicts {
 			hunks, err := fixupHunks(dir, e.sha, c.Path)
 			if err != nil {
-				return nil, nil, err
+				return none, err
 			}
 			for _, h := range hunks {
 				if len(h.before) == 0 {
 					continue
 				}
 				if has, err := blobs.has(cur, c.Path, h.before); err != nil {
-					return nil, nil, err
+					return none, err
 				} else if has {
 					continue
 				}
@@ -176,7 +221,7 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 					later := all[k]
 					has, err := blobs.has(later.sha+"^{tree}", c.Path, h.before)
 					if err != nil {
-						return nil, nil, err
+						return none, err
 					}
 					if !has {
 						continue
@@ -207,12 +252,12 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 							// commits up to a later one come to together.
 							if !replayDone {
 								replayDone = true
-								if replayed, err = replayAfter(dir, all, isFoldAt, targetOf, cleanFold, cur, j, i); err != nil {
-									return nil, nil, err
+								if replayed, err = replayAfter(dir, all, targetOf, cur, j, i); err != nil {
+									return none, err
 								}
 							}
 							if m, found, err := firstReplayedWith(blobs, replayed, j, i, c.Path, h.before); err != nil {
-								return nil, nil, err
+								return none, err
 							} else if found {
 								needs = m
 								break
@@ -237,7 +282,7 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 		}
 		gaps = append(gaps, mine...)
 	}
-	return gaps, unchecked, nil
+	return FixupAnalysis{Gaps: gaps, Unchecked: unchecked}, nil
 }
 
 // replayAfter is the tree each ordinary commit between target j and fixup i
@@ -247,7 +292,7 @@ func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
 // established: a commit or a fixup of one that does not merge clean, a
 // fixup of one that conflicted, or a fixup of a commit below j seen before i,
 // whose fold changes the trees from j on in a way the replay does not apply.
-func replayAfter(dir string, all []lineCommit, isFoldAt map[int]bool, targetOf map[int]int, cleanFold map[int]bool, start string, j, i int) (map[int]string, error) {
+func replayAfter(dir string, all []lineCommit, targetOf map[int]int, start string, j, i int) (map[int]string, error) {
 	for f := 0; f < i; f++ {
 		if t, ok := targetOf[f]; ok && t < j {
 			return nil, nil
@@ -268,7 +313,7 @@ func replayAfter(dir string, all []lineCommit, isFoldAt map[int]bool, targetOf m
 		return true, nil
 	}
 	for m := j + 1; m < i; m++ {
-		if isFoldAt[m] {
+		if isFold(all[m].subject) {
 			continue
 		}
 		if ok, err := apply(m); err != nil || !ok {
@@ -277,9 +322,6 @@ func replayAfter(dir string, all []lineCommit, isFoldAt map[int]bool, targetOf m
 		for f := m + 1; f < i; f++ {
 			if t, ok := targetOf[f]; !ok || t != m {
 				continue
-			}
-			if !cleanFold[f] {
-				return nil, nil
 			}
 			if ok, err := apply(f); err != nil || !ok {
 				return nil, err

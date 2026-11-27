@@ -141,10 +141,9 @@ func TestReplayAfterStopsAtAnOrdinaryCommitThatConflicts(t *testing.T) {
 		{"fixup! feat: a", "a.txt", "a\nf\n"},
 	})
 	all := []lineCommit{{commits[0], "feat: a"}, {commits[1], "feat: c"}, {commits[2], "fixup! feat: a"}}
-	isFold := map[int]bool{2: true}
 	startA := gitIn(t, dir, "rev-parse", sha["feat: a"]+"^{tree}")
 
-	trees, err := replayAfter(dir, all, isFold, map[int]int{}, map[int]bool{}, startA, 0, 2)
+	trees, err := replayAfter(dir, all, map[int]int{}, startA, 0, 2)
 	if err != nil || trees[1] == "" {
 		t.Fatalf("trees %v, err %v; want feat: c's tree from the target's", trees, err)
 	}
@@ -156,7 +155,7 @@ func TestReplayAfterStopsAtAnOrdinaryCommitThatConflicts(t *testing.T) {
 	gittest.WriteFile(t, filepath.Join(dir, "f.txt"), "1\nS\n3\n")
 	gitIn(t, dir, "commit", "-q", "-a", "-m", "side")
 	startSide := gitIn(t, dir, "rev-parse", "HEAD^{tree}")
-	trees, err = replayAfter(dir, all, isFold, map[int]int{}, map[int]bool{}, startSide, 0, 2)
+	trees, err = replayAfter(dir, all, map[int]int{}, startSide, 0, 2)
 	if err != nil || trees != nil {
 		t.Errorf("trees %v, err %v; want nil, nil at the conflicting feat: c", trees, err)
 	}
