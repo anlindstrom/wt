@@ -19,18 +19,20 @@ var tempDirs = struct {
 // tempDir makes a private directory under the system's temporary directory,
 // registered until cleanup removes it.
 func tempDir(pattern string) (dir string, cleanup func(), err error) {
+	// Made and registered, and removed before it is forgotten, so an
+	// interrupt between the two finds it.
+	tempDirs.Lock()
+	defer tempDirs.Unlock()
 	dir, err = os.MkdirTemp("", pattern)
 	if err != nil {
 		return "", nil, err
 	}
-	tempDirs.Lock()
 	tempDirs.dirs[dir] = true
-	tempDirs.Unlock()
 	return dir, func() {
+		_ = os.RemoveAll(dir)
 		tempDirs.Lock()
 		delete(tempDirs.dirs, dir)
 		tempDirs.Unlock()
-		_ = os.RemoveAll(dir)
 	}, nil
 }
 
