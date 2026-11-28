@@ -48,6 +48,11 @@ confirm the commit a warning names, a note says so and a stop offers no retarget
 for a fixup the fold in place applies says it does. A fixup's target is found by subject before
 revision, as git does.
 
+## 2026-11-27 12:12 — An ambiguous `fixup!` subject is refused with the ids to use
+
+The refusal says to reword it to `fixup! <id>` and gives the ids the run would take, and
+names the commits it would still refuse.
+
 ## 2026-11-26 11:53 — A `move!` commit folds with `--onto`
 
 `wt sync rebase <work> --stack --autosquash --onto <ref> --each-commit=targets` moves
