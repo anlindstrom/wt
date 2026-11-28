@@ -162,6 +162,8 @@ type Due struct {
 	Checks       []EachCommit
 	CheckCommits []Commit
 	Deferred     []Deferred
+	// AtMost says the run may check fewer commits than CheckCommits.
+	AtMost bool
 }
 
 // Needs is every need of a due step, each once, in the order declared.

@@ -252,9 +252,29 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 			return noLayerRefusal(kit.BranchWorkName(ctx, wt.Branch))
 		}
 	}
+	// What the fold may run is read before it is shown: an unmet need
+	// refuses it, as a fixup the run cannot take does.
+	prober := syncrun.StepOptions{Probes: opts.Probes}.Prober()
 	var refusal string
+	var folded wtsync.Due
+	var checks checkView
 	if look != nil && look.Autosquash {
 		refusal = stackRefusal(cfg, stack, kit.BranchWorkName(ctx, wt.Branch), a)
+		if refusal == "" && (fold == nil || fold.Refusal == nil) {
+			progress.phase("reading each_commit checks and needs")
+			var stops []wtsync.FoldStop
+			var each string
+			if folded, stops, each, err = foldDue(ctx.Repo.MainRoot, wt.Path, cfg, stack, target, fold); err != nil {
+				return err
+			}
+			checks = foldedChecks(stops, each, folded.AtMost)
+			// The run probes the needs before it reads the fixups.
+			if refusal = needRefusal(prober, folded); refusal == "" && fold == nil {
+				if refusal, err = ontoFoldRefusal(ctx.Repo.MainRoot, stack, target); err != nil {
+					return err
+				}
+			}
+		}
 		if fold != nil && refusal != "" {
 			fold.refuse(refusal)
 		}
@@ -263,7 +283,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		printFoldDetail(w, work, a, fold)
 	} else if look != nil {
 		mode := verdictMode{stack: true, rewrites: look.Autosquash}
-		printDetailRun(w, work, a, stackRunLine(work, a, mode, target, refusal))
+		printDetailRun(w, work, a, stackRunLine(work, a, mode, target, look, refusal))
 	} else {
 		printDetail(w, work, a)
 	}
@@ -287,7 +307,11 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 				return err
 			}
 		}
-		syncrun.PrintLayers(w, stack)
+		if refusal != "" || fold != nil && fold.Refusal != nil {
+			syncrun.PrintRefusedLayers(w, stack)
+		} else {
+			syncrun.PrintLayers(w, stack)
+		}
 		if opts.Alone {
 			fmt.Fprintln(w, "  --alone  a run folds and rebases the line and moves no layer: each stays on its old commits, its worktree untouched")
 		}
@@ -299,14 +323,13 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		if target == nil && !tgt.InPlace {
 			parents = parentsOf(ctx, onto)
 		}
-		mode := verdictMode{stack: look != nil, rewrites: look != nil && look.Autosquash}
-		var due wtsync.Due
-		// A refused fold runs nothing.
-		if refusal == "" && (fold == nil || fold.Refusal == nil) {
-			due = stepsDueIn(mode, tgt, cfg, parents, wt, a)
+		due := folded
+		if look == nil || !look.Autosquash {
+			due = stepsDueIn(verdictMode{stack: look != nil}, tgt, cfg, parents, wt, a)
+			checks = replayedChecks(due)
 		}
-		printChecks(w, due)
-		printNeeds(w, needProbes(cfg, []wtsync.Due{due}, syncrun.StepOptions{Probes: opts.Probes}.Prober()))
+		printChecks(w, checks, due)
+		printNeeds(w, needProbes(cfg, []wtsync.Due{due}, prober))
 	}
 	return nil
 }

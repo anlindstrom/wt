@@ -12,6 +12,7 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 	"github.com/anlindstrom/wt/internal/gittest"
+	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
 // needLine is fixedLine with its fixup in the top layer.
@@ -96,6 +97,77 @@ func refusedForDocker(t *testing.T, ctx *kit.Context, set func(*synccmd.RunOptio
 	}
 }
 
+// A path only trunk changed is no part of a fold in place, guarded or not:
+// its need neither warns nor refuses. A rebase onto trunk still counts it.
+func TestInPlaceFoldNeedsNothingOfPathsOnlyTrunkChanged(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	for name, guarded := range map[string]bool{"plain": false, "if-ready": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := needLine(t, "defer:\n  - run: 'true'\n    paths: [trunk.txt]\n    needs: [docker]\n",
+				func(_ string, commit func(string, string)) { commit("trunk.txt", "feat: trunk's own") })
+			if got := needLook(t, ctx); strings.Contains(got, "did not answer") {
+				t.Errorf("the look warns of a need the fold never has:\n%s", got)
+			}
+			refusedForDocker(t, ctx, func(o *synccmd.RunOptions) { o.Stack = &synccmd.StackOptions{} })
+			opts := synccmdtest.NoAgents()
+			opts.Probes = synccmdtest.DockerDown().Probes()
+			opts.Stack = &synccmd.StackOptions{Autosquash: true}
+			opts.IfReady = guarded
+			if _, human, err := synccmdtest.StackRun(t, ctx, "tmp/low", opts); err != nil {
+				t.Fatalf("%v\n%s", err, human)
+			}
+		})
+	}
+}
+
+// A commit trunk has cherry-picked is still replayed by a fold on the line's
+// own base, so its check's need counts.
+func TestInPlaceFoldNeedsTheCheckOfACommitTrunkAlsoCarries(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx := fixedLine(t, "low", "each_commit:\n  - run: 'true'\n    paths: [low.txt]\n    needs: [docker]\n",
+		func(main string, commit func(string, string)) {
+			commit("trunk.txt", "feat: trunk's own")
+			gittest.Git(t, main, "cherry-pick", "low1")
+		})
+	if got := needLook(t, ctx); !strings.Contains(got, "docker did not answer") || !strings.Contains(checkSection(got), "feat: low") {
+		t.Errorf("the look hides the check:\n%s", got)
+	}
+	refusedForDocker(t, ctx, func(o *synccmd.RunOptions) { o.Stack = &synccmd.StackOptions{Autosquash: true} })
+}
+
+// The look lists the checks the fold runs, a fixup checked as part of the
+// commit it folds into, and says what decides the list.
+func TestFoldLookListsTheChecksTheRunRuns(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx := needLine(t, "each_commit:\n  - run: 'true'\n    paths: [low.txt, top.txt]\n", func(string, func(string, string)) {})
+	got := needLook(t, ctx)
+	for _, want := range []string{"checks 1 commit with the each_commit steps", "fixups folded in first", "feat: top",
+		"feat: low  (not checked: the fold leaves layer low1 unchanged)"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the look lacks %q:\n%s", want, got)
+		}
+	}
+	if list := checkSection(got); strings.Contains(list, "fixup! feat: top") || !strings.Contains(list, "feat: top") {
+		t.Errorf("the look lists the fixup as a check:\n%s", got)
+	}
+	opts := synccmdtest.NoAgents()
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	res, human, err := synccmdtest.StackRun(t, ctx, "tmp/low", opts)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, human)
+	}
+	if n, p := strings.Count(human, "▸ check "), synccmdtest.Participant(t, res, "tmp/low"); n != 1 || p.Checked != 1 {
+		t.Errorf("the run checked %d (logged %d), the look said 1:\n%s", p.Checked, n, human)
+	}
+	if !strings.Contains(human, " feat: top\n") {
+		t.Errorf("the run did not check feat: top:\n%s", human)
+	}
+}
+
 // currentDiverged is a line current with trunk whose own remote has a commit
 // it never had, with a deferred step declared.
 func currentDiverged(t *testing.T) *kit.Context {
@@ -147,7 +219,7 @@ func TestFoldOfACurrentLineDivergedFromItsRemoteNeedsAllowDiverged(t *testing.T)
 					t.Errorf("the look lacks %q:\n%s", want, look.String())
 				}
 			}
-			if strings.Contains(look.String(), "1 fixup folds") || strings.Contains(look.String(), "re-pointed") {
+			if strings.Contains(look.String(), "1 fixup folds") || strings.Contains(look.String(), "re-pointed") || strings.Contains(look.String(), "the rebase moves it") {
 				t.Errorf("the refused look plans a fold:\n%s", look.String())
 			}
 			if onto == "" {
@@ -330,5 +402,104 @@ func TestEditOfACurrentLineDivergedFromItsRemoteIsRefused(t *testing.T) {
 		if tip != old[b] {
 			t.Errorf("a refused run moved %s", b)
 		}
+	}
+}
+
+// A check only an unchanged lower layer calls for is not run, so its need
+// neither warns nor refuses.
+func TestInPlaceFoldNeedsNothingOfAnUnchangedLayersCheck(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx := needLine(t, "each_commit:\n  - run: 'true'\n    paths: [low.txt]\n    needs: [docker]\n", func(string, func(string, string)) {})
+	got := needLook(t, ctx)
+	if strings.Contains(got, "did not answer") || !strings.Contains(checkSection(got), "feat: low  (not checked") {
+		t.Errorf("the look:\n%s", got)
+	}
+	opts := synccmdtest.NoAgents()
+	opts.Probes = synccmdtest.DockerDown().Probes()
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	res, human, err := synccmdtest.StackRun(t, ctx, "tmp/low", opts)
+	if err != nil || synccmdtest.Participant(t, res, "tmp/low").Checked != 0 {
+		t.Fatalf("%v\n%s", err, human)
+	}
+}
+
+// A step owed at an unchanged layer runs there whatever its paths, so its
+// unmet need refuses the fold. The commit there is still not checked, in the
+// look as in the run.
+func TestInPlaceFoldNeedsAStepOwedAtAnUnchangedLayer(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	const steps = "each_commit:\n  - run: 'true'\n    paths: [low.txt]\ndefer:\n  - run: 'true'\n    each: layer\n    paths: [trunk.txt]\n    needs: [docker]\n"
+	ctx := needLine(t, steps, func(_ string, commit func(string, string)) { commit("trunk.txt", "feat: trunk's own") })
+	owed := &wtsync.Owed{Branch: "tmp/low", Epoch: 1, Steps: []wtsync.OwedStep{{Step: "true", Layer: "low1", Why: "docker did not answer"}}}
+	if err := wtsync.WriteOwed(ctx.Repo.MainRoot, owed); err != nil {
+		t.Fatal(err)
+	}
+	got := needLook(t, ctx)
+	if !strings.Contains(got, "docker did not answer") || !strings.Contains(checkSection(got), "feat: low  (not checked") {
+		t.Errorf("the look:\n%s", got)
+	}
+	refusedForDocker(t, ctx, func(o *synccmd.RunOptions) { o.Stack = &synccmd.StackOptions{Autosquash: true} })
+	opts := synccmdtest.NoAgents()
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	res, human, err := synccmdtest.StackRun(t, ctx, "tmp/low", opts)
+	if err != nil || synccmdtest.Participant(t, res, "tmp/low").Checked != 0 || !strings.Contains(human, "step true layer 1/2 low1") {
+		t.Fatalf("%v\n%s", err, human)
+	}
+}
+
+// wt sync steps --all forces every step, so each one's need counts.
+func TestStepsAllNeedsEveryForcedStep(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx := needLine(t, "defer:\n  - run: 'true'\n    paths: [nothing.txt]\n    needs: [docker]\n", func(string, func(string, string)) {})
+	opts := synccmdtest.NoAgents()
+	opts.Probes = synccmdtest.DockerDown().Probes()
+	opts.Steps = &synccmd.StepsOptions{All: true}
+	var out, human bytes.Buffer
+	opts.Journal = syncrun.NewSyncRunJournal(&out, "sync steps")
+	if err := synccmd.SyncRebase(ctx, []string{"tmp/low"}, opts, &human); err == nil || !strings.Contains(human.String(), "needs docker") {
+		t.Fatalf("not refused for the need: %v\n%s", err, human.String())
+	}
+}
+
+// A fixup that puts a watched file back leaves its commit nothing to check.
+func TestFoldLookCountsWhatTheFoldedCommitChanges(t *testing.T) {
+	t.Parallel()
+	skipShort(t)
+	ctx, _ := synccmdtest.OpenLine(t, func(main, wtDir string) {
+		write := func(rel, content string) { gittest.WriteFile(t, filepath.Join(main, rel), content) }
+		commit := func(msg string) {
+			gittest.Git(t, main, "add", "-A")
+			gittest.Git(t, main, "commit", "-q", "--no-verify", "-m", msg)
+		}
+		write(".wt-sync.yaml", "conflicts: []\neach_commit:\n  - run: 'true'\n    paths: [watched.txt]\n    needs: [docker]\n")
+		commit("base")
+		gittest.Git(t, main, "checkout", "-q", "-b", "tmp/low")
+		write("low.txt", "low\n")
+		commit("feat: low")
+		gittest.Git(t, main, "branch", "low1")
+		write("top.txt", "top\n")
+		write("watched.txt", "watched\n")
+		commit("feat: top")
+		gittest.Git(t, main, "rm", "-q", "watched.txt")
+		commit("fixup! feat: top")
+		gittest.Git(t, main, "checkout", "-q", "main")
+		gittest.Git(t, main, "remote", "add", "origin", main)
+		gittest.Git(t, main, "fetch", "-q", "origin")
+		gittest.Git(t, main, "worktree", "add", "-q", filepath.Join(wtDir, "tmp_low"), "tmp/low")
+	})
+	got := needLook(t, ctx)
+	// The fixup itself changes the watched file, but is no commit of its own.
+	if checkSection(got) != "" || strings.Contains(got, "did not answer") {
+		t.Errorf("the look counts a check the fold never runs:\n%s", got)
+	}
+	opts := synccmdtest.NoAgents()
+	opts.Probes = synccmdtest.DockerDown().Probes()
+	opts.Stack = &synccmd.StackOptions{Autosquash: true}
+	res, human, err := synccmdtest.StackRun(t, ctx, "tmp/low", opts)
+	if err != nil || synccmdtest.Participant(t, res, "tmp/low").Checked != 0 {
+		t.Fatalf("%v\n%s", err, human)
 	}
 }

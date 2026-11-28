@@ -75,6 +75,8 @@
 //     the rebase's own state.
 //   - defer.go, needs.go: the deferred steps (RunDeferred, RunAfterSteps) and
 //     the needs that can make one unavailable.
+//   - rewrite_due.go: RewriteDue, the checks and steps a fold, edit or steps
+//     run may reach.
 //   - adopt.go: wt sync resume --adopt, taking over a tip.
 //   - recheck.go: Standing, what a verb re-reads once it holds the lock.
 //   - tracked_status.go: trackedStatus, the one status read of the dirty
@@ -85,7 +87,7 @@
 // Used from outside: Preflight, Verdict, Request, Handover, Result, Rebase,
 // Resume, StripMarks, MarksLeft, VerifyFinished, VerifyLeft, StopPaths,
 // AtHandoverStop, TodoHash, Recheck, RunAfterSteps, ChangedPaths,
-// DeferredResult, StepsDue, Due, ProbeNeedsWith, Adopt, ProveAdoption,
+// DeferredResult, StepsDue, RewriteDue, Folds, FoldStop, DueAtStop, Due, ProbeNeedsWith, Adopt, ProveAdoption,
 // EachCommitMode, CheckStopOf, Unchecked, CheckFailure, LayerStep,
 // StagedConflicts, RebaseInProgress, Timings, TimingSummary,
 // RemoveTempDirs.

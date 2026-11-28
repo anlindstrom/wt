@@ -145,6 +145,16 @@ func TestInPlaceFoldLookChecksTheCommitsBelowACheckedOutLayer(t *testing.T) {
 			if list := checkSection(got); !strings.Contains(list, "feat: low") || strings.Contains(list, "not checked") {
 				t.Errorf("the each_commit section lacks the lower commit:\n%s", got)
 			}
+			// The need refuses the fold in both looks, so neither plans a move.
+			wantAll(t, got, "refused: ", "needs docker")
+			if strings.Contains(got, "1 fixup folds") || strings.Contains(got, "the rebase moves it") {
+				t.Errorf("the refused look plans the fold:\n%s", got)
+			}
+			o := synccmdtest.OverviewJSONWith(t, ctx, synccmd.SyncOptions{NoFetch: true, Probes: synccmdtest.DockerDown().Probes(),
+				Stack: &synccmd.StackLook{Work: "tmp/low", Autosquash: true}})
+			if f := o.Fold; f == nil || f.Refusal == nil || !strings.Contains(*f.Refusal, "needs docker") || len(f.Folds) != 0 {
+				t.Errorf("--json fold %+v", o.Fold)
+			}
 			refusedForDocker(t, ctx, func(o *synccmd.RunOptions) { o.Stack = &synccmd.StackOptions{Autosquash: true} })
 		})
 	}

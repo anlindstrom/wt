@@ -9,6 +9,12 @@ would want read out to them; the full story is in git history.
 A fold (in place or `--onto`), `--edit` and `wt sync steps` rewrote a line already on trunk even
 when its own remote had commits it never had. They now refuse, and the look says so.
 
+## 2026-11-28 06:20 — A fold's look and needs match what the run does
+
+A fold's look lists the checks the run may make (`up to N` where unsure), refuses for an unmet
+need or an unknown fixup as the run does, and names a command with the look's options. Needs of
+trunk-only paths and unchanged layers no longer refuse a fold.
+
 ## 2026-11-28 06:12 — `wt sync push --forget` accepts `--yes`
 
 `wt sync push <work> --stack --forget --yes` now works as without `--yes`, since `--forget`

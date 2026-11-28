@@ -959,17 +959,12 @@ func (r *RunPlan) probeNeeds() {
 	prober := r.opts.Prober()
 	for _, b := range r.branches {
 		p := r.parts[b]
-		if p.verdict != wtsync.Proceed || p.refused != "" || p.a.OnlyFastForward() {
+		// wt sync steps runs its steps on a branch another run would only
+		// fast-forward.
+		if p.verdict != wtsync.Proceed || p.refused != "" || (p.a.OnlyFastForward() && r.opts.Steps == nil) {
 			continue
 		}
-		base := r.trunkSHA
-		if r.target != nil {
-			base = r.target.cutoff()
-		}
-		if parent, ok := r.parents[b]; ok && r.parts[parent] != nil {
-			base = "refs/heads/" + parent
-		}
-		due, err := wtsync.StepsDue(p.wt.Path, r.cfg, base, rebasedTip(b, p.a), r.tgt.Onto, r.tgt.Upstream)
+		due, err := r.dueOf(b, p)
 		if err != nil {
 			p.refused = p.work + ": could not tell which steps a rebase runs: " + err.Error()
 			r.refuseAbove(b, p.work+" was refused")
@@ -987,6 +982,44 @@ func (r *RunPlan) probeNeeds() {
 		}
 		p.unavailable = unavailable
 	}
+}
+
+// dueOf is what of the declaration's steps may run for b: for a run that
+// rewrites the branch, read from the rebase it makes.
+func (r *RunPlan) dueOf(b string, p *participant) (wtsync.Due, error) {
+	if !r.verdictMode().rewrites {
+		base := r.trunkSHA
+		if r.target != nil {
+			base = r.target.cutoff()
+		}
+		if parent, ok := r.parents[b]; ok && r.parts[parent] != nil {
+			base = "refs/heads/" + parent
+		}
+		due, err := wtsync.StepsDue(p.wt.Path, r.cfg, base, rebasedTip(b, p.a), r.tgt.Onto, r.tgt.Upstream)
+		return due.WithOwed(r.ctx.Repo.MainRoot, r.cfg, b), err
+	}
+	req := wtsync.Request{Path: p.wt.Path, Branch: b, Trunk: r.trunkSHA, Onto: r.tgt.Onto, Upstream: r.tgt.Upstream,
+		EachCommit: r.eachCommit}
+	if st := r.opts.Stack; st != nil {
+		req.Stack = &wtsync.StackRequest{Line: r.line, Autosquash: st.Autosquash}
+		// In place unless --onto names where the line goes.
+		if r.target == nil || r.opts.Steps != nil || r.edit != nil {
+			req.Onto, req.Upstream = r.line.Base, ""
+		}
+		req.Edit = r.edit
+	}
+	if r.opts.Steps != nil {
+		req.ForceSteps, req.Steps = true, r.stepSet
+		if r.opts.Stack == nil {
+			base, err := git.Run(r.ctx.Repo.MainRoot, "merge-base", r.trunkSHA, "refs/heads/"+b)
+			if err != nil {
+				return wtsync.Due{}, err
+			}
+			req.Onto = base
+		}
+	}
+	due, _, err := wtsync.RewriteDue(r.ctx.Repo.MainRoot, r.cfg, req, nil)
+	return due, err
 }
 
 // lockAll locks every member of every proceeding stack before touching any,

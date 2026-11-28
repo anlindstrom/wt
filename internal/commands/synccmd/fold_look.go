@@ -20,6 +20,12 @@ import (
 type FoldLook struct {
 	// onto is the target of a fold that moves the line, nil in place.
 	onto *OntoTarget
+	// analysis is the line's folds, for what a run of it may run.
+	analysis wtsync.Folds
+	// commits is the line's, oldest first.
+	commits []string
+	// look is what was asked for, for the command that runs it.
+	look *StackLook
 	// Base is the line's own base, which a fold in place stays on.
 	Base string `json:"base"`
 	// Refusal is why the run refuses the fold, the words it refuses with;
@@ -132,6 +138,9 @@ func foldLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, tar
 	if err != nil {
 		return nil, nil, err
 	}
+	if fl != nil {
+		fl.look = look
+	}
 	return s, fl, nil
 }
 
@@ -177,7 +186,7 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoT
 	if err != nil {
 		return nil, err
 	}
-	fl := &FoldLook{Base: s.Base, Folds: []FoldLookPair{}, Unchanged: []string{}, Repointed: []string{}, Held: []FoldLookHeld{}}
+	fl := &FoldLook{commits: commits, Base: s.Base, Folds: []FoldLookPair{}, Unchanged: []string{}, Repointed: []string{}, Held: []FoldLookHeld{}}
 	onto, upstream := s.Base, ""
 	if target != nil {
 		fl.onto, onto, upstream = target, target.SHA, target.Upstream
@@ -210,6 +219,7 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoT
 		}
 		return s.Branch
 	}
+	fl.analysis = wtsync.Folds{Pairs: pairs, Moves: moves}
 	lowest := len(commits)
 	for _, p := range pairs {
 		fl.Folds = append(fl.Folds, FoldLookPair{Kind: foldKindFold, Fixup: p.Fixup, FixupSubject: p.FixupSubject, FixupLayer: layerAt(p.FixupAt),
@@ -346,7 +356,7 @@ func printFoldDetail(w io.Writer, work string, a wtsync.Assessment, fl *FoldLook
 // show, with the verdict the run gives a stack and refusal, why the run
 // refuses its stack. A fold onto a target shows none without a move! commit,
 // and the command a run of it takes carries its flags.
-func stackRunLine(work string, a wtsync.Assessment, mode verdictMode, target *OntoTarget, refusal string) string {
+func stackRunLine(work string, a wtsync.Assessment, mode verdictMode, target *OntoTarget, look *StackLook, refusal string) string {
 	if refusal != "" {
 		return "refused: " + refusal
 	}
@@ -357,14 +367,14 @@ func stackRunLine(work string, a wtsync.Assessment, mode verdictMode, target *On
 	case v != wtsync.Proceed:
 		return "refused: " + why
 	case mode.rewrites:
-		return foldCommand(work, target, false) + asksFirst(a)
+		return foldCommand(work, target, look, false) + asksFirst(a)
 	}
 	return runVerdict(work, a)
 }
 
 // foldCommand is the command that runs a fold of work's line, onto target
 // when not nil, and what it does.
-func foldCommand(work string, target *OntoTarget, moves bool) string {
+func foldCommand(work string, target *OntoTarget, look *StackLook, moves bool) string {
 	flags, does := "--stack --autosquash", "folds the line in place"
 	if t := target; t != nil {
 		flags += " --onto " + t.Ref
@@ -372,6 +382,17 @@ func foldCommand(work string, target *OntoTarget, moves bool) string {
 			flags += " --upstream " + t.UpstreamRef
 		}
 		does = "folds the line and moves it onto " + t.Ref
+	}
+	if look != nil {
+		for _, l := range look.Layers {
+			flags += " --layer " + kit.ShellQuote(l)
+		}
+		if look.Alone {
+			flags += " --alone"
+		}
+		if look.NoSideBranches {
+			flags += " --no-side-branches"
+		}
 	}
 	if moves {
 		flags += " --each-commit=targets"
@@ -388,7 +409,7 @@ func asksFirst(a wtsync.Assessment) string {
 
 // refuse makes fl the look of a fold the run refuses for why.
 func (fl *FoldLook) refuse(why string) {
-	fl.Refusal = &why
+	fl.Refusal, fl.analysis = &why, wtsync.Folds{}
 	fl.Folds, fl.Unchanged, fl.Repointed, fl.Held = []FoldLookPair{}, []string{}, []string{}, []FoldLookHeld{}
 }
 
@@ -404,7 +425,7 @@ func foldVerdict(work string, a wtsync.Assessment, fl *FoldLook) string {
 	case fl.Refusal != nil:
 		return "refused: the fold: " + kit.OneLine(*fl.Refusal)
 	}
-	verdict := foldCommand(work, fl.onto, slices.ContainsFunc(fl.Folds, func(p FoldLookPair) bool { return p.Move != nil }))
+	verdict := foldCommand(work, fl.onto, fl.look, slices.ContainsFunc(fl.Folds, func(p FoldLookPair) bool { return p.Move != nil }))
 	if len(fl.Folds) == 0 {
 		verdict = fmt.Sprintf("wt sync rebase %s --stack --autosquash has no fixup to fold", work)
 	}
