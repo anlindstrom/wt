@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -286,6 +287,11 @@ func (e gitError) Unwrap() error { return e.err }
 // trailing newline is content. A failure keeps the stdout git wrote before
 // it, for merge-file, whose exit status counts conflicts.
 func runGit(dir string, env []string, stdin io.Reader, args ...string) ([]byte, error) {
+	// An index of wt's own runs no hooks: they are the repository's, and a
+	// post-index-change hook would act on the real worktree.
+	if slices.ContainsFunc(env, func(e string) bool { return strings.HasPrefix(e, "GIT_INDEX_FILE=") }) {
+		args = append([]string{"-c", "core.hooksPath=" + os.DevNull}, args...)
+	}
 	out, err := git.Exec(git.Opts{Dir: dir, Env: env, Stdin: stdin, Timeout: gitDeadline}, args...)
 	var gerr *git.Error
 	if errors.As(err, &gerr) {
