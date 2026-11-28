@@ -13,16 +13,22 @@ import (
 	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
-// stepsDue is what of the declaration's steps a run of wt may run, known
+// stepsDue is stepsDueIn for a plain run.
+func stepsDue(t wtsync.Target, cfg *wtsync.Config, parents map[string]string, wt repo.Worktree, a wtsync.Assessment) wtsync.Due {
+	return stepsDueIn(verdictMode{}, t, cfg, parents, wt, a)
+}
+
+// stepsDueIn is what of the declaration's steps a run of wt may run, known
 // before it starts; nothing for a worktree a run would not rebase. A stack
 // child's commits are counted from its parent's tip, as its rebase replays
 // them. An error reading it counts as nothing due: the overview is advice,
 // and a run reads it again and refuses on an error.
-func stepsDue(t wtsync.Target, cfg *wtsync.Config, parents map[string]string, wt repo.Worktree, a wtsync.Assessment) wtsync.Due {
+func stepsDueIn(mode verdictMode, t wtsync.Target, cfg *wtsync.Config, parents map[string]string, wt repo.Worktree, a wtsync.Assessment) wtsync.Due {
 	if cfg == nil || wt.Branch == "" || a.OnlyFastForward() {
 		return wtsync.Due{}
 	}
-	if v, _ := wtsync.Preflight(a); v != wtsync.Proceed {
+	a, v, _ := mode.verdict(a)
+	if v != wtsync.Proceed {
 		return wtsync.Due{}
 	}
 	base := cmp.Or(t.Upstream, t.Onto)
@@ -34,6 +40,23 @@ func stepsDue(t wtsync.Target, cfg *wtsync.Config, parents map[string]string, wt
 		return wtsync.Due{}
 	}
 	return due
+}
+
+// stackRefusal is why a run refuses the --stack fold of s, checked out as
+// work's worktree assessed as a, before it plans anything; "" when it goes.
+func stackRefusal(cfg *wtsync.Config, s *syncrun.Stack, work string, a wtsync.Assessment) string {
+	if cfg != nil {
+		if why := cfg.StackFoldRefusal(); why != "" {
+			return why
+		}
+		if len(s.Layers) == 0 {
+			return noLayerRefusal(work).Error()
+		}
+	}
+	if _, v, why := (verdictMode{stack: true, rewrites: true}).verdict(a); v != wtsync.Proceed {
+		return why
+	}
+	return ""
 }
 
 // rebasedTip is what a run rebases of branch: its own remote's commit when

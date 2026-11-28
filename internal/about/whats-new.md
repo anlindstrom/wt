@@ -4,6 +4,11 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-28 06:20 — A diverged line on trunk is no longer folded without `--allow-diverged`
+
+A fold (in place or `--onto`), `--edit` and `wt sync steps` rewrote a line already on trunk even
+when its own remote had commits it never had. They now refuse, and the look says so.
+
 ## 2026-11-28 06:12 — `wt sync push --forget` accepts `--yes`
 
 `wt sync push <work> --stack --forget --yes` now works as without `--yes`, since `--forget`
@@ -568,7 +573,6 @@ it again. `wt sync` says how many commits a run would check, and
 makes each pick's bump again on top of trunk: a minor stays a minor, a
 patch a patch. A stack that bumped 2.46.0 → 2.47.0 → … → 2.49.3 lands
 on 2.48.0 … 2.50.3 after trunk took 2.47.0. `max-plus-patch` is unchanged.
-
 
 ## 2026-11-08 22:53 — Safer Time Machine exclusions
 

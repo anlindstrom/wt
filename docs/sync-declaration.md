@@ -395,6 +395,12 @@ conflict with trunk is not shown, and a line divergent from trunk folds. A run
 given either does replay, and refuses as a plain run does. The `--json` look
 still surveys every worktree against trunk, so it can say divergent; the
 `--expect` token comes from that survey.
+
+A fold, an `--edit` and `wt sync steps` rewrite a line that is already on trunk,
+so a line diverged from its own remote is refused there as anywhere, unless
+`wt sync rebase` is given `--allow-diverged`; `wt sync steps` takes no such
+flag, so pull the remote's commits in first.
+
 When the content check at the end passes it prints
 `✓ tip tree equal to <old tip>`, naming the step paths it left out. The replayed
 trees can predate a script trunk declared since. A step whose `run` starts

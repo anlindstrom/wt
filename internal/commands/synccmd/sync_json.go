@@ -348,10 +348,33 @@ func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
 		} else if opts.Stack.Autosquash {
 			if o.Fold, err = foldLookFor(ctx.Repo.MainRoot, cfg, o.Stack, target, opts.Stack.Alone || opts.Alone); err != nil {
 				o.Error = jsonout.Strp(err.Error())
+			} else if err := refuseFoldLook(ctx, opts.Stack.Work, sha, cfg, o.Stack, target, sv, listed, own, o.Fold); err != nil {
+				o.Error = jsonout.Strp(err.Error())
 			}
 		}
 	}
 	return o
+}
+
+// refuseFoldLook puts on fl why the run refuses the fold's worktree: the
+// run's verdict, which for a fold in place is not the survey's, as it never
+// meets trunk. The rows and the token stay the survey's.
+func refuseFoldLook(ctx *kit.Context, work, trunkSHA string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoTarget, sv Survey, listed []agents.Agent, own *wtsync.Own, fl *FoldLook) error {
+	if fl == nil {
+		return nil
+	}
+	wt, err := kit.LocateBranch(ctx, work)
+	if err != nil {
+		return err
+	}
+	a, ok := sv.assessed[wt.Branch]
+	if target == nil || !ok {
+		a = wtsync.AssessTo(ctx.Repo.MainRoot, wtsync.Target{Onto: trunkSHA, InPlace: true}, cfg, wt, listed, syncrun.OwnStateOf(own, wt.Branch))
+	}
+	if why := stackRefusal(cfg, s, kit.BranchWorkName(ctx, wt.Branch), a); why != "" {
+		fl.refuse(why)
+	}
+	return nil
 }
 
 // Survey is every worktree of a repository assessed against one trunk
