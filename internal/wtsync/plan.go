@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -584,7 +585,11 @@ func RenderPlan(in PlanInput) (string, error) {
 	}
 
 	if gaps := in.Handover.Context; len(gaps) > 0 {
-		fmt.Fprintf(&b, "\n## a fixup moved ahead of its context — undo and retarget, not a resolution\n")
+		way := "undo and retarget, "
+		if !slices.ContainsFunc(gaps, func(g ContextGap) bool { return g.Doubt == "" }) {
+			way = ""
+		}
+		fmt.Fprintf(&b, "\n## a fixup moved ahead of its context — %snot a resolution\n", way)
 		fmt.Fprintf(&b, "%s %q was written above the commits that add what it changes, and the fold puts it\n",
 			git.ShortID(gaps[0].Fixup, 7), oneLinePlan(gaps[0].FixupSubject))
 		fmt.Fprintf(&b, "right behind %s %q. A resolution here has nowhere to put those hunks.\n", git.ShortID(gaps[0].Target, 7), oneLinePlan(gaps[0].TargetSubject))

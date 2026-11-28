@@ -28,7 +28,7 @@ func contextLine(t *testing.T, both bool) (*gittest.ContextLine, []string) {
 func TestContextGapsNameEveryFixupAheadOfItsContext(t *testing.T) {
 	t.Parallel()
 	s, commits := contextLine(t, true)
-	gaps, _, err := ContextGaps(s.Dir, commits)
+	gaps, _, err := ContextGaps(s.Dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,10 +64,10 @@ func TestContextGapsLeaveAFixupThatAppliesAlone(t *testing.T) {
 	}
 	s := gittest.NewFoldLine(t, gittest.NewRepo(t, parent, "r"), filepath.Join(parent, "wt"), "")
 	commits := strings.Fields(gitIn(t, s.Dir, "rev-list", "--reverse", s.Base+".."+gittest.FoldTmp))
-	if gaps, _, err := ContextGaps(s.Dir, commits); err != nil || len(gaps) != 0 {
+	if gaps, _, err := ContextGaps(s.Dir, commits, nil); err != nil || len(gaps) != 0 {
 		t.Errorf("fold line: gaps %+v, err %v; want none", gaps, err)
 	}
-	if gaps, _, err := ContextGaps(s.Dir, commits[:len(commits)-1]); err != nil || len(gaps) != 0 {
+	if gaps, _, err := ContextGaps(s.Dir, commits[:len(commits)-1], nil); err != nil || len(gaps) != 0 {
 		t.Errorf("no fixup: gaps %+v, err %v; want none", gaps, err)
 	}
 }
@@ -107,7 +107,7 @@ func TestContextGapsKeepTheCleanPartOfAnEarlierFixup(t *testing.T) {
 	dir, commits, sha := twoFixups(t, func(write func(string, string, string)) {
 		write("x.txt", "x=2\n", "fixup! feat: a")
 	})
-	gaps, unchecked, err := ContextGaps(dir, commits)
+	gaps, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestContextGapsCallAFixupOverAConflictingOneUncertain(t *testing.T) {
 	dir, commits, sha := twoFixups(t, func(write func(string, string, string)) {
 		write("y.txt", "y\na\nc\nf2\n", "fixup! feat: a")
 	})
-	gaps, unchecked, err := ContextGaps(dir, commits)
+	gaps, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

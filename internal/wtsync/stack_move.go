@@ -230,6 +230,11 @@ type StackRecord struct {
 	// PartMoves is the move! commits the rebase folds, each with the part
 	// it kept; none in a run with no move! commit.
 	PartMoves []PartMove `json:"partMoves,omitempty"`
+	// Context is what the run found of its fixups' context before it moved
+	// anything, which a resume goes on with: a name a fixup gives by revision
+	// is not the same commit once the rebase moves HEAD. nil for a run that
+	// folds none, and in a record that predates it.
+	Context *RunContext `json:"context,omitempty"`
 	// Pushes is where each layer and the line's own branch push and the
 	// commit each push is leased on, as read before anything moved.
 	Pushes []BranchPush `json:"pushes,omitempty"`
@@ -241,6 +246,12 @@ func stackRecordPath(mainRoot string, epoch int64) (string, error) {
 		return "", err
 	}
 	return filepath.Join(common, "wt-sync-stack", strconv.FormatInt(epoch, 10)+".json"), nil
+}
+
+// RunContext is a fold's ContextGaps, as its run read them.
+type RunContext struct {
+	Gaps      []ContextGap `json:"gaps"`
+	Unchecked []string     `json:"unchecked"`
 }
 
 // WriteStackRecord writes rec in full, atomically.

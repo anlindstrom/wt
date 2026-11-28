@@ -125,7 +125,7 @@ func readLookLine(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, l
 // stackLookAt is the look at the stack held on the line of the worktree
 // look names, read as readLookLine reads it: its layers, bottom first, and
 // what holds each.
-func stackLookAt(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, look *StackLook, listed []agents.Agent, progress lookProgress) (*syncrun.Stack, error) {
+func stackLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent, progress lookProgress) (*syncrun.Stack, error) {
 	line, path, err := readLookLine(ctx, base, trunkSHA, target, look)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func stackLookAt(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, lo
 	}
 	if look.Autosquash {
 		progress.phase("analysing fixup context")
-		syncrun.ContextGaps(ctx.Repo.MainRoot, line, s)
+		syncrun.ContextGaps(path, line, s, cfg, target == nil)
 	}
 	return s, nil
 }

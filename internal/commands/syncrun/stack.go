@@ -174,6 +174,8 @@ type Stack struct {
 	kept *wtsync.PushRecord
 	// declined is why the stack is not pushed as one, when it is not.
 	declined string
+	// applied is the fixups of ContextGaps that a fold in place applies.
+	applied map[string]bool
 }
 
 // StackFold is, for a run that folds the line (--autosquash, --edit or
@@ -390,20 +392,30 @@ func ReadSideHolders(ctx *kit.Context, sides []wtsync.SideBranch, listed []agent
 	return holders, nil
 }
 
-// ContextGaps is, for a fold of line, the hunks of its fixups that lack
+// ContextGaps is, for a fold of line read in dir, its worktree, under the
+// run's declaration cfg, the hunks of its fixups that lack
 // their context behind their targets, set on s as --json reports them, with
 // what could not be analysed, and returned for the rebase. An analysis that
 // fails is noted on s and the look or run goes on without: the gaps are a
-// warning. PrintLayers says both.
-func ContextGaps(main string, line wtsync.Line, s *Stack) []wtsync.ContextGap {
-	gaps, unchecked, err := ContextGapsOf(main, line.Commits)
+// warning, and read is false. PrintLayers says both, and for a fold in place,
+// inPlace, which gaps are of fixups it applies.
+func ContextGaps(dir string, line wtsync.Line, s *Stack, cfg *wtsync.Config, inPlace bool) (read []wtsync.ContextGap, ok bool) {
+	gaps, unchecked, err := ContextGapsOf(dir, line.Commits, cfg)
 	if err != nil {
 		s.ContextUnchecked = append(s.ContextUnchecked, "which fixups lack their context could not be read: "+err.Error())
-		return nil
+		return nil, false
 	}
 	s.ContextGaps = GapsJSON(gaps)
 	s.ContextUnchecked = append(s.ContextUnchecked, unchecked...)
-	return gaps
+	for _, g := range gaps {
+		if inPlace && g.Applies {
+			if s.applied == nil {
+				s.applied = map[string]bool{}
+			}
+			s.applied[g.Fixup] = true
+		}
+	}
+	return gaps, true
 }
 
 // ContextGapsOf is wtsync.ContextGaps, replaced in a test.
@@ -463,11 +475,21 @@ func PrintLayers(w io.Writer, s *Stack) {
 	for _, x := range s.SideBranches {
 		fmt.Fprintf(w, "    %-24s %s  %s\n", x.Branch, git.ShortID(x.OldTip, 7), sideWhere(x))
 	}
+	stops := false
 	for _, g := range s.ContextGaps {
-		fmt.Fprintf(w, "  ⚠ %s %q: %s\n", git.ShortID(g.Fixup, 7), g.FixupSubject, g.Message)
+		here := ""
+		if s.applied[g.Fixup] {
+			here = "; the fold in place applies this fixup"
+		} else {
+			stops = true
+		}
+		fmt.Fprintf(w, "  ⚠ %s %q: %s%s\n", git.ShortID(g.Fixup, 7), g.FixupSubject, g.Message, here)
 	}
-	if len(s.ContextGaps) > 0 {
+	switch {
+	case stops:
 		fmt.Fprintf(w, "    the fold stops there or loses the hunk: move each hunk into a fixup of the commit named, or resolve the stop with it kept\n")
+	case len(s.ContextGaps) > 0:
+		fmt.Fprintf(w, "    this fold does not stop there; a run onto another base may, and checks the hunk if it does\n")
 	}
 	for _, n := range s.ContextUnchecked {
 		fmt.Fprintf(w, "  note: %s\n", n)

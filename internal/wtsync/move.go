@@ -440,9 +440,9 @@ type replayFrom struct {
 	between func(sha string) string
 }
 
-// replayedLine is what replayLine came to: the tip's tree, the tree each
-// replayed commit left before its folds, and the commits that came out empty
-// though they change something.
+// replayedLine is what replayLine came to: the tip's tree, or the tree it
+// had reached when it refused; the tree each replayed commit left before its
+// folds; and the commits that came out empty though they change something.
 type replayedLine struct {
 	tree    string
 	after   map[string]string
@@ -572,6 +572,7 @@ func replayLine(dir string, all []moveCommit, moves []PartMove, from replayFrom)
 			continue
 		}
 		if why, err := group(i); err != nil || why != "" {
+			res.tree = cur
 			return res, why, err
 		}
 	}

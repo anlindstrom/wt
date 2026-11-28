@@ -9,6 +9,12 @@ would want read out to them; the full story is in git history.
 `wt sync push <work> --stack --forget --yes` now works as without `--yes`, since `--forget`
 never asks. `--forget` with `--push-line` is still refused.
 
+## 2026-11-28 06:08 — A fold look resolves fixup revisions in the line's worktree
+
+`fixup! HEAD~1` is now read as the run reads it, in the worktree of the line: the look no
+longer refuses a fold the run makes, and names the fixups ahead of their context. A resume
+goes on with what its run found, so a later stop at such a fixup is still checked.
+
 ## 2026-11-27 22:33 — An in-place fold no longer replays onto trunk
 
 `wt sync <work> --stack --autosquash` is faster: neither the look nor the run replays the line
@@ -38,6 +44,20 @@ something else stops it first, the run will refuse the fold: …`); the look the
 
 The examples include a stack held on one line:
 `wt sync top --stack --autosquash --layer 'feat/*'`.
+
+## 2026-11-27 12:12 — A fixup of a file an earlier fixup creates is analysed
+
+A fold's look no longer says "not analysed" for a fixup whose context an earlier fixup
+adds, when the fold is clean up to it. Where wt still cannot analyse a fixup, the note says
+whether the fold in place conflicts there or wt cannot tell. Where the fold's order does not
+confirm the commit a warning names, a note says so and a stop offers no retarget. A warning
+for a fixup the fold in place applies says it does. A fixup's target is found by subject before
+revision, as git does.
+
+## 2026-11-27 12:12 — An ambiguous `fixup!` subject is refused with the ids to use
+
+The refusal says to reword it to `fixup! <id>` and gives the ids the run would take, and
+names the commits it would still refuse.
 
 ## 2026-11-26 11:53 — A `move!` commit folds with `--onto`
 

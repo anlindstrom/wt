@@ -44,13 +44,13 @@ func TestContextGapsCountWhatAFixupNotAnalysedHasAtRisk(t *testing.T) {
 		{"fixup! feat: a", "y.txt", "y\na\nc\nf1\n", "z.txt", "z\na\nc\nf1\n"},
 		{"fixup! feat: a", "y.txt", "y\na\nc\nf2\n", "z.txt", "z\na\nc\nf2\n"},
 	})
-	_, unchecked, err := ContextGaps(dir, commits)
+	_, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, second := commits[len(commits)-2], commits[len(commits)-1]
 	want := git.ShortID(second, 7) + ` "fixup! feat: a": not analysed: 2 files (2 hunks) lack context behind ` + git.ShortID(sha["feat: a"], 7) +
-		` that 1 later commit adds; the earlier fixup ` + git.ShortID(first, 7) + ` conflicts there too`
+		` that 1 later commit adds; the earlier fixup ` + git.ShortID(first, 7) + ` conflicts there too; wt cannot tell whether this fixup applies: the fold in place conflicts at ` + git.ShortID(first, 7) + ` "fixup! feat: a" first`
 	if len(unchecked) != 1 || unchecked[0] != want {
 		t.Errorf("unchecked %q, want [%q]", unchecked, want)
 	}
@@ -67,7 +67,7 @@ func TestContextGapsNameTheLaterCommitAFixupOfItAddsContextTo(t *testing.T) {
 		{"fixup! feat: b", "y.txt", "y\na\nb\nb2\n"},
 		{"fixup! feat: a", "y.txt", "y\na\nb\nb3\n"},
 	})
-	gaps, unchecked, err := ContextGaps(dir, commits)
+	gaps, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestContextGapsCountMatchesTheFilesTheStopHas(t *testing.T) {
 		{"fixup! feat: a", "y.txt", "y\na\nc\nf1\n", "z.txt", "z\na\nc\nf1\n"},
 		{"fixup! feat: a", "y.txt", "y\na\nc\nf2\n", "z.txt", "z\na\nc\nf2\n"},
 	})
-	_, unchecked, err := ContextGaps(dir, commits)
+	_, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil || len(unchecked) != 1 || !strings.Contains(unchecked[0], ": not analysed: 2 files (2 hunks) lack context") {
 		t.Fatalf("unchecked %q, err %v; want the second fixup counted at 2 files", unchecked, err)
 	}
@@ -127,7 +127,7 @@ func TestContextGapsDoNotCreditAFoldWithWhatOnlyALaterCommitAdds(t *testing.T) {
 		{"fixup! feat: b", "f.txt", lines("b4", "l5", "c6")},
 		{"fixup! feat: a", "f.txt", lines("b4", "a5", "c6")},
 	})
-	gaps, unchecked, err := ContextGaps(dir, commits)
+	gaps, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

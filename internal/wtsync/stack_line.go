@@ -770,11 +770,12 @@ func FixupOfCarried(dir, onto, upstream, branch string, commits []string) (strin
 	if err != nil {
 		return "", err
 	}
-	type entry struct{ sha, subject string }
-	var all []entry
+	var all []lineCommit
+	index := map[string]int{}
 	for _, l := range strings.Split(subjects, "\n") {
 		if sha, subject, ok := strings.Cut(l, " "); ok {
-			all = append(all, entry{sha, subject})
+			index[sha] = len(all)
+			all = append(all, lineCommit{sha, subject})
 		}
 	}
 	ancestor := func(a, of string) (bool, error) {
@@ -808,54 +809,55 @@ func FixupOfCarried(dir, onto, upstream, branch string, commits []string) (strin
 		return why, nil
 	}
 	for i, e := range all {
-		target, folding := e.subject, false
-		for {
-			rest, ok := cutFoldPrefix(target)
-			if !ok {
-				break
-			}
-			target, folding = strings.TrimSpace(rest), true
-		}
+		target, folding := foldName(e.subject)
 		if !folding {
 			continue
 		}
 		if why, err := notReplayed(e.sha); err != nil || why != "" {
 			continue // the fixup itself is not replayed: nothing of it lands
 		}
+		refusal := func(problem, remedy string) string {
+			return fmt.Sprintf("the fixup %q (%s) %s; %s, then run again; nothing is rebased",
+				e.subject, git.ShortID(e.sha, 7), problem, remedy)
+		}
+		const byHand = "drop it or fold it by hand"
 		refuse := func(format string, a ...any) (string, error) {
-			return fmt.Sprintf("the fixup %q (%s) %s; drop it or fold it by hand, then run again; nothing is rebased",
-				e.subject, git.ShortID(e.sha, 7), fmt.Sprintf(format, a...)), nil
+			return refusal(fmt.Sprintf(format, a...), byHand), nil
 		}
-		var named *entry
-		if sha, err := gitEnv(dir, nil, nil, "rev-parse", "--verify", "--quiet", target+"^{commit}"); err == nil {
-			for j := range all[:i] {
-				if all[j].sha == strings.TrimSpace(sha) {
-					named = &all[j]
+		var named lineCommit
+		switch candidates := foldMatches(dir, all[:i], target, index); len(candidates) {
+		case 0:
+			return refuse("names no commit earlier on the line (%q)", target)
+		case 1:
+			named = all[candidates[0]]
+		default:
+			// An id names one commit: offer those the run would take.
+			prefix, _ := cutFoldPrefix(e.subject)
+			kind := strings.TrimSuffix(e.subject, prefix)
+			var take, refused []string
+			for _, c := range candidates {
+				sha := all[c].sha
+				why, err := notReplayed(sha)
+				if err != nil {
+					return "", err
 				}
-			}
-		}
-		if named == nil {
-			var exact, prefix []*entry
-			for j := range all[:i] {
-				switch c := &all[j]; {
-				case c.subject == target:
-					exact = append(exact, c)
-				case strings.HasPrefix(c.subject, target):
-					prefix = append(prefix, c)
+				if why != "" {
+					refused = append(refused, fmt.Sprintf("a fixup of %s, which %s, would still be refused", git.ShortID(sha, 10), why))
+					continue
 				}
+				id := offeredID(dir, all[:i], index, c)
+				if id == "" {
+					refused = append(refused, fmt.Sprintf("no id names %s alone, with other commits' subjects spelling its ids", git.ShortID(sha, 10)))
+					continue
+				}
+				take = append(take, fmt.Sprintf("%q", kind+id))
 			}
-			candidates := exact
-			if len(candidates) == 0 {
-				candidates = prefix
+			problem := fmt.Sprintf("names more than one commit on the line (%q)", target)
+			if len(take) == 0 {
+				return refusal(problem, strings.Join(refused, "; ")+"; "+byHand), nil
 			}
-			switch len(candidates) {
-			case 0:
-				return refuse("names no commit earlier on the line (%q)", target)
-			case 1:
-				named = candidates[0]
-			default:
-				return refuse("names more than one commit on the line (%q)", target)
-			}
+			note := strings.Join(append([]string{"an id names one commit"}, refused...), "; ")
+			return refusal(problem, fmt.Sprintf("reword it to %s (%s)", strings.Join(take, " or "), note)), nil
 		}
 		why, err := notReplayed(named.sha)
 		if err != nil {
@@ -867,6 +869,30 @@ func FixupOfCarried(dir, onto, upstream, branch string, commits []string) (strin
 		}
 	}
 	return "", nil
+}
+
+// offeredID is what a fold of earlier[c] can name it by: an abbreviation of
+// its id that a fold of that name finds it and no other commit by
+// (foldMatches), the shortest of ten characters or more, else the longest git
+// reads below that; "" when there is none.
+func offeredID(dir string, earlier []lineCommit, index map[string]int, c int) string {
+	sha := earlier[c].sha
+	names := func(n int) bool {
+		found := foldMatches(dir, earlier, sha[:n], index)
+		return len(found) == 1 && found[0] == c
+	}
+	for n := 10; n <= len(sha); n++ {
+		if names(n) {
+			return sha[:n]
+		}
+	}
+	// Four is the shortest abbreviation git takes for a revision.
+	for n := 9; n >= 4; n-- {
+		if names(n) {
+			return sha[:n]
+		}
+	}
+	return ""
 }
 
 // cutFoldPrefix is s without a leading fixup!, squash! or amend!.
