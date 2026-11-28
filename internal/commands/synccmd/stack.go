@@ -149,7 +149,7 @@ func stackLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, ta
 	}
 	if look.Autosquash {
 		progress.phase("analysing fixup context")
-		syncrun.ContextGaps(ctx.Repo.MainRoot, line, s, cfg, target == nil)
+		syncrun.ContextGaps(path, line, s, cfg, target == nil)
 	}
 	return s, nil
 }

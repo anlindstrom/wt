@@ -3,6 +3,7 @@ package synccmd
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/anlindstrom/wt/internal/commands/syncrun"
 	"github.com/anlindstrom/wt/internal/git"
@@ -68,7 +69,13 @@ func (r *RunPlan) readStack() error {
 	}
 	if r.opts.Stack.Autosquash {
 		// Named before anything replays; a warning, so the run goes ahead.
-		r.gaps, _ = syncrun.ContextGaps(r.ctx.Repo.MainRoot, line, s, r.cfg, r.target == nil)
+		dir := r.parts[b].wt.Path
+		// What each fixup names, read with the gaps: stackRecord reads it
+		// again under the lock.
+		if r.folds, err = wtsync.FoldPairs(dir, line.Commits); err != nil {
+			return err
+		}
+		r.gaps, r.gapsRead = syncrun.ContextGaps(dir, line, s, r.cfg, r.target == nil)
 		r.gapsUnchecked = s.ContextUnchecked
 	}
 	syncrun.PrintLayers(r.w, s)
@@ -204,6 +211,15 @@ func (r *RunPlan) stackRecord(b string, p *participant, req wtsync.Request) (*wt
 		// Before anything moves: the lease of each push is what the remote
 		// held when the run began.
 		Pushes: syncrun.PushesOf(r.own, r.line)}
+	if st.Autosquash && r.gapsRead {
+		// A tag or a ref a fixup names may have moved while the run asked and
+		// waited for the lock: what was read is then not this run's, and a
+		// resume reads its own.
+		folds, err := wtsync.FoldPairs(p.wt.Path, r.line.Commits)
+		if err == nil && slices.Equal(folds, r.folds) {
+			rec.Context = &wtsync.RunContext{Gaps: r.gaps, Unchecked: r.gapsUnchecked}
+		}
+	}
 	if err := wtsync.WriteStackRecord(r.ctx.Repo.MainRoot, rec); err != nil {
 		return rec, err
 	}

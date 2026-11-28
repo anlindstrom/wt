@@ -9,6 +9,12 @@ would want read out to them; the full story is in git history.
 `wt sync push <work> --stack --forget --yes` now works as without `--yes`, since `--forget`
 never asks. `--forget` with `--push-line` is still refused.
 
+## 2026-11-28 06:08 — A fold look resolves fixup revisions in the line's worktree
+
+`fixup! HEAD~1` is now read as the run reads it, in the worktree of the line: the look no
+longer refuses a fold the run makes, and names the fixups ahead of their context. A resume
+goes on with what its run found, so a later stop at such a fixup is still checked.
+
 ## 2026-11-27 22:33 — An in-place fold no longer replays onto trunk
 
 `wt sync <work> --stack --autosquash` is faster: neither the look nor the run replays the line

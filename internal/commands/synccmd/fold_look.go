@@ -94,7 +94,9 @@ func noticeFixupRefusal(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Con
 		}
 		onto, upstream = target.SHA, target.Upstream
 	}
-	if why, err := wtsync.FixupOfCarried(main, onto, upstream, line.Branch, line.Commits); err == nil && why != "" {
+	// In the line's worktree, as the run: a fixup may name its target by a
+	// revision, HEAD~1.
+	if why, err := wtsync.FixupOfCarried(path, onto, upstream, line.Branch, line.Commits); err == nil && why != "" {
 		progress.line("wt: unless something else stops it first, the run will refuse the fold: %s", kit.OneLine(why))
 	}
 }
@@ -154,6 +156,15 @@ func lineCommits(main string, s *syncrun.Stack) ([]string, error) {
 	return strings.Fields(out), err
 }
 
+// lineDir is where the revisions s's commits name are resolved: the
+// worktree of its line, where the run resolves them, else main.
+func lineDir(main string, s *syncrun.Stack) string {
+	if s.Top != nil && s.Top.Worktree != nil {
+		return *s.Top.Worktree
+	}
+	return main
+}
+
 // aloneHeld is why --alone leaves a layer where it is.
 const aloneHeld = "--alone leaves every layer on its old commits"
 
@@ -161,6 +172,7 @@ const aloneHeld = "--alone leaves every layer on its old commits"
 // line, as the run decides it: the refusals it makes before it writes
 // anything, the layers a worktree holds, and --alone.
 func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoTarget, alone bool) (*FoldLook, error) {
+	dir := lineDir(main, s)
 	commits, err := lineCommits(main, s)
 	if err != nil {
 		return nil, err
@@ -172,13 +184,13 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoT
 	}
 	why := cfg.StackFoldRefusal()
 	if why == "" {
-		if why, err = wtsync.FixupOfCarried(main, onto, upstream, s.Branch, commits); err != nil {
+		if why, err = wtsync.FixupOfCarried(dir, onto, upstream, s.Branch, commits); err != nil {
 			return nil, err
 		}
 	}
 	var moves []wtsync.PartMove
 	if why == "" {
-		if moves, why, err = wtsync.PlanMovesOnto(main, cfg, commits, onto, upstream); err != nil {
+		if moves, why, err = wtsync.PlanMovesOnto(dir, cfg, commits, onto, upstream); err != nil {
 			return nil, err
 		}
 	}
@@ -186,7 +198,7 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoT
 		fl.Refusal = &why
 		return fl, nil
 	}
-	pairs, err := wtsync.FoldPairs(main, commits)
+	pairs, err := wtsync.FoldPairs(dir, commits)
 	if err != nil {
 		return nil, err
 	}

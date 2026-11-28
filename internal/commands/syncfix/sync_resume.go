@@ -547,7 +547,10 @@ func (r *resume) rebase() (wtsync.Result, error) {
 	if hasRec && rec.Autosquash {
 		// A later stop at a fixup ahead of its context says so too, and
 		// the report keeps them.
-		if r.gaps, r.unchecked, err = syncrun.ContextGapsOf(r.ctx.Repo.MainRoot, rec.Line.Commits, r.cfg); err != nil {
+		if c := rec.Context; c != nil {
+			r.gaps, r.unchecked = c.Gaps, c.Unchecked
+		} else if r.gaps, r.unchecked, err = syncrun.ContextGapsOf(r.ctx.Repo.MainRoot, rec.Line.Commits, r.cfg); err != nil {
+			// A record that predates Context.
 			r.unchecked = []string{"which fixups lack their context could not be read: " + err.Error()}
 			fmt.Fprintf(r.w, "  note: %s\n", r.unchecked[0])
 		}

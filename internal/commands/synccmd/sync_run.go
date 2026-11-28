@@ -244,6 +244,10 @@ type RunPlan struct {
 	// behind their targets, named before the rebase.
 	gaps          []wtsync.ContextGap
 	gapsUnchecked []string
+	// gapsRead is whether the analysis of gaps ran, and folds what each
+	// fixup named when it did.
+	gapsRead bool
+	folds    []wtsync.FoldPair
 	// stackBroken is why the layers of a finished --stack rebase are not
 	// moved: their plan could not be recorded.
 	stackBroken string
