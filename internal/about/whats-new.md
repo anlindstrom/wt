@@ -10,6 +10,13 @@ would want read out to them; the full story is in git history.
 `fold: 7 fixups, each applies at its target`, or counts the ones ahead of their context, in
 conflict or not analysed, naming the last two. `--json` has the same counts on `fold` (sync 1.20.0).
 
+## 2026-11-28 09:43 — A stack push no longer refuses over leases a hand push made stale
+
+When unpushed `--stack` runs took different leases for a branch and the remote is at the newest
+run's, `wt sync push --stack` (and a run's own push) now goes over that lease and says so in one
+line. Anything else is refused in one line, printed once; `--dry-run` lists the branches, and now
+asks git for a dry run of the push and fails where git would refuse it.
+
 ## 2026-11-28 06:52 — `wt sync` run results are summaries by default
 
 `--json` on `wt sync rebase`, `resume`, `undo`, `steps` and `push` now holds only the stack rows

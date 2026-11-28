@@ -177,11 +177,22 @@ type AtomicRef struct{ RemoteBranch, Lease, New string }
 // on the commit it names. It writes the remote's refs only: no local branch
 // moves, and git moves all of the remote's refs or none.
 func PushAtomic(dir, target string, refs []AtomicRef, timeout time.Duration) error {
+	return pushAtomic(dir, target, refs, timeout)
+}
+
+// PushAtomicDryRun is git's own dry run of PushAtomic: it fails where the
+// push would for what git and the remote say before anything is sent, writes
+// nothing, and runs no pre-push hook.
+func PushAtomicDryRun(dir, target string, refs []AtomicRef, timeout time.Duration) error {
+	return pushAtomic(dir, target, refs, timeout, "--dry-run", "--no-verify")
+}
+
+func pushAtomic(dir, target string, refs []AtomicRef, timeout time.Duration, flags ...string) error {
 	target, err := pushTarget(dir, target)
 	if err != nil {
 		return err
 	}
-	args := []string{"push", "--atomic"}
+	args := append([]string{"push", "--atomic"}, flags...)
 	for _, r := range refs {
 		args = append(args, "--force-with-lease=refs/heads/"+r.RemoteBranch+":"+r.Lease)
 	}
