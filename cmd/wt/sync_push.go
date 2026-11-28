@@ -12,7 +12,8 @@ import (
 )
 
 func newSyncPushCmd() *cobra.Command {
-	var stack, dryRun, yes, asJSON, pushLine, forget bool
+	var stack, dryRun, yes, pushLine, forget bool
+	var form jsonForm
 	push := &cobra.Command{
 		Use:   "push <work> --stack",
 		Short: "Push a --stack line rebased earlier with --no-push, over the run's leases",
@@ -53,7 +54,8 @@ func newSyncPushCmd() *cobra.Command {
 			"branch would push, lease \u2192 new, and, for a record of several runs, the\n" +
 			"run each came from, and changes nothing. --json prints one\n" +
 			"result object on stdout, as wt sync rebase --json does: the worktree's\n" +
-			"stack.push is the push, as for a run that pushed.",
+			"stack.push is the push, as for a run that pushed. It is a summary, which\n" +
+			"leaves out of stack.push the branches that were pushed; --full has them.",
 		Example: "  wt sync rebase login-crash --stack --no-push   # rebase, check, then\n" +
 			"  wt sync push login-crash --stack --dry-run     # what it would push\n" +
 			"  wt sync push login-crash --stack --yes         # push it\n" +
@@ -67,7 +69,7 @@ func newSyncPushCmd() *cobra.Command {
 			if forget && pushLine {
 				return usagef("--forget pushes nothing: it does not take --push-line")
 			}
-			return withVerbContext(cmd, args, "sync push", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
+			return withVerbContext(cmd, args, "sync push", form, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				opts := syncfix.PushLaterOptions{DryRun: dryRun, Forget: forget, Journal: j}
 				opts.Push = syncrun.PushAsk
 				opts.PushLine = pushLine
@@ -86,7 +88,7 @@ func newSyncPushCmd() *cobra.Command {
 	push.Flags().BoolVar(&forget, "forget", false, "drop the line's push record and nothing else: no ref moves, nothing is pushed")
 	push.Flags().BoolVar(&dryRun, "dry-run", false, "say what would be pushed (or, with --forget, dropped) and change nothing")
 	push.Flags().BoolVarP(&yes, "yes", "y", false, "do not ask first")
-	push.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
+	form.addFlags(push, "print one result object on stdout, the rest on stderr")
 	return push
 }
 

@@ -66,6 +66,12 @@ func WriteJSON(w io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
+// WriteCompactJSON writes v as JSON on one line, for output whose size its
+// reader pays for.
+func WriteCompactJSON(w io.Writer, v any) error {
+	return json.NewEncoder(w).Encode(v)
+}
+
 // The outcomes a whole run can come to.
 const (
 	// OutcomeDone is every participant rebased or skipped.

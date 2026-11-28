@@ -371,6 +371,22 @@ func syncOverviewJSON(cmd *cobra.Command, args []string, sel reposel.Selection, 
 	return synccmd.SyncJSON(ctx, opts, cmd.OutOrStdout())
 }
 
+// jsonForm is what a verb that runs is asked to print: --json, and with
+// --full every row of it.
+type jsonForm struct{ on, full bool }
+
+// addFlags declares --json and --full on cmd, --full refused alone.
+func (f *jsonForm) addFlags(cmd *cobra.Command, jsonUsage string) {
+	cmd.Flags().BoolVar(&f.on, "json", false, jsonUsage)
+	cmd.Flags().BoolVar(&f.full, "full", false, "with --json: every row of the result, not only those that need attention")
+	cmd.PreRunE = func(*cobra.Command, []string) error {
+		if f.full && !f.on {
+			return usagef("--full goes with --json")
+		}
+		return nil
+	}
+}
+
 // rebaseCommand names wt sync rebase in its --json result.
 const rebaseCommand = "sync rebase"
 
@@ -385,8 +401,9 @@ var runLogged = map[string]bool{rebaseCommand: true, "sync steps": true, "sync r
 // asJSON its result is one object on stdout, written however the verb ends,
 // and everything it prints, questions included, goes to stderr; command
 // names the verb in that object.
-func withVerbContext(cmd *cobra.Command, args []string, command string, asJSON bool,
+func withVerbContext(cmd *cobra.Command, args []string, command string, form jsonForm,
 	fn func(ctx *kit.Context, j *syncrun.RunJournal) error) error {
+	asJSON := form.on
 	if runLogged[command] && !noRunLog {
 		// The run's log is a copy of what it prints to the person: both
 		// writers copy into it, the JSON result object (written on the
@@ -403,6 +420,9 @@ func withVerbContext(cmd *cobra.Command, args []string, command string, asJSON b
 		})(cmd, args)
 	}
 	journal := syncrun.NewSyncRunJournal(cmd.OutOrStdout(), command)
+	if !form.full {
+		journal.Summarize()
+	}
 	cmd.SetOut(cmd.ErrOrStderr())
 	ctx, err := openContext(cmd.ErrOrStderr())
 	if err != nil {

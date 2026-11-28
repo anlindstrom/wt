@@ -8,7 +8,8 @@ import (
 )
 
 func newSyncUndoCmd() *cobra.Command {
-	var force, yes, asJSON bool
+	var force, yes bool
+	var form jsonForm
 	undo := &cobra.Command{
 		Use:   "undo <work>",
 		Short: "Put back every ref the last run on this worktree moved",
@@ -40,7 +41,7 @@ func newSyncUndoCmd() *cobra.Command {
 			"under one ends with a wt: line to pass on to it. The session wt itself\n" +
 			"runs under is not counted.\n\n" +
 			"--json prints one result object on stdout and the rest on stderr, as\n" +
-			"wt sync rebase --json does.",
+			"wt sync rebase --json does: a summary, or every row with --full.",
 		Example: "  wt sync undo login-crash            # back to the safety refs\n" +
 			"  wt sync undo login-crash --force    # even if the branch moved since\n" +
 			"  wt sync undo login-crash --yes      # without asking about an idle session\n" +
@@ -48,14 +49,14 @@ func newSyncUndoCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withVerbContext(cmd, args, "sync undo", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
+			return withVerbContext(cmd, args, "sync undo", form, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				return syncUndo(cmd, args[0], ctx, force, yes, j)
 			})
 		},
 	}
 	undo.Flags().BoolVarP(&force, "force", "f", false, "undo a branch that has moved since the run, pinning its tip first")
 	undo.Flags().BoolVarP(&yes, "yes", "y", false, "do not ask first when a session is idle in a checkout")
-	undo.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
+	form.addFlags(undo, "print one result object on stdout, the rest on stderr")
 	return undo
 }
 

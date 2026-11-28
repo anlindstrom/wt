@@ -15,7 +15,9 @@ Each output has a schema with a semantic version, and says which it follows:
 
 - `schema` — the **major** version, an integer. A new major is a change that
   breaks a reader: a field renamed or removed, a type or a meaning changed. It
-  comes as a new schema file (`up.v2.json`); v1 is never edited that way.
+  comes as a new schema file (`up.v2.json`); v1 is never edited that way, and
+  stays in `schema/` for results saved under it. `wt schema <name>` prints the
+  newest major.
 - `schemaVersion` — the full version, `MAJOR.MINOR.PATCH`. A **minor** adds a
   field or an enumeration value; a **patch** is wording only, and a wording
   change does not have to bump it.
@@ -160,7 +162,7 @@ generating types from it:
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
 | `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.19.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
 | `wt sync move --json` | [`schema/sync-move.v1.json`](../schema/sync-move.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-move.v1.json` |
-| `wt sync rebase\|resume\|undo --json` | [`schema/sync-run.v1.json`](../schema/sync-run.v1.json) | 1.29.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v1.json` |
+| `wt sync rebase\|resume\|undo\|steps\|push --json` | [`schema/sync-run.v2.json`](../schema/sync-run.v2.json) | 2.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v2.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
@@ -2097,12 +2099,14 @@ would start on is not what `wt sync --json` showed. It is then an `error` with
 no participants and a non-zero exit. The fetch then covers every worktree's own
 remote, as the overview's did.
 
-The fields are `wt up --json`'s (above), with `command` one of `"sync rebase"`,
+The object is [`sync-run`](../schema/sync-run.v2.json) schema 2 (`wt up
+--json` is its own schema, at 1), written on one line, without indentation. The
+fields are `wt up --json`'s (above), with `command` one of `"sync rebase"`,
 `"sync resume"`, `"sync undo"`, `"sync steps"` (since 1.7.0: `wt sync steps
 <work> --json`, a run in place onto the worktree's own base that runs the
 deferred steps and rebases nothing onto trunk) (`"sync run"` is what the verb called itself
 before `sync-run` 1.3.0; no wt prints it since 1.4.1, and the schema keeps the
-value for results saved before that), and:
+value for results saved before that), `"sync push"` (since 1.22.0), and:
 
 Since 1.28.0 a fold's `fold.moves` lists every `move!` commit the run folds: the
 part of the source it moves into the target, whole `paths` and since 1.29.0 the
@@ -2114,11 +2118,63 @@ then false, and `fold.guard` compares the new tip with the old line replayed ont
 none; a resume reads it from the run's
 record.
 
+### `detail` — the summary and `--full`
+
+Since `sync-run` 2.0.0 the five verbs that print this object (`rebase`,
+`resume`, `undo`, `steps` and `push`) print a **summary** by default, `detail`
+`"summary"`; `--json --full` prints every row, `detail` `"full"`. `--full`
+without `--json` is a usage mistake. A reader of a stack of many layers pays
+for every row at every stop, and most rows say that nothing needs doing.
+
+The summary leaves out rows of these arrays and nothing else:
+
+| array | rows the summary keeps |
+|---|---|
+| `worktrees[].stack.layers` | `result` `held`, `needsRecovery`, `moving` or `planned`; or `noPushReason`, `note` or `moveCommand` set; and, with `result` null (a stop, a refusal, an early end), `state` other than `none` and `clean`; and, when the run could not save its push record, a `pushCommand` |
+| `worktrees[].stack.sideBranches` | not a backup, and one of those results, or `left` or `moveCommand` set |
+| `worktrees[].stack.push.branches` | `outcome` other than `pushed` |
+| `worktrees[].layerSteps` | `result` `owed` or `failed` |
+| `worktrees[].timings.slowest` | none (`wallMs` and `runs` stay) |
+
+A row that is kept has all its fields. Every participant, every other field and
+every other array is the same in both forms, so the outcome, the reason, the
+recovery, the plan file and the undo command of a stop, a refusal or an
+interrupt are all in the summary. An empty array there means no row needs
+attention, not that there is none: `stack.counts` says how many rows there are,
+by result, in both forms. A run without `--stack` has no `stack` and so no
+counts: each participant's `result` and `failedSteps` say how its steps went.
+
+A finished run cannot be asked again: pass `--full` to the verb whose rows you
+want. A resume of a run that printed a summary may pass it.
+
+`stack.pushLaterCommand` stands for the rows' push commands after `--no-push`,
+a no to the question or nobody to ask: `wt sync push <work> --stack`, which
+pushes what the run left recorded, in one go. It never carries `--push-line`,
+so a line's own branch that has no remote branch yet is left out and stays
+recorded, unless a destination is recorded for it (`wt sync push-to`), which
+lets the command create that remote branch. When that left-out branch is all
+that is left the command is null and `stack.push.lineLeftOut` says why; in a
+summary, and in any form of a run that attempted no push,
+`stack.push.branches` is then empty. The command asks first, so with nobody at
+a terminal add `--yes`.
+
+The command, and `lineLeftOut` with it, are set only once the record has been
+checked under its lock as the run settles its push:
+
+- The record could not be saved: no command, and the summary keeps every layer
+  row that has a `pushCommand`.
+- Another push or a `--forget` took the record, a later run replaced it, it
+  could not be checked, or the run was interrupted before settling it: no
+  command and no `lineLeftOut`, and the summary keeps no layer row for its
+  `pushCommand`, which would push whatever the branch holds by now. The
+  participant's `recovery` says so and names `wt sync push <work> --stack
+  --dry-run`, which shows what is left.
+
 <!-- json-docs:begin sync-run -->
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
-| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows. |
+| `schema` | `2` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^2\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows. |
 | `command` | `"sync rebase"` \| `"sync run"` \| `"sync resume"` \| `"sync undo"` \| `"sync steps"` \| `"sync push"` | yes | The verb. sync push since 1.22.0: the push of a --stack line rebased earlier with --no-push; its one worktree row carries stack.push, and result pushed when anything went. sync steps since 1.7.0. sync rebase since 1.3.0: before it the verb was spelled wt sync run and named itself sync run. No wt prints sync run since 1.4.1; the value stays for results saved before it. |
 | `repo` | string \| null | yes | The main checkout, as wt sweep --json names the repository; null when the verb stopped before reading it. |
 | `trunk` | string \| null | yes |  |
@@ -2147,7 +2203,7 @@ record.
 | `worktrees[].before` | string \| null, matching `^[0-9a-f]{40,64}$` | yes |  |
 | `worktrees[].after` | string \| null, matching `^[0-9a-f]{40,64}$` | yes |  |
 | `worktrees[].failedSteps` | array of string | yes |  |
-| `worktrees[].recovery` | string \| null | yes |  |
+| `worktrees[].recovery` | string \| null | yes | For needsRecovery, handedOver and interrupted: how to put it back or finish it. Since 2.0.0 also, on a --stack run's row of any result, that its push record changed, could not be checked or was not settled, with the wt sync push <work> --stack --dry-run that shows what is left; after the way back, separated by a semicolon, when the row has one. |
 | `worktrees[].pushCommand` | array of string \| null, at least 1 items | yes | For rebased: the push, as an argv. Since 1.4.0 null also for rebased, when wt has no push to make or offer for the branch, which noPushReason explains. |
 | `worktrees[].pushed` | boolean | yes |  |
 | `worktrees[].noPushReason` | string \| null | yes | Since 1.4.0: for rebased with a null pushCommand, why wt made and offered no push for the branch, in words, whatever the reason: among them that it tracks a remote branch of another name with nothing recorded for it, and that the branch of another name it is recorded as pushing to holds commits that cannot be shown to be old versions of its own. Null otherwise. |
@@ -2189,7 +2245,7 @@ record.
 | `worktrees[].stack.base` | string, matching `^[0-9a-f]{40,64}$` | yes | Where the line leaves trunk: the merge base. |
 | `worktrees[].stack.head` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's tip before the run. |
 | `worktrees[].stack.autosquash` | boolean | yes | A fold of the line's fixups (--autosquash): onto its own base, or, with --onto, as the line moves onto the target. |
-| `worktrees[].stack.layers` | array of object | yes | The layer branches, bottom first: what a run moves once its rebase has finished. The line's own branch is never one of them. |
+| `worktrees[].stack.layers` | array of object | yes | The layer branches, bottom first: what a run moves once its rebase has finished. The line's own branch is never one of them. In a summary (detail) only those that need attention: result held, needsRecovery, moving or planned; or noPushReason, note or moveCommand set; and, with result null (a stop, a refusal or an early end), state other than none and clean; and, when the run could not save its push record, a layer with a pushCommand, which is then what pushes it. counts.layers is how many there are. |
 | `worktrees[].stack.layers[].branch` | string | yes | The layer branch. |
 | `worktrees[].stack.layers[].oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip before the run. |
 | `worktrees[].stack.layers[].commits` | integer, at least 1 | yes | Its commits from the line's base, its tip included. |
@@ -2220,7 +2276,7 @@ record.
 | `worktrees[].stack.skipped[].branch` | string | yes |  |
 | `worktrees[].stack.skipped[].tip` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
 | `worktrees[].stack.skipped[].reason` | string | yes | A backup name, unless --layer names it (a pattern never does); without --layer, a branch with no commits of its own that has uncommitted tracked changes in another worktree, which --layer by name or by pattern takes; or a branch a --layer pattern matched whose tip is not on the line. |
-| `worktrees[].stack.sideBranches` | array of object | yes | Since 1.16.0: the local branches that hang off the line, parents first: forked from a commit of it above its base, or above its top. Empty with --no-side-branches. |
+| `worktrees[].stack.sideBranches` | array of object | yes | Since 1.16.0: the local branches that hang off the line, parents first: forked from a commit of it above its base, or above its top. Empty with --no-side-branches. In a summary (detail) only those that are no backup and need attention: result held, needsRecovery, moving or planned, or left or moveCommand set. counts.sideBranches is how many there are. |
 | `worktrees[].stack.sideBranches[].branch` | string | yes |  |
 | `worktrees[].stack.sideBranches[].kind` | `"forked"` \| `"above"` | yes | forked: it leaves the line at a commit below its top. above: it carries the line's top. |
 | `worktrees[].stack.sideBranches[].oldTip` | string, matching `^[0-9a-f]{40,64}$` | yes | Its tip before the run. |
@@ -2262,9 +2318,9 @@ record.
 | `worktrees[].stack.contextGaps[].needsSubject` | string | yes |  |
 | `worktrees[].stack.contextGaps[].message` | string | yes | The line wt prints for it: fixup moved ahead of its context: <path>:<lines> needs <sha> "<subject>", which comes later on the line. |
 | `worktrees[].stack.contextUnchecked` | array of string | yes | Since 1.14.0: for a fold, what of its fixups could not be analysed, one line each: a fixup whose missing context cannot be told apart from another fixup's, because it is in an earlier fixup of the same target that conflicts or in a fixup of another commit that does not fold clean, or the analysis failing as a whole; each such line counts the files and hunks at risk and the later commits that add their context. Empty when every fixup was analysed and for any other look or run. |
-| `worktrees[].stack.push` | object \| null | yes | Since 1.21.0: for a --stack run that pushed (--push, or yes to the question), what came of the push: every moved layer and the line's own branch that had somewhere safe to push, in one atomic push per remote, each over a lease on the commit the run recorded for its remote branch before it moved anything. Null in the look, and for a run that pushed nothing: with --no-push, a no to the question, or nobody to ask. |
+| `worktrees[].stack.push` | object \| null | yes | Since 1.21.0: for a --stack run that pushed (--push, or yes to the question), what came of the push: every moved layer and the line's own branch that had somewhere safe to push, in one atomic push per remote, each over a lease on the commit the run recorded for its remote branch before it moved anything. Null in the look, and for a run that pushed nothing: with --no-push, a no to the question, or nobody to ask. Except, since 2.0.0, when all such a run leaves for later is the line's own branch, which only --push-line publishes: lineLeftOut then says so, and branches is empty in a run that attempted no push. Not so when the push record could not be verified. |
 | `worktrees[].stack.push.lineLeftOut` | string \| null | yes | Since 1.23.0: why the line's own branch is not in branches, when a stack push left it out: pushing it would create its remote branch, and nothing recorded says it should, so it goes only with --push-line (wt sync rebase --stack --push, wt sync push --stack). Null when it was in the push, or has nowhere to push. |
-| `worktrees[].stack.push.branches` | array of object | yes | Each branch that was in a push, in this order whatever the remotes: moved layers bottom first (for a push of several recorded runs, in the order the runs first recorded them), then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason). |
+| `worktrees[].stack.push.branches` | array of object | yes | Each branch that was in a push, in this order whatever the remotes: moved layers bottom first (for a push of several recorded runs, in the order the runs first recorded them), then the line's own branch. A held layer, and a branch with nowhere safe to push, are not in it: layers[] names them (held, noPushReason). In a summary (detail) only those whose outcome is not pushed; counts.pushed is how many were. |
 | `worktrees[].stack.push.branches[].branch` | string | yes | The local branch. |
 | `worktrees[].stack.push.branches[].rule` | string | yes | Since 1.23.0: what decided the remote branch: recorded (wt sync push-to), or its own name. Empty for a push recorded before 1.23.0. |
 | `worktrees[].stack.push.branches[].remote` | string | yes | The remote it was pushed to. |
@@ -2279,6 +2335,15 @@ record.
 | `worktrees[].stack.push.conflicted` | array of object | yes | Since 1.25.0: for wt sync push --stack refused because the runs the line's record holds disagree about a branch (see why), the branches that disagree, and branches is empty: nothing was pushed, and the record is kept. Empty for a run's own push and when no branch disagrees. |
 | `worktrees[].stack.push.conflicted[].branch` | string | yes | The local branch. |
 | `worktrees[].stack.push.conflicted[].why` | string | yes | Why: the runs push it to different remote branches or endpoints, or took different leases (the remote moved between the runs). |
+| `worktrees[].stack.counts` | object | yes | Since 2.0.0: every row of the stack and of this participant's layerSteps, counted, whether or not the object holds it. |
+| `worktrees[].stack.counts.layers` | integer, at least 0 | yes | The layer branches. |
+| `worktrees[].stack.counts.layerResults` | object of integer, at least 1 | yes | The layers by result, as layers[].result names it; a layer with no result is in none. |
+| `worktrees[].stack.counts.patchChanged` | integer, at least 0 | yes | The layers whose patch is changed. |
+| `worktrees[].stack.counts.sideBranches` | integer, at least 0 | yes | The side branches. |
+| `worktrees[].stack.counts.sideResults` | object of integer, at least 1 | yes | The side branches by result; one with no result is in none. |
+| `worktrees[].stack.counts.pushed` | integer, at least 0 | yes | The branches of push whose outcome is pushed; 0 when the run pushed nothing. |
+| `worktrees[].stack.counts.layerStepResults` | object of integer, at least 1 | yes | layerSteps by result. |
+| `worktrees[].stack.pushLaterCommand` | array of string \| null, at least 1 items | yes | Since 2.0.0: for a --stack rebase, resume or steps that left branches unpushed and kept a record of them, the command that pushes that record, as an argv: wt sync push <work> --stack. It never carries --push-line, so it leaves out a line's own branch that has no remote branch yet and no destination recorded for it (wt sync push-to records one, and the command then creates that remote branch). It asks before pushing, as ever: add --yes with nobody at a terminal. Set only once the record is verified under its lock as the push is settled. Null when that command would send nothing (the line's own branch is all that is left: push.lineLeftOut says so), when the run pushed all it moved, moved nothing or left the line not pushable, when it could not save the record (layers[] then keeps the push commands), when the record was taken, replaced or could not be checked, or the run was interrupted before settling it (the participant's recovery then says so and names wt sync push <work> --stack --dry-run), and for wt sync push. |
 | `worktrees[].fold` | object \| null | yes | Since 1.18.0: for a --stack run that folds the line (--autosquash, --edit, or wt sync steps), what it folded on and what its tree guard compared. Null for any other run. |
 | `worktrees[].fold.inPlace` | boolean | yes | The line is folded on its own base, not moved onto a target. |
 | `worktrees[].fold.base` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's own base: what an in-place fold rebases onto. |
@@ -2303,7 +2368,7 @@ record.
 | `worktrees[].fold.moves[].lines[].from` | integer, at least 1 | yes |  |
 | `worktrees[].fold.moves[].lines[].to` | integer, at least 1 | yes |  |
 | `worktrees[].fold.moves[].kept` | string | yes | The ref the part is kept under, refs/wt-sync-kept/<branch>/<epoch>-move-<n>: a commit whose tree is the target's, with its fixups folded in, plus the part; its parent has that tree without the part, on the target. It stays after the run and after undo. |
-| `worktrees[].layerSteps` | array of object | yes | Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish. |
+| `worktrees[].layerSteps` | array of object | yes | Since 1.7.0: what each per-layer step (each: layer or fold: owner) came to at the end of each layer, bottom first, steps in the order declared. Empty when the declaration has none or the rebase did not finish. In a summary (detail) only those whose result is owed or failed; for a --stack run stack.counts.layerStepResults counts every one. |
 | `worktrees[].layerSteps[].layer` | integer, at least 1 | yes | The layer, from 1 at the bottom. In a --stack run the line's own commits above its top layer are one more layer; a rebase of one branch is one layer. |
 | `worktrees[].layerSteps[].layers` | integer, at least 1 | yes | How many layers the run stopped at. |
 | `worktrees[].layerSteps[].branch` | string | yes | The layer's branch: a layer branch, or the line's own for the commits above every layer. |
@@ -2336,7 +2401,7 @@ record.
 | `worktrees[].timings.runs[].run` | string | yes | The step's run line from .wt-sync.yaml. |
 | `worktrees[].timings.runs[].count` | integer, at least 1 | yes | How many times it ran. A check that failed and was retried is one run, its retry's time in it. |
 | `worktrees[].timings.runs[].totalMs` | integer, at least 0 | yes | The time of all of them, in milliseconds. |
-| `worktrees[].timings.slowest` | array of object | yes | The slowest runs of any check or step, slowest first; at most three. |
+| `worktrees[].timings.slowest` | array of object | yes | Empty in a summary (detail). The slowest runs of any check or step, slowest first; at most three. |
 | `worktrees[].timings.slowest[].kind` | `"check"` \| `"step"` | yes |  |
 | `worktrees[].timings.slowest[].run` | string | yes |  |
 | `worktrees[].timings.slowest[].at` | string | yes | Where it ran: a commit's short id and subject for a check, a layer and its branch for a step. |
@@ -2352,6 +2417,7 @@ record.
 | `leftAlone[].branch` | string | yes |  |
 | `leftAlone[].path` | string \| null | yes | Null for a branch in no worktree. |
 | `recovery` | string \| null | yes | For interrupted: the way back wt printed. |
+| `detail` | `"summary"` \| `"full"` | yes | Since 2.0.0: which rows the object holds. summary, the default: worktrees[].stack.layers, .stack.sideBranches, .stack.push.branches and worktrees[].layerSteps hold only the rows that need attention, and timings.slowest is empty. full, with --full: every row. Nothing else differs: every participant, every field and every count is in both. |
 <!-- json-docs:end -->
 
 ### `dropped` — a commit a rebase emptied
@@ -2413,8 +2479,9 @@ A run started or resumed with `--no-push` keeps it for every later `wt sync resu
 neither `--yes` nor a yes to the question pushes it; only `--push` on the resume
 does.
 
-`branches` lists what was in a push: the moved layers bottom first, then the
-line. A held layer and a layer with nowhere safe to push are not in it: they are
+`branches` lists what was in a push (in a [summary](#detail--the-summary-and---full),
+only what was not `pushed`; `stack.counts.pushed` counts the rest): the moved
+layers bottom first, then the line. A held layer and a layer with nowhere safe to push are not in it: they are
 named in `layers[]` (`held`, `noPushReason`), as for a run that pushes nothing.
 Layers that push to different remotes get one push each, and atomicity holds
 within a remote only.
@@ -2428,7 +2495,10 @@ same way, all `notSent`; wt never falls back to one push per branch. Any other r
 The push goes to the push URL the run recorded with the leases, not to the remote's name, so a remote reconfigured while the question waits redirects nothing; a push to a URL moves no remote-tracking ref, so wt moves each pushed branch's, and sets the line's upstream when it had none. The read-back after a transport failure asks that same URL.
 
 A stack is pushed as a whole or not at all: if the line was not left pushable (a step or check failed or is owed), the record has no leases (an older wt wrote it), the line's own branch has nowhere safe to push, or a remote no longer pushes to the one URL the run recorded, nothing is pushed, `push` is null, and the per-branch commands print as they do without `--push`. A layer whose remote branch is at a commit it never held, even a patch-equivalent one such as a teammate's reworded commit, is left out like one with nowhere to push. `push` is
-null in the look, and for a run that pushed nothing.
+null in the look, and for a run that pushed nothing, except (since `sync-run`
+2.0.0) when all such a run leaves for later is a line's own branch that only
+`--push-line` publishes and its record was verified: `lineLeftOut` then says
+so, and `branches` is empty in a run that attempted no push.
 
 `wt sync push <work> --stack --json` (`sync-run` 1.22.0, `command` `sync push`)
 reports the push a `--stack` run left for later (`--no-push`, a no to the
@@ -3348,3 +3418,4 @@ change made it.
 | `sync` 1.19.0 | `fold` is also filled for a `--stack --autosquash --onto` look of a line with a `move!` commit |
 | `sync-move` 1.0.0 | `wt sync move --json`, the `move!` commit written or why none was |
 | `sync` 1.18.0, `sync-run` 1.29.0 | `lines` on a fold's moves: the line ranges a `move!` commit moves (`Move-Lines`), beside `paths`, the paths moved whole |
+| `sync-run` 2.0.0 | a new major. [The summary](#detail--the-summary-and---full) is the default: `stack.layers`, `stack.sideBranches`, `stack.push.branches` and `layerSteps` hold only the rows that need attention, and `timings.slowest` is empty; `--full` holds every row. New in both forms: `detail`, `stack.counts` and `stack.pushLaterCommand`. The object is written on one line |

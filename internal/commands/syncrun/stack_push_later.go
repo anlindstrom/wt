@@ -50,7 +50,7 @@ func KeepStackPush(ctx *kit.Context, w io.Writer, s *Stack, targets []PushTarget
 	}
 	var err error
 	if s.kept, err = wtsync.AddPushRun(main, s.kept); err != nil {
-		s.kept = nil
+		s.kept, s.unsaved = nil, true
 		fmt.Fprintf(w, "  note: what is left unpushed could not be kept for a later push (%v)\n", err)
 	}
 }
@@ -75,28 +75,61 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 	if next != nil {
 		left = next.Branches()
 	}
-	if len(left) == len(all) && len(left) > 0 {
-		fmt.Fprintf(w, "  ↪ %s\n", s.laterLine(next, left))
+	// Another push or a --forget may have taken the record since the run let
+	// the line's lock go: the result names it only once it is checked, or
+	// rewritten, under the records' lock.
+	unchanged := len(left) == len(all) && len(left) > 0
+	var err error
+	if unchanged {
+		err = wtsync.PushRecordStands(ctx.Repo.MainRoot, s.kept)
+	} else {
+		err = wtsync.ReplacePushRecord(ctx.Repo.MainRoot, s.kept, next)
+	}
+	// Whether the record still owes a branch of this run's.
+	mine := next != nil && slices.ContainsFunc(next.Runs(), func(r wtsync.PushRun) bool { return r.Epoch == s.kept.Epoch })
+	s.settled = true
+	if err != nil {
+		if s.Push != nil {
+			s.Push.LineLeftOut = nil
+		}
+		why := "changed after this run saved it"
+		if !errors.Is(err, wtsync.ErrPushRecordReplaced) {
+			why = "could not be checked"
+			doing := "updated"
+			if unchanged {
+				doing = "read"
+			}
+			fmt.Fprintf(w, "  note: the record of what is left for a later push could not be %s (%v)\n", doing, err)
+		}
+		if mine {
+			s.recordNote = fmt.Sprintf("the line's push record %s; wt sync push %s --stack --dry-run shows what is left to push now", why, s.work)
+		}
 		return
 	}
-	err := wtsync.ReplacePushRecord(ctx.Repo.MainRoot, s.kept, next)
-	switch {
-	case errors.Is(err, wtsync.ErrPushRecordReplaced):
-	case err != nil:
-		fmt.Fprintf(w, "  note: the record of what is left for a later push could not be updated (%v)\n", err)
-	case next != nil:
+	// A run whose own branches all went has nothing left to name, whatever
+	// earlier runs still hold.
+	if mine {
+		s.nameLater(next, left)
+	}
+	if next != nil {
 		fmt.Fprintf(w, "  ↪ %s\n", s.laterLine(next, left))
 	}
+}
+
+// recoveryNote is what a reader of the result has to be told about a record
+// the result cannot name, "" when there is nothing.
+func (s *Stack) recoveryNote() string {
+	if s.kept != nil && !s.settled {
+		return fmt.Sprintf("the run ended before it settled its push; wt sync push %s --stack --dry-run shows what is left to push", s.work)
+	}
+	return s.recordNote
 }
 
 // laterLine is what is left for wt sync push --stack, counting the branches
 // that push sends: the line's own branch, left out when it would create its
 // remote branch, is named with the flag that includes it.
 func (s *Stack) laterLine(next *wtsync.PushRecord, left []string) string {
-	sends := left
-	if lineCreates(next) {
-		sends = slices.DeleteFunc(slices.Clone(left), func(b string) bool { return b == next.Branch })
-	}
+	sends := laterSends(next, left)
 	if len(sends) == 0 {
 		return fmt.Sprintf("%s kept for wt sync push %s --stack --push-line", next.Branch, s.work)
 	}
@@ -109,6 +142,38 @@ func (s *Stack) laterLine(next *wtsync.PushRecord, left []string) string {
 		line += fmt.Sprintf("; the line's own branch, %s, goes with --push-line", next.Branch)
 	}
 	return line
+}
+
+// laterSends is what of left a plain wt sync push --stack sends: all of it
+// but the line's own branch when that would create its remote branch.
+func laterSends(next *wtsync.PushRecord, left []string) []string {
+	if !lineCreates(next) {
+		return left
+	}
+	return slices.DeleteFunc(slices.Clone(left), func(b string) bool { return b == next.Branch })
+}
+
+// nameLater is what the run's result says of rec's branches left: the
+// command that pushes them, never with --push-line, which publishes the
+// line's own branch and is for a person to add. With that branch alone left
+// there is no command, and the push says it is left out, unless it tried that
+// branch.
+func (s *Stack) nameLater(rec *wtsync.PushRecord, left []string) {
+	if len(laterSends(rec, left)) > 0 {
+		s.pushLater = []string{"wt", "sync", "push", s.work, "--stack"}
+		return
+	}
+	items, _ := rec.Merged()
+	for _, it := range items {
+		tried := s.Push != nil && slices.ContainsFunc(s.Push.Branches, func(b StackPushed) bool { return b.Branch == it.Branch })
+		if !it.Top || tried {
+			continue
+		}
+		if s.Push == nil {
+			s.Push = &StackPush{Branches: []StackPushed{}, Conflicted: []StackConflicted{}}
+		}
+		s.Push.LineLeftOut = jsonout.Strp(LineLeftOutWhy(it.BranchPush, s.work))
+	}
 }
 
 // lineCreates is whether the record holds the line's own branch and a push

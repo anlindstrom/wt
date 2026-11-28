@@ -233,8 +233,7 @@ type DroppedJSON struct {
 	Unmatched bool `json:"unmatched"`
 }
 
-// RunResult is the one object wt sync rebase, resume and undo print with
-// --json.
+// RunResult is the one object a wt sync verb that runs prints with --json.
 type RunResult struct {
 	Schema        int                `json:"schema"`
 	SchemaVersion string             `json:"schemaVersion"`
@@ -254,6 +253,8 @@ type RunResult struct {
 	// commits they were on. [] for every other run.
 	LeftAlone []LeftAlone `json:"leftAlone"`
 	Recovery  *string     `json:"recovery"`
+	// Detail is which rows the object holds: DetailSummary or DetailFull.
+	Detail string `json:"detail"`
 	// TrunkSource is printed by wt up alone, not by sync-run.
 	TrunkSource *string `json:"-"`
 }
@@ -293,8 +294,11 @@ type RunJournal struct {
 	*jsonout.Journal[RunResult]
 	// up writes wt up's object; otherwise the journal writes wt sync's,
 	// which reports more of each participant.
-	up   bool
-	byBr map[string]*SyncParticipant
+	up bool
+	// summary leaves out the rows of wt sync's object that need no
+	// attention.
+	summary bool
+	byBr    map[string]*SyncParticipant
 	// eachCommit is the mode every joining participant starts with.
 	eachCommit string
 	// changed tells a signal which participants still recorded as not run
@@ -316,18 +320,31 @@ func NewRunJournal(out io.Writer) *RunJournal {
 }
 
 // NewSyncRunJournal is a journal that writes the object of a wt sync verb
-// to out: command is "sync rebase", "sync resume" or "sync undo".
+// to out: command is the verb, such as "sync rebase". The object holds every
+// row unless Summarize says otherwise.
 func NewSyncRunJournal(out io.Writer, command string) *RunJournal {
 	return newJournal(out, "sync-run", command)
 }
 
 func newJournal(out io.Writer, schemaName, command string) *RunJournal {
 	j := &RunJournal{byBr: map[string]*SyncParticipant{}, eachCommit: wtsync.EachAll}
-	j.Journal = jsonout.NewJournal(out, RunResult{Schema: 1, SchemaVersion: schema.VersionOf(schemaName), Command: command,
+	version := schema.VersionOf(schemaName)
+	j.Journal = jsonout.NewJournal(out, RunResult{Schema: schema.Major(version), SchemaVersion: version, Command: command,
 		Worktrees: []*SyncParticipant{}, LeftAlone: []LeftAlone{}},
 		jsonout.JournalRules[RunResult]{Error: func(r *RunResult, err error) { r.Error = jsonout.Strp(err.Error()) },
-			Caught: j.caught, Close: j.close})
+			Caught: j.caught, Close: j.close, Compact: schemaName == "sync-run"})
 	return j
+}
+
+// Summarize has the object leave out the rows that need no attention: wt
+// sync's --json without --full.
+func (j *RunJournal) Summarize() {
+	if j == nil {
+		return
+	}
+	j.Lock()
+	defer j.Unlock()
+	j.summary = true
 }
 
 // Fail records an error that stopped the run before it began, and writes
@@ -544,7 +561,16 @@ func (j *RunJournal) close(r *RunResult, signalled bool, recovery string) any {
 		r.Outcome = OutcomeOf(r.Worktrees, r.Error != nil)
 	}
 	if !j.up {
-		return r
+		out := *r
+		out.Detail = DetailFull
+		if j.summary {
+			out.Detail = DetailSummary
+		}
+		out.Worktrees = make([]*SyncParticipant, len(r.Worktrees))
+		for i, p := range r.Worktrees {
+			out.Worktrees[i] = reported(p, j.summary)
+		}
+		return &out
 	}
 	up := UpResult{Schema: r.Schema, SchemaVersion: r.SchemaVersion, Command: r.Command,
 		Trunk: r.Trunk, TrunkSource: r.TrunkSource, TrunkRef: r.TrunkRef, Onto: r.Onto, Target: r.Target, Fetched: r.Fetched,

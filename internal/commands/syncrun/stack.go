@@ -162,6 +162,15 @@ type Stack struct {
 	// push per remote, each branch with its lease and the commit pushed. Null
 	// in the look, and for a run that pushed nothing.
 	Push *StackPush `json:"push"`
+	*StackReport
+	// pushLater is the command for what the run's push record still holds,
+	// nil until the record is verified, and when it holds nothing of the
+	// run's for that command.
+	pushLater []string
+	// unsaved says the record could not be saved; settled that the saved one
+	// was settled; recordNote why it could not be verified then.
+	unsaved, settled bool
+	recordNote       string
 	// items is the moved layers that have somewhere safe to push, top the
 	// line's own branch's push, and work the worktree the line is held on:
 	// what PushStack takes.

@@ -4,6 +4,13 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-28 06:52 — `wt sync` run results are summaries by default
+
+`--json` on `wt sync rebase`, `resume`, `undo`, `steps` and `push` now holds only the stack rows
+that need attention, counts the rest and prints on one line; add `--full` for every row.
+It is `sync-run` schema 2: update any program that reads it, a git client included, before installing
+this wt, or it may refuse to start.
+
 ## 2026-11-28 06:20 — A diverged line on trunk is no longer folded without `--allow-diverged`
 
 A fold (in place or `--onto`), `--edit` and `wt sync steps` rewrote a line already on trunk even

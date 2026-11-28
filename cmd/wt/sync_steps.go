@@ -8,7 +8,8 @@ import (
 )
 
 func newSyncStepsCmd() *cobra.Command {
-	var yes, all, allowOwed, asJSON, stack bool
+	var yes, all, allowOwed, stack bool
+	var form jsonForm
 	var eachCommit string
 	var layers []string
 	var push func() syncrun.PushMode
@@ -42,8 +43,8 @@ func newSyncStepsCmd() *cobra.Command {
 			"under all.\n\n" +
 			"The push and the questions are as for wt sync rebase (--push, --no-push,\n" +
 			"--yes); a step still owed keeps the branch from being pushed. --json\n" +
-			"prints one result object on stdout, as wt sync rebase --json does, with\n" +
-			"command sync steps.",
+			"prints one result object on stdout, as wt sync rebase --json does (a\n" +
+			"summary, or every row with --full), with command sync steps.",
 		Example: "  wt sync steps tmp/stack --stack    # what the last run owed, at every layer\n" +
 			"  wt sync steps tmp/stack --stack --each-commit tips  # check each layer's tip only\n" +
 			"  wt sync steps login-crash --all    # every declared step, on one branch\n" +
@@ -54,12 +55,12 @@ func newSyncStepsCmd() *cobra.Command {
 			if eachCommit != "" && !validEachCommit(eachCommit) {
 				return usagef("--each-commit takes all, tips, targets or off, not %q", eachCommit)
 			}
-			f := runFlags{yes: yes, noFetch: true, allowOwed: allowOwed, push: push(), json: asJSON,
+			f := runFlags{yes: yes, noFetch: true, allowOwed: allowOwed, push: push(), json: form.on,
 				stack: stack, layers: layers}
 			if err := f.check(false); err != nil {
 				return err
 			}
-			return withVerbContext(cmd, args, "sync steps", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
+			return withVerbContext(cmd, args, "sync steps", form, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				opts, _ := runOptions(cmd, f, false)
 				opts.Journal, opts.Stack = j, f.stackOptions()
 				opts.Steps = &synccmd.StepsOptions{All: all, EachCommit: eachCommit}
@@ -74,6 +75,6 @@ func newSyncStepsCmd() *cobra.Command {
 	steps.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer, or every branch a pattern with * or ? matches (quote it); repeatable; none takes every branch on the line but those listed as skipped (backup names, and a branch with no commits of its own that has uncommitted changes in another worktree)")
 	steps.Flags().StringVar(&eachCommit, "each-commit", "", "where the each_commit checks run: all, tips, targets (as tips: steps folds no fixup) or off; the default is the mode of the run that owed the steps")
 	steps.Flags().BoolVar(&allowOwed, "allow-owed", false, "run even when a step's need does not answer; that step stays owed")
-	steps.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
+	form.addFlags(steps, "print one result object on stdout, the rest on stderr")
 	return steps
 }

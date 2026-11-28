@@ -8,11 +8,12 @@ import (
 )
 
 func newSyncRebaseCmd() *cobra.Command {
-	var noFetch, noFFTrunk, yes, ifReady, force, allowDiverged, allowOwed, asJSON, stack, autosquash, alone, noSides bool
+	var noFetch, noFFTrunk, yes, ifReady, force, allowDiverged, allowOwed, stack, autosquash, alone, noSides bool
 	var expect, onto, upstream, edit, eachCommit string
 	var layers []string
 	var pushLine bool
 	var sel selectionFlags
+	var form jsonForm
 	var push func() syncrun.PushMode
 	rebase := &cobra.Command{
 		Use:   "rebase [<work>...]",
@@ -138,7 +139,10 @@ func newSyncRebaseCmd() *cobra.Command {
 			"--all, --roots and --profile run across repositories, asked once.\n\n" +
 			"--json prints one result object on stdout and the progress, and any\n" +
 			"question, on stderr, for a tool driving wt; with no terminal a run with\n" +
-			"nothing named still needs --yes, and --no-push keeps the push out.\n" +
+			"nothing named still needs --yes, and --no-push keeps the push out. The\n" +
+			"object is a summary: of a --stack run's layer, side branch, push and\n" +
+			"layer step rows it holds those that need attention, and counts them all;\n" +
+			"--full holds every row.\n" +
 			"--expect <token> fetches, then refuses the run, touching nothing, when\n" +
 			"what it would start on is no longer what wt sync --json reported. With\n" +
 			"--allow-diverged it goes ahead only over the divergence that overview\n" +
@@ -291,6 +295,7 @@ func newSyncRebaseCmd() *cobra.Command {
 			"later one puts everything back and keeps the amend under a safety ref.\n" +
 			"One --edit per run; to fold or move the line too, run that after.",
 		Example: "  wt sync rebase login-crash api-tidy --yes --json --expect 1:0123abcd # a tool\n" +
+			"  wt sync rebase tmp/stack --stack --no-push --json --full  # every row of the result\n" +
 			"  wt sync rebase login-crash --alone  # only this one; its stack is left as it is\n" +
 			"  wt sync rebase tmp/ref --alone --stack --autosquash  # fold a copy; no layer moves\n" +
 			"  wt sync rebase tmp/stack --stack --each-commit=tips  # check each layer's tip only\n" +
@@ -313,7 +318,7 @@ func newSyncRebaseCmd() *cobra.Command {
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f := runFlags{yes: yes, noFetch: noFetch, noFFTrunk: noFFTrunk, ifReady: ifReady, force: force,
-				allowDiverged: allowDiverged, allowOwed: allowOwed, push: push(), json: asJSON, expect: expect,
+				allowDiverged: allowDiverged, allowOwed: allowOwed, push: push(), json: form.on, expect: expect,
 				stack: stack, layers: layers, autosquash: autosquash, edit: edit, eachCommit: eachCommit, onto: onto, upstream: upstream, alone: alone, noSides: noSides, pushLine: pushLine}
 			if err := f.check(false); err != nil {
 				return err
@@ -330,7 +335,7 @@ func newSyncRebaseCmd() *cobra.Command {
 			if sel.selection().Any() {
 				return syncAcross(cmd, args, true, sel.selection(), f)
 			}
-			return withVerbContext(cmd, args, rebaseCommand, asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
+			return withVerbContext(cmd, args, rebaseCommand, form, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				return syncRebase(cmd, args, ctx, f, j)
 			})
 		},
@@ -342,7 +347,7 @@ func newSyncRebaseCmd() *cobra.Command {
 	rebase.Flags().BoolVarP(&force, "force", "f", false, "rebase a named worktree even with an agent session in it")
 	rebase.Flags().BoolVar(&allowDiverged, "allow-diverged", false, "rebase a branch that has diverged from its own remote, as it stands")
 	rebase.Flags().BoolVar(&allowOwed, "allow-owed", false, "rebase now even when a step's need does not answer; the step is owed, to run later")
-	rebase.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the progress on stderr")
+	form.addFlags(rebase, "print one result object on stdout, the progress on stderr")
 	rebase.Flags().StringVar(&expect, "expect", "", "refuse unless the overview still matches this token from wt sync --json")
 	rebase.Flags().BoolVar(&stack, "stack", false, "rebase the line of the worktree named once, and move every layer branch on it")
 	rebase.Flags().StringArrayVar(&layers, "layer", nil, "with --stack: take this branch as a layer, or every branch a pattern with * or ? matches (quote it); repeatable; none takes every branch on the line but those listed as skipped (backup names, and a branch with no commits of its own that has uncommitted changes in another worktree)")
