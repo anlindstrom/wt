@@ -50,8 +50,11 @@ func envNeedName(need string) (name string, ok bool) {
 // stepEnviron is the environment every step and check process starts with:
 // the caller's, with NO_COLOR and the rebase editors set over it. A probe
 // reads this same list, so it and the step cannot disagree.
-func stepEnviron() []string {
-	return git.Environ(append([]string{"NO_COLOR=1"}, rebaseEnv...)...)
+func stepEnviron() []string { return stepEnvironIn("") }
+
+// stepEnvironIn is stepEnviron for a command run in dir.
+func stepEnvironIn(dir string) []string {
+	return git.EnvironIn(dir, append([]string{"NO_COLOR=1"}, rebaseEnv...)...)
 }
 
 // probeEnv answers whether name is set and not empty in stepEnviron. The

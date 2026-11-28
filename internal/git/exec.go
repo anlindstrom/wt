@@ -294,7 +294,7 @@ func Exec(o Opts, args ...string) ([]byte, error) {
 	}
 	cmd := exec.Command("git", parsed(args)...)
 	cmd.Dir = o.Dir
-	cmd.Env = Environ(append([]string{"GIT_TERMINAL_PROMPT=0", "NO_COLOR=1"}, o.Env...)...)
+	cmd.Env = EnvironIn(o.Dir, append([]string{"GIT_TERMINAL_PROMPT=0", "NO_COLOR=1"}, o.Env...)...)
 	cmd.Stdin = o.Stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
