@@ -36,6 +36,17 @@ type Line struct {
 	Skipped []SkippedBranch
 }
 
+// LayerAt is the branch of the layer Commits[i] is in: the lowest layer whose
+// tip is at or above it, else the line's own branch.
+func (l Line) LayerAt(i int) string {
+	for _, layer := range l.Layers {
+		if i < layer.Count {
+			return layer.Branch
+		}
+	}
+	return l.Branch
+}
+
 // fold subjects: a commit git's autosquash folds into another.
 var foldPrefixes = []string{"fixup! ", "squash! ", "amend! "}
 

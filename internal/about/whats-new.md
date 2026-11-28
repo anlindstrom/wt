@@ -4,6 +4,23 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-28 13:51 — `log.showSignature` no longer confuses wt
+
+With it set in your git config, wt read signature checks as part of what `git log` told it. wt's
+own reads now leave them out.
+
+## 2026-11-28 12:54 — `wt sync fixup <rev>` commits a fixup that names one commit
+
+Commits what is staged as a `fixup!` of that commit of the line, by its id where the subject is
+shared, so the fold does not refuse it later. Unstaged changes stay and no commit hook runs;
+`--dry-run` shows it first.
+
+## 2026-11-28 12:54 — `wt sync owner` says which commit owns some lines
+
+`wt sync owner <path>:<from>-<to>` names the commits of the line that last changed them, and
+their layers. `--into <rev>` says whether a change there folds into an older commit, and if
+not, which later commit carries its context.
+
 ## 2026-11-28 10:05 — A fold's look says what becomes of every fixup
 
 `wt sync <work> --stack --autosquash` now ends its list of folds with a summary such as

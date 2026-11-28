@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-owner.v1.json",
+  "x-version": "1.0.0",
+  "title": "wt sync owner --json",
+  "description": "What `wt sync owner --json` prints on stdout: one object, for an answer or a refusal. A refusal has the reason in refusal and exits non-zero; every answer, whatever into says, exits 0; a command line wt cannot read prints no object and exits non-zero. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
+  "type": "object",
+  "required": ["schema", "schemaVersion", "command", "work", "branch", "tip", "path", "lines", "edited", "owners", "unowned", "into", "refusal"],
+  "properties": {
+    "schema": { "const": 1, "description": "The major version: a new one only for a change that breaks readers." },
+    "schemaVersion": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$", "description": "The full semantic version of this schema that the output follows." },
+    "command": { "const": "sync owner" },
+    "work": { "type": ["string", "null"], "description": "The worktree as it was named; null for the one the command ran in." },
+    "branch": { "type": ["string", "null"], "description": "The branch whose line was read; null when the line was not read." },
+    "tip": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha" }], "description": "The line's tip, whose version of the file the lines are of; null when the line was not read." },
+    "path": { "type": ["string", "null"], "description": "The file, from the worktree's root; null when it was not resolved." },
+    "lines": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/span" }], "description": "The lines answered for, the whole file when none were given; null when they were not resolved." },
+    "edited": { "type": "boolean", "description": "Whether the worktree has uncommitted changes, staged or not, in or right beside those lines. The answer is for the committed lines either way." },
+    "owners": {
+      "type": "array",
+      "description": "The commits of the line that last changed some of the lines, newest first.",
+      "items": {
+        "type": "object",
+        "required": ["sha", "subject", "layer", "foldsInto", "lines"],
+        "properties": {
+          "sha": { "$ref": "#/$defs/sha" },
+          "subject": { "type": "string" },
+          "layer": { "$ref": "#/$defs/layer" },
+          "foldsInto": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/commit" }], "description": "For an owner that is a fixup!, squash! or amend! commit, the commit a fold makes it part of; null otherwise, and when its subject names no one commit." },
+          "lines": { "type": "array", "items": { "$ref": "#/$defs/span" }, "description": "The lines it owns, in order." }
+        }
+      }
+    },
+    "unowned": { "type": "array", "items": { "$ref": "#/$defs/span" }, "description": "The lines no commit of the line changed: the line's base already has them." },
+    "into": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["sha", "subject", "layer", "verdict", "needs", "why"],
+          "properties": {
+            "sha": { "$ref": "#/$defs/sha" },
+            "subject": { "type": "string" },
+            "layer": { "$ref": "#/$defs/layer" },
+            "verdict": { "enum": ["folds", "does-not-fold", "cannot-tell", "refused"], "description": "What a fold of the line in place makes of a change to exactly those lines, committed as a fixup of this commit: folds, when it applies there and the rest of the line replays clean; does-not-fold, when a later commit has its context; cannot-tell; refused, when the run would not make the fold." },
+            "needs": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/commit" }], "description": "For does-not-fold, the later commit that carries the context; null otherwise." },
+            "why": { "type": ["string", "null"], "description": "For cannot-tell and refused, the reason; null otherwise." }
+          }
+        }
+      ],
+      "description": "The commit --into names, and the verdict; null without --into, and for a refusal."
+    },
+    "refusal": { "type": ["string", "null"], "description": "Why there is no answer, in the words printed on stderr; null when there is one." }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+    "layer": { "type": "string", "description": "The layer branch the commit is in; the line's own branch above the top layer." },
+    "commit": {
+      "type": "object",
+      "required": ["sha", "subject", "layer"],
+      "properties": {
+        "sha": { "$ref": "#/$defs/sha" },
+        "subject": { "type": "string" },
+        "layer": { "$ref": "#/$defs/layer" }
+      }
+    },
+    "span": {
+      "type": "object",
+      "required": ["from", "to"],
+      "description": "Lines from to to, inclusive, of the file as the line's tip has it.",
+      "properties": {
+        "from": { "type": "integer", "minimum": 1 },
+        "to": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

@@ -161,7 +161,9 @@ generating types from it:
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
 | `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.20.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync fixup --json` | [`schema/sync-fixup.v1.json`](../schema/sync-fixup.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-fixup.v1.json` |
 | `wt sync move --json` | [`schema/sync-move.v1.json`](../schema/sync-move.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-move.v1.json` |
+| `wt sync owner --json` | [`schema/sync-owner.v1.json`](../schema/sync-owner.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-owner.v1.json` |
 | `wt sync rebase\|resume\|undo\|steps\|push --json` | [`schema/sync-run.v2.json`](../schema/sync-run.v2.json) | 2.1.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v2.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
@@ -2669,6 +2671,80 @@ The fold that makes the move is `wt sync rebase`, and its look is
 | `refusal` | string \| null | yes | Why no commit was written, in the words printed on stderr; null when one was. |
 <!-- json-docs:end -->
 
+## `wt sync owner [<work>] <path>[:<from>-<to>] [--into <rev>] --json` — who owns the lines
+
+One object for the answer, or for why there is none. The lines are those of the
+file as the line's tip has it; `edited` says the worktree has changes in or
+beside them. `owners` is newest first. Every answer exits 0, whatever
+`into.verdict` says; a refusal has the reason in `refusal`, which stderr
+carries too, and exits 1. A range that is not `<from>-<to>` prints no object
+and exits 2. Nothing but objects in git's store is written.
+
+<!-- json-docs:begin sync-owner -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows. |
+| `command` | `"sync owner"` | yes |  |
+| `work` | string \| null | yes | The worktree as it was named; null for the one the command ran in. |
+| `branch` | string \| null | yes | The branch whose line was read; null when the line was not read. |
+| `tip` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The line's tip, whose version of the file the lines are of; null when the line was not read. |
+| `path` | string \| null | yes | The file, from the worktree's root; null when it was not resolved. |
+| `lines` | object \| null | yes | The lines answered for, the whole file when none were given; null when they were not resolved. |
+| `lines.from` | integer, at least 1 | yes |  |
+| `lines.to` | integer, at least 1 | yes |  |
+| `edited` | boolean | yes | Whether the worktree has uncommitted changes, staged or not, in or right beside those lines. The answer is for the committed lines either way. |
+| `owners` | array of object | yes | The commits of the line that last changed some of the lines, newest first. |
+| `owners[].sha` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `owners[].subject` | string | yes |  |
+| `owners[].layer` | string | yes | The layer branch the commit is in; the line's own branch above the top layer. |
+| `owners[].foldsInto` | object \| null | yes | For an owner that is a fixup!, squash! or amend! commit, the commit a fold makes it part of; null otherwise, and when its subject names no one commit. |
+| `owners[].foldsInto.sha` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `owners[].foldsInto.subject` | string | yes |  |
+| `owners[].foldsInto.layer` | string | yes | The layer branch the commit is in; the line's own branch above the top layer. |
+| `owners[].lines` | array of object | yes | The lines it owns, in order. |
+| `owners[].lines[]` | object | yes | Fields as at `lines`. |
+| `unowned` | array of object | yes | The lines no commit of the line changed: the line's base already has them. |
+| `unowned[]` | object | yes | Fields as at `lines`. |
+| `into` | object \| null | yes | The commit --into names, and the verdict; null without --into, and for a refusal. |
+| `into.sha` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `into.subject` | string | yes |  |
+| `into.layer` | string | yes | The layer branch the commit is in; the line's own branch above the top layer. |
+| `into.verdict` | `"folds"` \| `"does-not-fold"` \| `"cannot-tell"` \| `"refused"` | yes | What a fold of the line in place makes of a change to exactly those lines, committed as a fixup of this commit: folds, when it applies there and the rest of the line replays clean; does-not-fold, when a later commit has its context; cannot-tell; refused, when the run would not make the fold. |
+| `into.needs` | object \| null | yes | For does-not-fold, the later commit that carries the context; null otherwise. Fields as at `owners[].foldsInto`. |
+| `into.why` | string \| null | yes | For cannot-tell and refused, the reason; null otherwise. |
+| `refusal` | string \| null | yes | Why there is no answer, in the words printed on stderr; null when there is one. |
+<!-- json-docs:end -->
+
+## `wt sync fixup <rev> [--dry-run] --json` — the fixup committed
+
+One object for the commit made, for the one `--dry-run` would make
+(`commit.sha` null, nothing written), or for why none was. A refusal has the
+reason in `refusal`, which stderr carries too, and exits 1. No commit hook
+runs. Both `commit` and `refusal` are set only when the branch took the commit
+although git reported a failure moving it.
+
+<!-- json-docs:begin sync-fixup -->
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema` | `1` | yes | The major version: a new one only for a change that breaks readers. |
+| `schemaVersion` | string, matching `^1\.[0-9]+\.[0-9]+$` | yes | The full semantic version of this schema that the output follows. |
+| `command` | `"sync fixup"` | yes |  |
+| `dryRun` | boolean | yes | Whether --dry-run asked for the look, which writes nothing. |
+| `branch` | string \| null | yes | The branch the commit goes on; null when the line was not read. |
+| `target` | object \| null | yes | The commit of the line the fixup is for; null when the refusal came before it was found. |
+| `target.sha` | string, matching `^[0-9a-f]{40,64}$` | yes |  |
+| `target.subject` | string | yes |  |
+| `target.layer` | string | yes | The layer branch the commit is in; the line's own branch above the top layer. |
+| `commit` | object \| null | yes | The fixup committed, or that a dry run would commit; null when none is. Set with a refusal only when the branch took the commit although git reported a failure moving it. |
+| `commit.sha` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit made; null for a dry run. |
+| `commit.subject` | string | yes | The fixup! subject asked for, naming the target by its subject, or by an id where that names no one commit. |
+| `files` | array of object | yes | What is staged, which the commit holds; empty when the refusal came before it was read. |
+| `files[].status` | string | yes | git's letter for the change: A, M, D or T. |
+| `files[].path` | string | yes | From the worktree's root. |
+| `refusal` | string \| null | yes | Why nothing was committed, or what git reported although the branch took the commit, in the words printed on stderr; null otherwise. |
+<!-- json-docs:end -->
+
 ## `wt new <type>/<work> [--base <ref>] --dry-run --json` — the plan
 
 What `wt new` would create, from local state alone. It **writes nothing**: no
@@ -3445,3 +3521,5 @@ change made it.
 | `sync-run` 2.0.0 | a new major. [The summary](#detail--the-summary-and---full) is the default: `stack.layers`, `stack.sideBranches`, `stack.push.branches` and `layerSteps` hold only the rows that need attention, and `timings.slowest` is empty; `--full` holds every row. New in both forms: `detail`, `stack.counts` and `stack.pushLaterCommand`. The object is written on one line |
 | `sync` 1.20.0 | `analysis`, `fixups`, `appliesAtTarget`, `aheadOfContext`, `conflicts` and `notAnalysed` on the look's `fold`: how many fixups there are and what the analysis finds of each |
 | `sync-run` 2.1.0 | no new field: `stack.push.branches[].old` is the lease the push went over, which is the newest run's, no longer always the oldest's, where [the recorded runs' leases differ](#push--a-stacks-push) and the remote is at the newest |
+| `sync-owner` 1.0.0 | `wt sync owner --json`, the commits of the line that own some lines, and whether a change there folds into one |
+| `sync-fixup` 1.0.0 | `wt sync fixup <rev> --json`, the fixup committed, the one `--dry-run` would commit, or why none was |

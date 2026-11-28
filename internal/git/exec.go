@@ -292,7 +292,7 @@ func Exec(o Opts, args ...string) ([]byte, error) {
 	if timeout <= 0 {
 		timeout = GitTimeout
 	}
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", parsed(args)...)
 	cmd.Dir = o.Dir
 	cmd.Env = Environ(append([]string{"GIT_TERMINAL_PROMPT=0", "NO_COLOR=1"}, o.Env...)...)
 	cmd.Stdin = o.Stdin
@@ -306,6 +306,15 @@ func Exec(o Opts, args ...string) ([]byte, error) {
 		return stdout.Bytes(), &Error{Args: args, Stderr: stderr.String(), Code: code, Timeout: timeout, Err: err}
 	}
 	return stdout.Bytes(), nil
+}
+
+// parsed is args as wt runs them to read the answer: a log or show without
+// signature checks, which log.showSignature would print into its output.
+func parsed(args []string) []string {
+	if !slices.Contains(args, "log") && !slices.Contains(args, "show") {
+		return args
+	}
+	return append([]string{"-c", "log.showSignature=false"}, args...)
 }
 
 // Answer reads an exit status that is an answer rather than a failure, such

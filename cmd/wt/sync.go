@@ -37,6 +37,10 @@ func newSyncCmd() *cobra.Command {
 			"                                    first, and what holds each; with\n" +
 			"                                    --autosquash, the fixups a fold\n" +
 			"                                    moves ahead of their context\n" +
+			"          wt sync owner <path>[:<from>-<to>]\n" +
+			"                                    the commit of the line that owns those\n" +
+			"                                    lines, and with --into whether a change\n" +
+			"                                    there folds into an older one\n" +
 			"          wt sync <work> --alone    that worktree, and which of its stack a\n" +
 			"                                    run of it alone would leave\n" +
 			"          wt sync <work>            one worktree in full: every stop,\n" +
@@ -65,6 +69,8 @@ func newSyncCmd() *cobra.Command {
 			"          wt sync undo <work>       put back every ref that run moved\n" +
 			"          wt sync steps <work>      run the steps a run left owed, in\n" +
 			"                                    place, without rebasing onto trunk\n" +
+			"          wt sync fixup <rev>       commit what is staged as a fixup! that\n" +
+			"                                    names <rev> and no other commit\n" +
 			"          wt sync move <work> [<path>...] --from <c> --into <c>\n" +
 			"                                    write a move! commit, which the\n" +
 			"                                    next fold makes\n" +
@@ -224,7 +230,7 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave out the branches that fork from the line or sit above its top; a run then never moves them")
 	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk")
 	sel.add(sync, true)
-	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncPushCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncMoveCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
+	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncPushCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncMoveCmd(), newSyncOwnerCmd(), newSyncFixupCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
 	return sync
 }
 

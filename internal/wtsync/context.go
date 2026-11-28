@@ -122,13 +122,21 @@ type FixupAnalysis struct {
 // another base. Nothing but objects in the store is written: no ref, no index
 // and no worktree. An error means nothing was analysed.
 func AnalyseFixups(dir string, commits []string, cfg *Config) (FixupAnalysis, error) {
+	a, _, err := analyseFixups(dir, commits, cfg, false)
+	return a, err
+}
+
+// analyseFixups is AnalyseFixups with the replay it made, which with toTip
+// goes on to the line's last commit instead of ending at the last fold target.
+func analyseFixups(dir string, commits []string, cfg *Config, toTip bool) (FixupAnalysis, foldReplay, error) {
 	var none FixupAnalysis
+	var run foldReplay
 	if len(commits) == 0 {
-		return none, nil
+		return none, run, nil
 	}
 	out, err := gitEnv(dir, nil, nil, append([]string{"log", "--no-walk=unsorted", "--format=%H%x00%s"}, commits...)...)
 	if err != nil {
-		return none, err
+		return none, run, err
 	}
 	var all []lineCommit
 	for _, l := range strings.Split(out, "\n") {
@@ -149,11 +157,11 @@ func AnalyseFixups(dir string, commits []string, cfg *Config) (FixupAnalysis, er
 	blobs := blobCache{dir: dir, got: map[string]*string{}}
 	lines, err := lineGaps(dir, blobs, all, targetOf)
 	if err != nil {
-		return none, err
+		return none, run, err
 	}
-	run, err := replayFold(dir, all, targetOf, cfg)
+	run, err = replayFold(dir, all, targetOf, cfg, toTip)
 	if err != nil {
-		return none, err
+		return none, run, err
 	}
 	paths := pathCache{dir: dir, got: map[string][]string{}}
 	var a FixupAnalysis
@@ -171,9 +179,9 @@ func AnalyseFixups(dir string, commits []string, cfg *Config) (FixupAnalysis, er
 		_, applied := run.after[e.sha]
 		stopsHere, unreached := run.stop == i, run.unreached
 		if applied {
-			step, err := layerStepOver(cfg, paths, run.upTo(all, i))
+			step, err := layerStepOver(cfg, paths, run.upTo(i))
 			if err != nil {
-				return none, err
+				return none, run, err
 			}
 			if step != "" {
 				applied, unreached = false, fmt.Sprintf("the layer step %q may change what it, or a commit before it, is merged onto", step)
@@ -204,7 +212,7 @@ func AnalyseFixups(dir string, commits []string, cfg *Config) (FixupAnalysis, er
 		if stopsHere {
 			more, hunks, w, err := stopGaps(dir, blobs, all, j, i, run.tree, run.conflicted)
 			if err != nil {
-				return none, err
+				return none, run, err
 			}
 			whole = w
 			for n, g := range more {
@@ -231,7 +239,7 @@ func AnalyseFixups(dir string, commits []string, cfg *Config) (FixupAnalysis, er
 				h := line.hunks[n]
 				m, found, err := view.placed(g.Path, h.before, isFold(all[h.first].subject))
 				if err != nil {
-					return none, err
+					return none, run, err
 				}
 				switch {
 				case !found:
@@ -267,7 +275,7 @@ func AnalyseFixups(dir string, commits []string, cfg *Config) (FixupAnalysis, er
 		}
 		a.Fixups = append(a.Fixups, outcome)
 	}
-	return a, nil
+	return a, run, nil
 }
 
 // lineFixup is what the line's own trees say of one fixup.
@@ -468,19 +476,21 @@ type foldReplay struct {
 	// there.
 	first int
 	order []int
+	// all is the line that was read.
+	all []lineCommit
 }
 
 // upTo is the commits of the fold of all up to fixup i: those below the
 // replay, which are no fold's, then the replay's own as far as i.
-func (r foldReplay) upTo(all []lineCommit, i int) []string {
+func (r foldReplay) upTo(i int) []string {
 	var commits []string
 	for m := range r.first {
-		if !isFold(all[m].subject) {
-			commits = append(commits, all[m].sha)
+		if !isFold(r.all[m].subject) {
+			commits = append(commits, r.all[m].sha)
 		}
 	}
 	for _, c := range r.order {
-		commits = append(commits, all[c].sha)
+		commits = append(commits, r.all[c].sha)
 		if c == i {
 			break
 		}
@@ -491,9 +501,9 @@ func (r foldReplay) upTo(all []lineCommit, i int) []string {
 // replayFold replays all for AnalyseFixups, from the first commit a fixup
 // folds into to the last. A line the run refuses is not replayed, nor one
 // whose fold takes an order wt does not follow, and the replay ends where
-// the run may lift a version.
-func replayFold(dir string, all []lineCommit, targetOf map[int]int, cfg *Config) (foldReplay, error) {
-	r := foldReplay{stop: -1}
+// the run may lift a version. With toTip it goes on to the last commit.
+func replayFold(dir string, all []lineCommit, targetOf map[int]int, cfg *Config, toTip bool) (foldReplay, error) {
+	r := foldReplay{stop: -1, all: all}
 	for i, c := range all {
 		if _, ok := targetOf[i]; !ok && isFold(c.subject) {
 			r.unreached = fmt.Sprintf("the run refuses the line: %s %q names no one commit earlier on it", git.ShortID(c.sha, 7), oneLinePlan(c.subject))
@@ -508,6 +518,9 @@ func replayFold(dir string, all []lineCommit, targetOf map[int]int, cfg *Config)
 	}
 	targets := slices.Collect(maps.Values(targetOf))
 	first, last := slices.Min(targets), slices.Max(targets)
+	if toTip {
+		last = len(all) - 1
+	}
 	start, err := gitEnv(dir, nil, nil, "rev-parse", all[first].sha+"^^{tree}")
 	if err != nil {
 		return r, err
