@@ -112,8 +112,11 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 	if mine {
 		s.nameLater(next, left)
 	}
-	if next != nil {
+	switch {
+	case next != nil:
 		fmt.Fprintf(w, "  ↪ %s\n", s.laterLine(next, left))
+	case len(s.nowhere) > 0:
+		fmt.Fprintf(w, "  ↪ %s with nowhere to push: %s\n", kit.Count(len(s.nowhere), "moved layer"), strings.Join(s.nowhere, ", "))
 	}
 }
 
@@ -132,13 +135,22 @@ func (s *Stack) recoveryNote() string {
 func (s *Stack) laterLine(next *wtsync.PushRecord, left []string) string {
 	sends := laterSends(next, left)
 	if len(sends) == 0 {
-		return fmt.Sprintf("%s kept for wt sync push %s --stack --push-line", next.Branch, s.work)
+		return fmt.Sprintf("%s kept for wt sync push %s --stack --push-line", next.Branch, s.work) + s.nowhereClause()
 	}
 	line := fmt.Sprintf("%s: wt sync push %s --stack pushes %s later", s.unpushedLine(sends), s.work, itOrThem(len(sends)))
 	if len(sends) < len(left) {
 		line += fmt.Sprintf("; the line's own branch, %s, goes with --push-line", next.Branch)
 	}
-	return line
+	return line + s.nowhereClause()
+}
+
+// nowhereClause ends the line that counts what is left with the moved layers
+// that count leaves out, as nothing says where they push; "" with none.
+func (s *Stack) nowhereClause() string {
+	if len(s.nowhere) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("; %d more with nowhere to push: %s", len(s.nowhere), strings.Join(s.nowhere, ", "))
 }
 
 // laterSends is what of left a plain wt sync push --stack sends: all of it

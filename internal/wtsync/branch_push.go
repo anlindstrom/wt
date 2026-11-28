@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/anlindstrom/wt/internal/git"
+	"github.com/anlindstrom/wt/internal/repo"
 )
 
 // BranchPush is where one branch of a stack run pushes and the commit that
@@ -116,6 +117,82 @@ func (o *Own) BranchPush(branch string, top bool) BranchPush {
 	bp.Endpoint = r.pushURLs[0]
 	bp.Remote, bp.RemoteBranch, bp.SetUpstream, bp.Tracking, bp.Rule = to.Remote, to.Branch, to.SetUpstream, to.Tracking, to.Rule
 	return bp
+}
+
+// NowhereRecorded reports a branch nothing says where to push: no recorded
+// destination, and either no remote branch of its own or a choice between two
+// nobody has made.
+func (o *Own) NowhereRecorded(branch string) bool {
+	if o == nil || o.pushTo[branch] != "" {
+		return false
+	}
+	st := o.State(branch)
+	return st.State == OwnNone || st.State == OwnGone || st.Undecided != nil
+}
+
+// SiblingPushTo is where branch would push by the pattern the records of its
+// siblings follow: for a layer with nothing recorded and no remote branch of
+// its own, whose siblings with a record all swap one prefix of their name for
+// another, the remote branch that gives it, when the remote has it as last
+// fetched, it is no other branch's, and written as <remote>/<branch> it is
+// read back as that. Nothing is recorded.
+func (o *Own) SiblingPushTo(branch string, siblings []string) (repo.PushTo, bool) {
+	var none repo.PushTo
+	if !o.NowhereRecorded(branch) || o.State(branch).Undecided != nil {
+		return none, false
+	}
+	type pattern struct{ remote, from, to string }
+	var shared pattern
+	for _, s := range siblings {
+		recorded, ok := o.pushTo[s]
+		if s == branch || !ok {
+			continue
+		}
+		dest, ok := repo.ParsePushTo(recorded)
+		if !ok {
+			return none, false
+		}
+		from, to, ok := swappedPrefix(s, dest.Branch)
+		p := pattern{dest.Remote, from, to}
+		if !ok || shared != (pattern{}) && shared != p {
+			return none, false
+		}
+		shared = p
+	}
+	rest, ok := strings.CutPrefix(branch, shared.from)
+	if shared.remote == "" || !ok || o.remotes[shared.remote] == nil {
+		return none, false
+	}
+	dest := repo.PushTo{Remote: shared.remote, Branch: shared.to + rest}
+	ref := "refs/remotes/" + dest.String()
+	// The longest remote name is how wt sync push-to reads the argument.
+	if remote, _ := o.split(ref); remote != dest.Remote {
+		return none, false
+	}
+	if _, there := o.tracking[ref]; !there || o.someoneElses(branch, dest.Remote, dest.Branch) || !o.pushToName(dest.Branch) {
+		return none, false
+	}
+	return dest, true
+}
+
+// swappedPrefix is the prefixes by which a and b differ before the longest
+// run of whole path segments they end with; false when they end with none.
+func swappedPrefix(a, b string) (from, to string, ok bool) {
+	as, bs := strings.Split(a, "/"), strings.Split(b, "/")
+	i, j := len(as), len(bs)
+	for i > 0 && j > 0 && as[i-1] == bs[j-1] {
+		i, j = i-1, j-1
+	}
+	if i == len(as) {
+		return "", "", false
+	}
+	prefix := func(parts []string) string {
+		if len(parts) == 0 {
+			return ""
+		}
+		return strings.Join(parts, "/") + "/"
+	}
+	return prefix(as[:i]), prefix(bs[:j]), true
 }
 
 // PushEndpoint is the one URL remote pushes to now. It is an error for the

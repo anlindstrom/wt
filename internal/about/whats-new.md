@@ -17,6 +17,12 @@ run's, `wt sync push --stack` (and a run's own push) now goes over that lease an
 line. Anything else is refused in one line, printed once; `--dry-run` lists the branches, and now
 asks git for a dry run of the push and fails where git would refuse it.
 
+## 2026-11-28 09:43 — A new layer with no push target is told the command its siblings imply
+
+When the other layers' recorded targets follow one pattern and the matching remote branch exists,
+the run prints the `wt sync push-to --branch` command, and the count of what is left unpushed
+names every layer with nowhere to push. Nothing is recorded for you.
+
 ## 2026-11-28 06:52 — `wt sync` run results are summaries by default
 
 `--json` on `wt sync rebase`, `resume`, `undo`, `steps` and `push` now holds only the stack rows

@@ -184,6 +184,9 @@ type Stack struct {
 	epoch int64
 	// kept is the record KeepStackPush wrote for this run, for SettleStackPush.
 	kept *wtsync.PushRecord
+	// nowhere is, for each moved layer nothing says where to push, the
+	// command that records it or the layer with what does.
+	nowhere []string
 	// declined is why the stack is not pushed as one, when it is not.
 	declined string
 	// applied is the fixups of ContextGaps that a fold in place applies.
@@ -991,6 +994,14 @@ func (f *stackFinisher) reportLayers(tips []wtsync.LayerTip) (held, moved int) {
 			if noPush != "" {
 				l.NoPushReason = jsonout.Strp(noPush)
 				fmt.Fprintf(w, "      not pushed by this run, and no safe push: %s\n", noPush)
+				record := m.Branch + " (wt sync " + PushToName + " records where)"
+				if to, ok := in.Own.SiblingPushTo(m.Branch, layerBranches(tips)); ok {
+					record = "wt sync " + PushToName + " --branch " + kit.ShellQuote(m.Branch) + " " + kit.ShellQuote(to.String())
+					fmt.Fprintf(w, "      its siblings' records give %s; to record that: %s\n", to, record)
+				}
+				if in.Own.NowhereRecorded(m.Branch) {
+					s.nowhere = append(s.nowhere, record)
+				}
 			} else {
 				fmt.Fprintf(w, "      push: %s\n", strings.Join(push, " "))
 			}
@@ -1013,6 +1024,14 @@ func (f *stackFinisher) reportLayers(tips []wtsync.LayerTip) (held, moved int) {
 		oldBase, newBase = t.Old, t.New
 	}
 	return held, moved
+}
+
+func layerBranches(tips []wtsync.LayerTip) []string {
+	out := make([]string, len(tips))
+	for i, t := range tips {
+		out[i] = t.Branch
+	}
+	return out
 }
 
 // moveSides carries the side branches, forgets the record and says how to
