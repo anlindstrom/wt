@@ -46,7 +46,7 @@ func TestResumeKeepsTheGapOfARevisionFixupAtALaterStop(t *testing.T) {
 }
 
 // An analysis that fails in the run is read again by the resume, so a later
-// stop is still checked. Not parallel: it swaps syncrun.ContextGapsOf.
+// stop is still checked. Not parallel: it swaps syncrun.AnalyseFixupsOf.
 func TestResumeReadsAgainWhatTheRunCouldNotAnalyse(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
@@ -54,15 +54,15 @@ func TestResumeReadsAgainWhatTheRunCouldNotAnalyse(t *testing.T) {
 	ctx, tmp := twoStopLine(t, "fixup! feat: b")
 	late := testkit.GitOut(t, ctx.Repo.MainRoot, "rev-parse", "tmp/rev")
 	resolve, state := stopTools(t, tmp)
-	was := syncrun.ContextGapsOf
-	t.Cleanup(func() { syncrun.ContextGapsOf = was })
-	syncrun.ContextGapsOf = func(string, []string, *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
-		return nil, nil, errors.New("merge-tree: out of cheese")
+	was := syncrun.AnalyseFixupsOf
+	t.Cleanup(func() { syncrun.AnalyseFixupsOf = was })
+	syncrun.AnalyseFixupsOf = func(string, []string, *wtsync.Config) (wtsync.FixupAnalysis, error) {
+		return wtsync.FixupAnalysis{}, errors.New("merge-tree: out of cheese")
 	}
 	if _, out, err := synccmdtest.StackRun(t, ctx, "tmp/rev", runAt(601, &synccmd.StackOptions{Autosquash: true})); err == nil || !strings.Contains(err.Error(), "needs you") {
 		t.Fatalf("run: err %v, want the first fixup handed over\n%s", err, out)
 	}
-	syncrun.ContextGapsOf = was
+	syncrun.AnalyseFixupsOf = was
 	resolve("u.txt", "u\nu2\n")
 	opts := noResumeAgents()
 	opts.Push = syncrun.PushNever
@@ -75,19 +75,19 @@ func TestResumeReadsAgainWhatTheRunCouldNotAnalyse(t *testing.T) {
 }
 
 // A dropped hunk of a gap in doubt is refused with no commit to move it to.
-// Not parallel: it swaps syncrun.ContextGapsOf.
+// Not parallel: it swaps syncrun.AnalyseFixupsOf.
 func TestResumeOffersNoRetargetForADroppedHunkInDoubt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
-	was := syncrun.ContextGapsOf
-	t.Cleanup(func() { syncrun.ContextGapsOf = was })
-	syncrun.ContextGapsOf = func(dir string, commits []string, cfg *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
-		gaps, unchecked, err := was(dir, commits, cfg)
-		for i := range gaps {
-			gaps[i].Doubt = "wt cannot tell"
+	was := syncrun.AnalyseFixupsOf
+	t.Cleanup(func() { syncrun.AnalyseFixupsOf = was })
+	syncrun.AnalyseFixupsOf = func(dir string, commits []string, cfg *wtsync.Config) (wtsync.FixupAnalysis, error) {
+		a, err := was(dir, commits, cfg)
+		for i := range a.Gaps {
+			a.Gaps[i].Doubt = "wt cannot tell"
 		}
-		return gaps, unchecked, err
+		return a, err
 	}
 	ctx, _, _ := handedAtFixup(t, 602, gittest.StateTS("size: 20,", ""))
 	opts := noResumeAgents()

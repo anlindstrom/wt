@@ -210,7 +210,7 @@ type Request struct {
 	// reached past it must be on top of it.
 	HandedHead string
 	// Gaps is the hunks of the fold's fixups that lack their context behind
-	// their targets (ContextGaps): a stop at one of those fixups says so.
+	// their targets (AnalyseFixups): a stop at one of those fixups says so.
 	Gaps []ContextGap
 	// Content is the content check of an edit run at the end of its list,
 	// before the line's branch moves: given the rebased tip, the edit as the

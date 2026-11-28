@@ -160,7 +160,7 @@ generating types from it:
 | `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | 1.12.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
-| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.19.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.20.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
 | `wt sync move --json` | [`schema/sync-move.v1.json`](../schema/sync-move.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-move.v1.json` |
 | `wt sync rebase\|resume\|undo\|steps\|push --json` | [`schema/sync-run.v2.json`](../schema/sync-run.v2.json) | 2.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v2.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
@@ -1807,6 +1807,17 @@ is what it does. Without `--autosquash` `fold` is null, and with `--onto` too,
 except (since 1.19.0) for a line with a `move!` commit: then `fold` is what the
 run does as it replays the line onto the target `onto` names, `fold.base` the
 line's own base, and every layer is re-pointed or held.
+Since 1.20.0 `fold` also sums up the fixups, one per `fixup!`, `squash!` or
+`amend!` commit of `fold.folds` (`fold.fixups`; a `move!` commit is none), by
+what the analysis behind `stack.contextGaps` finds of each: `appliesAtTarget`,
+`aheadOfContext`, `conflicts` and `notAnalysed`. They say what the fold of the
+line on its own base does, without the conflict strategies of `.wt-sync.yaml`.
+`fold.analysis` says how to read them: `done`, the four add up to `fixups`;
+`failed`, the analysis failed as a whole, the four are 0 and
+`stack.contextUnchecked` says why; `none`, there is nothing to sum up: no fixup
+commit in `fold.folds`, which includes every refused fold, whose counts are all
+0 even when the analysis ran or failed. `stack.contextGaps` and
+`stack.contextUnchecked` stay filled on a refused fold.
 Since 1.17.0 each of `fold.folds` has a `kind`: `fold` for a `fixup!`, `squash!`
 or `amend!` commit, `move` for a `move!` commit, whose `move` names the source
 commit, its layer and the part it moves into `target`: whole `paths`, and since
@@ -2019,7 +2030,7 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `stack.push.branches[].why` | string \| null | yes | For an outcome other than pushed, what git said. Null for pushed. |
 | `fold` | object \| null | yes | Since 1.15.0: for --stack --autosquash with no --onto, the fold a run makes in place on the line's own base: which fixup folds into which commit and layer, and which layers change. The worktrees' class, behind, stops and verdict still describe a rebase onto trunk, which that run does not make. Since 1.19.0 also filled for --stack --autosquash --onto when the line has a move! commit: the fold that run makes as it replays the line onto the target (onto). Null for any other look. |
 | `fold.base` | string, matching `^[0-9a-f]{40,64}$` | yes | The line's own base, which a fold in place stays on: stack.base. |
-| `fold.refusal` | string \| null | yes | Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, a declaration the line cannot take, or (since 1.17.0) a move! commit the fold cannot take: its target or source does not name one commit below it, a path the source does not change, a range that splits a hunk or selects none (since 1.18.0), a hunk two move! commits take, the whole source in one move, a part that does not apply at the target or would land elsewhere than the source has it, a fold that does not merge clean or would end in another tree with it. Also what keeps the run off the line or its worktree: no layer branch, tracked changes, a busy agent session, its own remote, a need of a step it may run that does not answer. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty. |
+| `fold.refusal` | string \| null | yes | Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, a declaration the line cannot take, or (since 1.17.0) a move! commit the fold cannot take: its target or source does not name one commit below it, a path the source does not change, a range that splits a hunk or selects none (since 1.18.0), a hunk two move! commits take, the whole source in one move, a part that does not apply at the target or would land elsewhere than the source has it, a fold that does not merge clean or would end in another tree with it. Also what keeps the run off the line or its worktree: no layer branch, tracked changes, a busy agent session, its own remote, a need of a step it may run that does not answer. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty, and since 1.20.0 analysis is none and the counts are 0. |
 | `fold.folds` | array of object | yes | Every fixup!, squash! or amend! commit of the line with the commit it folds into, and since 1.17.0 every move! commit with the commit its part goes into, oldest first. A fixup whose name finds no commit, or more than one, is left out: the run refuses it. |
 | `fold.folds[].kind` | `"fold"` \| `"move"` | yes | Since 1.17.0: fold for a fixup!, squash! or amend! commit; move for a move! commit, which folds part of a later commit (move) into target. |
 | `fold.folds[].fixup` | string, matching `^[0-9a-f]{40,64}$` | yes | The fixup!, squash!, amend! or move! commit. |
@@ -2037,6 +2048,12 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `fold.folds[].move.lines[].path` | string | yes |  |
 | `fold.folds[].move.lines[].from` | integer, at least 1 | yes |  |
 | `fold.folds[].move.lines[].to` | integer, at least 1 | yes |  |
+| `fold.analysis` | `"done"` \| `"failed"` \| `"none"` | yes | Since 1.20.0: whether the fixups of folds were analysed. done: the four outcome counts add up to fixups. failed: the analysis failed as a whole, the outcome counts are 0 and stack.contextUnchecked says why. none: no summary, because folds has no fixup commit (a refused fold, which is none even when the analysis ran or failed, or a line with no fixup!, squash! or amend! commit). |
+| `fold.fixups` | integer, at least 0 | yes | Since 1.20.0: the fixup!, squash! and amend! commits in folds, one each whatever their hunks; no move! commit. |
+| `fold.appliesAtTarget` | integer, at least 0 | yes | Since 1.20.0: the fixups the fold of the line on its own base applies behind their targets. .wt-sync.yaml conflict strategies are not consulted. One may still have a hunk in stack.contextGaps, for a run onto another base. |
+| `fold.aheadOfContext` | integer, at least 0 | yes | Since 1.20.0: the fixups that fold does not apply because a hunk needs a later commit of the line; stack.contextGaps names the hunks. |
+| `fold.conflicts` | integer, at least 0 | yes | Since 1.20.0: the fixups that fold first conflicts at, with no later commit that explains it. .wt-sync.yaml may resolve the file in a run. |
+| `fold.notAnalysed` | integer, at least 0 | yes | Since 1.20.0: the fixups wt cannot say this of, such as one reached only after a stop, or any on a line with a move! commit. The look's text names each with its reason. |
 | `fold.unchanged` | array of string | yes | The layers whose commits all lie below every fold target: the fold leaves them as they are. All layers when there is no fold, none with --alone. |
 | `fold.repointed` | array of string | yes | The layers that get new commits, bottom first: not those in held. |
 | `fold.held` | array of object | yes | The layers the fold would change that the run leaves on their old commits: one a worktree holds (dirty, a process, a rebase), or every layer with --alone. |
@@ -3419,3 +3436,4 @@ change made it.
 | `sync-move` 1.0.0 | `wt sync move --json`, the `move!` commit written or why none was |
 | `sync` 1.18.0, `sync-run` 1.29.0 | `lines` on a fold's moves: the line ranges a `move!` commit moves (`Move-Lines`), beside `paths`, the paths moved whole |
 | `sync-run` 2.0.0 | a new major. [The summary](#detail--the-summary-and---full) is the default: `stack.layers`, `stack.sideBranches`, `stack.push.branches` and `layerSteps` hold only the rows that need attention, and `timings.slowest` is empty; `--full` holds every row. New in both forms: `detail`, `stack.counts` and `stack.pushLaterCommand`. The object is written on one line |
+| `sync` 1.20.0 | `analysis`, `fixups`, `appliesAtTarget`, `aheadOfContext`, `conflicts` and `notAnalysed` on the look's `fold`: how many fixups there are and what the analysis finds of each |

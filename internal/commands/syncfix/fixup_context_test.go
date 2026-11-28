@@ -2,6 +2,7 @@ package syncfix
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -42,6 +43,20 @@ func checkGaps(t *testing.T, what string, st *syncrun.Stack, s *gittest.ContextL
 	for i, g := range st.ContextGaps {
 		if g.Message != want[i] || g.Fixup != fixups[i] || g.Needs != needs[i] {
 			t.Errorf("%s: gap %d %+v, want %q of %s needing %s", what, i, g, want[i], fixups[i], needs[i])
+		}
+	}
+}
+
+// wantFoldSummary checks the --json fold has the counts want.
+func wantFoldSummary(t *testing.T, f *synccmd.FoldLook, want string) {
+	t.Helper()
+	data, err := json.Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range strings.Split(want, ",") {
+		if !strings.Contains(string(data), field+",") && !strings.Contains(string(data), field+"}") {
+			t.Errorf("fold %s lacks %s", data, field)
 		}
 	}
 }
@@ -126,6 +141,10 @@ func TestFoldNamesTheFixupsAheadOfTheirContext(t *testing.T) {
 			t.Errorf("look: %q not said:\n%s", l, human.String())
 		}
 	}
+	if want := "  fold: 2 fixups: 2 ahead of their context\n"; !strings.Contains(human.String(), want) {
+		t.Errorf("look: %q not said:\n%s", want, human.String())
+	}
+	wantFoldSummary(t, synccmdtest.OverviewJSONWith(t, ctx, look).Fold, `"analysis":"done","fixups":2,"appliesAtTarget":0,"aheadOfContext":2,"conflicts":0,"notAnalysed":0`)
 	// Without --autosquash nothing is folded, so nothing is said.
 	plain := synccmd.SyncOptions{NoFetch: true, Stack: &synccmd.StackLook{Work: gittest.ContextTmp}}
 	if st := synccmdtest.OverviewJSONWith(t, ctx, plain).Stack; st == nil || len(st.ContextGaps) != 0 {
@@ -186,18 +205,19 @@ func TestFoldNamesTheFixupsAheadOfTheirContext(t *testing.T) {
 func probeUnchecked(t *testing.T) string {
 	t.Helper()
 	line := "probe: not analysed"
-	was := syncrun.ContextGapsOf
-	syncrun.ContextGapsOf = func(dir string, commits []string, cfg *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
-		gaps, unchecked, err := was(dir, commits, cfg)
-		return gaps, append(unchecked, line), err
+	was := syncrun.AnalyseFixupsOf
+	syncrun.AnalyseFixupsOf = func(dir string, commits []string, cfg *wtsync.Config) (wtsync.FixupAnalysis, error) {
+		a, err := was(dir, commits, cfg)
+		a.Unchecked = append(a.Unchecked, line)
+		return a, err
 	}
-	t.Cleanup(func() { syncrun.ContextGapsOf = was })
+	t.Cleanup(func() { syncrun.AnalyseFixupsOf = was })
 	return line
 }
 
 // A finished fold keeps, in its report, what it could not analyse.
 func TestAFinishedFoldKeepsWhatItCouldNotAnalyse(t *testing.T) {
-	// Not parallel: it swaps syncrun.ContextGapsOf.
+	// Not parallel: it swaps syncrun.AnalyseFixupsOf.
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -372,19 +392,21 @@ func TestUndoAfterARefusedResumePutsTheLineBack(t *testing.T) {
 // --json has the failure in contextUnchecked, not an empty contextGaps
 // that reads as nothing found.
 func TestTheLookSaysWhenItCannotTellTheContext(t *testing.T) {
-	// Not parallel: it swaps syncrun.ContextGapsOf.
+	// Not parallel: it swaps syncrun.AnalyseFixupsOf.
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
 	ctx, _ := synccmdtest.ContextLine(t, false)
-	was := syncrun.ContextGapsOf
-	syncrun.ContextGapsOf = func(string, []string, *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
-		return nil, nil, errors.New("merge-tree: out of cheese")
+	was := syncrun.AnalyseFixupsOf
+	syncrun.AnalyseFixupsOf = func(string, []string, *wtsync.Config) (wtsync.FixupAnalysis, error) {
+		return wtsync.FixupAnalysis{}, errors.New("merge-tree: out of cheese")
 	}
-	t.Cleanup(func() { syncrun.ContextGapsOf = was })
+	t.Cleanup(func() { syncrun.AnalyseFixupsOf = was })
 	look := synccmd.SyncOptions{NoFetch: true, Stack: &synccmd.StackLook{Work: gittest.ContextTmp, Autosquash: true}}
 	note := "which fixups lack their context could not be read: merge-tree: out of cheese"
-	st := synccmdtest.OverviewJSONWith(t, ctx, look).Stack
+	o := synccmdtest.OverviewJSONWith(t, ctx, look)
+	wantFoldSummary(t, o.Fold, `"analysis":"failed","fixups":1,"appliesAtTarget":0,"aheadOfContext":0,"conflicts":0,"notAnalysed":0`)
+	st := o.Stack
 	if st == nil || len(st.ContextUnchecked) != 1 || !strings.Contains(st.ContextUnchecked[0], note) {
 		t.Errorf("look --json: %+v, want the failure in contextUnchecked", st)
 	}
@@ -394,5 +416,8 @@ func TestTheLookSaysWhenItCannotTellTheContext(t *testing.T) {
 	}
 	if !strings.Contains(human.String(), "note: "+note) {
 		t.Errorf("look: the failure is not said:\n%s", human.String())
+	}
+	if want := "  fold: which fixups apply could not be analysed: merge-tree: out of cheese\n"; !strings.Contains(human.String(), want) {
+		t.Errorf("look: %q not said:\n%s", want, human.String())
 	}
 }

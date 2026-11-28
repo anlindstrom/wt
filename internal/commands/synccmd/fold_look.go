@@ -30,11 +30,12 @@ type FoldLook struct {
 	Base string `json:"base"`
 	// Refusal is why the run refuses the fold, the words it refuses with;
 	// null when it does not. When set, Folds, Unchanged, Repointed and Held
-	// are all empty.
+	// are all empty and the summary is withheld.
 	Refusal *string `json:"refusal"`
 	// Folds is every fixup with the commit and layer it folds into, oldest
 	// fixup first. A fixup above the top layer is on the line's own branch.
 	Folds []FoldLookPair `json:"folds"`
+	FoldLookSummary
 	// Unchanged is the layers below every fold target: the fold leaves their
 	// commits as they are.
 	Unchanged []string `json:"unchanged"`
@@ -43,6 +44,115 @@ type FoldLook struct {
 	// Held is the layers the run leaves on their old commits although the
 	// fold changes them: a worktree holds them, or --alone.
 	Held []FoldLookHeld `json:"held"`
+}
+
+// FoldLookSummary counts the fixup commits of Folds, no move! commit, by
+// what the analysis found of each.
+type FoldLookSummary struct {
+	// Analysis is done; failed, when none could be analysed; or none, for a
+	// refused fold or one with no fixup.
+	Analysis string `json:"analysis"`
+	// Fixups is the fixup commits in Folds. Done, the four outcome counts add
+	// up to it; failed, they are 0.
+	Fixups          int `json:"fixups"`
+	AppliesAtTarget int `json:"appliesAtTarget"`
+	AheadOfContext  int `json:"aheadOfContext"`
+	Conflicts       int `json:"conflicts"`
+	NotAnalysed     int `json:"notAnalysed"`
+	// listed is the fixups the printed summary names, oldest first, and failed
+	// why the analysis failed.
+	listed []wtsync.FixupOutcome
+	failed error
+}
+
+// The values of FoldLookSummary.Analysis.
+const (
+	foldAnalysisDone   = "done"
+	foldAnalysisFailed = "failed"
+	foldAnalysisNone   = "none"
+)
+
+// summariseFixups sums up what read found of the fixups of folds.
+func summariseFixups(folds []FoldLookPair, read *syncrun.FixupsRead) FoldLookSummary {
+	var fixups []string
+	for _, p := range folds {
+		if p.Kind == foldKindFold {
+			fixups = append(fixups, p.Fixup)
+		}
+	}
+	sum := FoldLookSummary{Analysis: foldAnalysisNone, Fixups: len(fixups)}
+	switch {
+	case len(fixups) == 0 || read == nil:
+		return sum
+	case read.Err != nil:
+		sum.Analysis, sum.failed = foldAnalysisFailed, read.Err
+		return sum
+	}
+	sum.Analysis = foldAnalysisDone
+	found := map[string]wtsync.FixupOutcome{}
+	for _, o := range read.Outcomes {
+		found[o.Fixup] = o
+	}
+	for _, sha := range fixups {
+		o, ok := found[sha]
+		if !ok {
+			o = wtsync.FixupOutcome{Fixup: sha, State: wtsync.FixupNotAnalysed, Why: "the analysis says nothing of it"}
+		}
+		switch o.State {
+		case wtsync.FixupApplies:
+			sum.AppliesAtTarget++
+		case wtsync.FixupAheadOfContext:
+			sum.AheadOfContext++
+		case wtsync.FixupConflicts:
+			sum.Conflicts++
+			sum.listed = append(sum.listed, o)
+		default:
+			sum.NotAnalysed++
+			sum.listed = append(sum.listed, o)
+		}
+	}
+	return sum
+}
+
+// printSummary writes the summary line and, under it, each fixup that
+// conflicts or is not analysed.
+func (sum FoldLookSummary) printSummary(w io.Writer) {
+	switch sum.Analysis {
+	case foldAnalysisNone:
+		return
+	case foldAnalysisFailed:
+		fmt.Fprintf(w, "  fold: which fixups apply could not be analysed: %s\n", kit.OneLine(sum.failed.Error()))
+		return
+	}
+	total := kit.Count(sum.Fixups, "fixup")
+	switch {
+	case sum.AppliesAtTarget == 1 && sum.Fixups == 1:
+		fmt.Fprintf(w, "  fold: %s, applies at its target\n", total)
+	case sum.AppliesAtTarget == sum.Fixups:
+		fmt.Fprintf(w, "  fold: %s, each applies at its target\n", total)
+	default:
+		var parts []string
+		part := func(n int, one, many string) {
+			switch {
+			case n == 1:
+				parts = append(parts, "1 "+one)
+			case n > 1:
+				parts = append(parts, fmt.Sprintf("%d %s", n, many))
+			}
+		}
+		part(sum.AppliesAtTarget, "applies at its target", "apply at their target")
+		part(sum.AheadOfContext, "ahead of its context", "ahead of their context")
+		part(sum.Conflicts, "conflicts", "conflict")
+		part(sum.NotAnalysed, "not analysed", "not analysed")
+		fmt.Fprintf(w, "  fold: %s: %s\n", total, strings.Join(parts, ", "))
+	}
+	for _, o := range sum.listed {
+		what := "conflicts"
+		if o.State != wtsync.FixupConflicts {
+			what = "not analysed: " + strings.TrimPrefix(kit.OneLine(o.Why), "not analysed: ")
+		}
+		fmt.Fprintf(w, "    %s %s\n", git.ShortID(o.Fixup, 7), what)
+	}
 }
 
 // FoldLookHeld is a layer the run leaves where it is, and why.
@@ -186,7 +296,8 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoT
 	if err != nil {
 		return nil, err
 	}
-	fl := &FoldLook{commits: commits, Base: s.Base, Folds: []FoldLookPair{}, Unchanged: []string{}, Repointed: []string{}, Held: []FoldLookHeld{}}
+	fl := &FoldLook{commits: commits, Base: s.Base, Folds: []FoldLookPair{}, Unchanged: []string{}, Repointed: []string{}, Held: []FoldLookHeld{},
+		FoldLookSummary: summariseFixups(nil, nil)}
 	onto, upstream := s.Base, ""
 	if target != nil {
 		fl.onto, onto, upstream = target, target.SHA, target.Upstream
@@ -238,6 +349,7 @@ func foldLookOf(main string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoT
 		lowest = min(lowest, at[m.Target])
 	}
 	slices.SortStableFunc(fl.Folds, func(a, b FoldLookPair) int { return at[a.Fixup] - at[b.Fixup] })
+	fl.FoldLookSummary = summariseFixups(fl.Folds, s.Fixups)
 	for _, l := range s.Layers {
 		changes := onto != s.Base || len(fl.Folds) > 0 && l.Commits > lowest
 		switch {
@@ -285,6 +397,7 @@ func printFoldLook(w io.Writer, fl *FoldLook) {
 			fmt.Fprintf(w, "      moves %s of %s %s  (layer %s)\n", wtsync.MoveWhat(m.Paths, m.Lines), git.ShortID(m.Source, 7), kit.OneLine(m.SourceSubject), m.SourceLayer)
 		}
 	}
+	fl.printSummary(w)
 	if moves > 0 {
 		fmt.Fprintf(w, "  a move! commit needs the run's checks at its target and source: --each-commit=targets\n")
 	}
@@ -411,6 +524,7 @@ func asksFirst(a wtsync.Assessment) string {
 func (fl *FoldLook) refuse(why string) {
 	fl.Refusal, fl.analysis = &why, wtsync.Folds{}
 	fl.Folds, fl.Unchanged, fl.Repointed, fl.Held = []FoldLookPair{}, []string{}, []string{}, []FoldLookHeld{}
+	fl.FoldLookSummary = summariseFixups(nil, nil)
 }
 
 // foldVerdict is runVerdict for a fold in place, with the verdict the run

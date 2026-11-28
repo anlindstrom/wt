@@ -248,7 +248,7 @@ func stackRecordPath(mainRoot string, epoch int64) (string, error) {
 	return filepath.Join(common, "wt-sync-stack", strconv.FormatInt(epoch, 10)+".json"), nil
 }
 
-// RunContext is a fold's ContextGaps, as its run read them.
+// RunContext is a fold's context gaps, as its run read them.
 type RunContext struct {
 	Gaps      []ContextGap `json:"gaps"`
 	Unchecked []string     `json:"unchecked"`

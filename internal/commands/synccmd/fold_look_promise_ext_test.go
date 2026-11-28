@@ -133,6 +133,10 @@ func TestFoldLookProceedsWhereTheLineIsCurrentWithTrunk(t *testing.T) {
 	if strings.Contains(got, "skipped") || !strings.Contains(got, "folds the line in place") {
 		t.Errorf("the look does not promise the fold:\n%s", got)
 	}
+	if want := "  fold: 1 fixup, applies at its target"; summaryBlock(got) != want {
+		t.Errorf("summary %q, want %q:\n%s", summaryBlock(got), want, got)
+	}
+	wantSummary(t, synccmdtest.OverviewJSONWith(t, ctx, summaryLook()).Fold, "done 1 1 0 0 0")
 	old := tipsOf(t, main, "tmp/low", "low1")
 	opts := synccmdtest.NoAgents()
 	opts.Stack = &synccmd.StackOptions{Autosquash: true}

@@ -106,12 +106,6 @@ type FixupAnalysis struct {
 	Fixups []FixupOutcome
 }
 
-// ContextGaps is the gaps AnalyseFixups finds, and its notes.
-func ContextGaps(dir string, commits []string, cfg *Config) ([]ContextGap, []string, error) {
-	a, err := AnalyseFixups(dir, commits, cfg)
-	return a.Gaps, a.Unchecked, err
-}
-
 // AnalyseFixups says what each fixup of the line comes to in the fold, names
 // every hunk that lacks its context at its target, and notes what of that it
 // could not tell. commits is the line, oldest first, and cfg the declaration
