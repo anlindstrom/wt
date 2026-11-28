@@ -10,6 +10,25 @@ would want read out to them; the full story is in git history.
 `fold: 7 fixups, each applies at its target`, or counts the ones ahead of their context, in
 conflict or not analysed, naming the last two. `--json` has the same counts on `fold` (sync 1.20.0).
 
+## 2026-11-28 09:43 — A stack push no longer refuses over leases a hand push made stale
+
+When unpushed `--stack` runs took different leases for a branch and the remote is at the newest
+run's, `wt sync push --stack` (and a run's own push) now goes over that lease and says so in one
+line. Anything else is refused in one line, printed once; `--dry-run` lists the branches, and now
+asks git for a dry run of the push and fails where git would refuse it.
+
+## 2026-11-28 09:43 — A `--stack` run no longer prints a push that publishes your local top branch
+
+The run ends with `push: wt sync push <work> --stack`. A `git push` of the line's own branch is
+printed only when the run saw its remote branch, a destination is recorded, or with `--push-line`.
+A record no push takes ends pointing at `--dry-run` instead.
+
+## 2026-11-28 09:43 — A new layer with no push target is told the command its siblings imply
+
+When the other layers' recorded targets follow one pattern and the matching remote branch exists,
+the run prints the `wt sync push-to --branch` command, and the count of what is left unpushed
+names every layer with nowhere to push. Nothing is recorded for you.
+
 ## 2026-11-28 06:52 — `wt sync` run results are summaries by default
 
 `--json` on `wt sync rebase`, `resume`, `undo`, `steps` and `push` now holds only the stack rows

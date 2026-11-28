@@ -151,33 +151,6 @@ func TestPushLaterDryRunNamesTheRunEachBranchCameFrom(t *testing.T) {
 	}
 }
 
-// The remote moved between A and B: B's lease for s4 is not A's, so s4 is
-// conflicted. The push is refused, naming it, and nothing moves.
-func TestPushLaterRefusesABranchWhoseLeasesDisagree(t *testing.T) {
-	t.Parallel()
-	skipShort(t)
-	p := newPushedLine(t)
-	main := p.ctx.Repo.MainRoot
-	p.runAt(t, epochA)
-	// The remote's s4 goes back a commit, as if somebody reset it, and B
-	// fetches that: B's lease for s4 is not A's.
-	testkit.GitIn(t, main, "push", "-q", "--force", p.bare, "refs/heads/s4~1:refs/heads/s4")
-	testkit.GitIn(t, main, "fetch", "-q", "origin")
-	p.runAt(t, epochB, "s4")
-	before, pushes := bareRefs(t, p.bare), pushCount(t, p.hooks)
-	human, err := p.pushLater(t, false)
-	if err == nil || !strings.Contains(human+err.Error(), "s4") || !strings.Contains(human+err.Error(), "conflict") {
-		t.Fatalf("err %v, want a refusal naming s4 as conflicted\n%s", err, human)
-	}
-	if bareRefs(t, p.bare) != before || pushCount(t, p.hooks) != pushes {
-		t.Errorf("something was pushed\n%s", human)
-	}
-	// The record is kept: the same push refuses the same way.
-	if _, err := p.pushLater(t, false); err == nil || strings.Contains(err.Error(), "nothing recorded") {
-		t.Errorf("the record was dropped by a refused push: %v", err)
-	}
-}
-
 // wt sync undo takes back run B and only B's contribution: A's tips are what
 // the line is at and what the push sends.
 func TestPushLaterAfterUndoOfTheNewestRunSendsTheEarlierOnes(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -165,12 +166,18 @@ func (r *PushRecord) LeftOut() []PushLeft {
 }
 
 // MergedItem is one branch of the push the record makes: its entry from the
-// oldest run that moved it for the lease and the newest for the tip.
+// newest run that moved it, over the lease of the oldest where every run took
+// the same one.
 type MergedItem struct {
 	PushRecordItem
-	// LeaseFrom is the run the lease is from, the oldest that moved the
-	// branch; TipFrom is the run the tip is from, the newest.
+	// LeaseFrom is the run the lease is from: the oldest that moved the
+	// branch, or the newest when the leases differ. TipFrom is the run the tip
+	// is from, the newest.
 	LeaseFrom, TipFrom RunRef
+	// LeasesDiffer says what each run's lease was, "" when they are one. The
+	// item's lease is then the newest run's, which is good only while the
+	// remote is at it: the older ones are stale after a push made since.
+	LeasesDiffer string
 }
 
 // RunRef names a run of a record.
@@ -188,10 +195,10 @@ type PushConflict struct {
 // Merged is the push the record's runs add up to, branches in the order they
 // were first moved (the line's own last), and the branches that cannot be
 // pushed. A branch moved by one run has that run's entry. One moved by
-// several goes over the oldest run's lease to the newest run's tip, and only
-// while every run agrees on where it pushes and on the lease: a different
-// lease says the remote moved between the runs, which no one run's lease
-// covers, and the branch is a PushConflict.
+// several goes to the newest run's tip, and only while every run agrees on
+// where it pushes: otherwise it is a PushConflict. Over the oldest run's lease
+// when the runs took one lease; over the newest's when they did not (see
+// MergedItem.LeasesDiffer).
 func (r *PushRecord) Merged() ([]MergedItem, []PushConflict) {
 	var order []string
 	by := map[string][]MergedItem{}
@@ -208,12 +215,19 @@ func (r *PushRecord) Merged() ([]MergedItem, []PushConflict) {
 	var conflicts []PushConflict
 	for _, b := range order {
 		entries := by[b]
-		oldest, newest := entries[0], entries[len(entries)-1]
-		merged := newest
-		merged.Lease, merged.LeaseFrom = oldest.Lease, oldest.LeaseFrom
-		if why := disagreement(entries); why != "" {
+		if why := destinationsDiffer(entries); why != "" {
 			conflicts = append(conflicts, PushConflict{Branch: b, Why: why})
 			continue
+		}
+		oldest, merged := entries[0], entries[len(entries)-1]
+		if slices.ContainsFunc(entries, func(e MergedItem) bool { return e.Lease != oldest.Lease }) {
+			var leases []string
+			for _, e := range entries {
+				leases = append(leases, fmt.Sprintf("run %d over %s", e.TipFrom.Epoch, leaseText(e.Lease)))
+			}
+			merged.LeasesDiffer = strings.Join(leases, ", ")
+		} else {
+			merged.LeaseFrom = oldest.LeaseFrom
 		}
 		items = append(items, merged)
 	}
@@ -230,8 +244,9 @@ func (r *PushRecord) Merged() ([]MergedItem, []PushConflict) {
 	return items, conflicts
 }
 
-// disagreement is why the runs' entries for one branch cannot be one push, or "".
-func disagreement(entries []MergedItem) string {
+// destinationsDiffer is why the runs' entries for one branch name more than
+// one place to push it, or "".
+func destinationsDiffer(entries []MergedItem) string {
 	first := entries[0]
 	for _, e := range entries[1:] {
 		switch {
@@ -239,8 +254,6 @@ func disagreement(entries []MergedItem) string {
 			return fmt.Sprintf("run %d pushes it to %s/%s, run %d to %s/%s", first.TipFrom.Epoch, first.Remote, first.RemoteBranch, e.TipFrom.Epoch, e.Remote, e.RemoteBranch)
 		case e.Endpoint != first.Endpoint:
 			return fmt.Sprintf("%s pushed to %s when run %d took its lease and to %s for run %d", e.Remote, first.Endpoint, first.TipFrom.Epoch, e.Endpoint, e.TipFrom.Epoch)
-		case e.Lease != first.Lease:
-			return fmt.Sprintf("the remote moved between run %d and run %d: their leases on it differ (%s, %s)", first.TipFrom.Epoch, e.TipFrom.Epoch, leaseText(first.Lease), leaseText(e.Lease))
 		}
 	}
 	return ""

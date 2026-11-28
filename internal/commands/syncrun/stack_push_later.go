@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -102,7 +103,8 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 			fmt.Fprintf(w, "  note: the record of what is left for a later push could not be %s (%v)\n", doing, err)
 		}
 		if mine {
-			s.recordNote = fmt.Sprintf("the line's push record %s; wt sync push %s --stack --dry-run shows what is left to push now", why, s.work)
+			s.recordNote = fmt.Sprintf("the line's push record %s; %s shows what is left to push now", why, stackPushCommand(s.work, "--dry-run"))
+			fmt.Fprintf(w, "  note: %s\n", s.recordNote)
 		}
 		return
 	}
@@ -111,16 +113,66 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 	if mine {
 		s.nameLater(next, left)
 	}
-	if next != nil {
+	switch {
+	case next != nil:
 		fmt.Fprintf(w, "  ↪ %s\n", s.laterLine(next, left))
+	case len(s.nowhere) > 0:
+		fmt.Fprintf(w, "  ↪ %s with nowhere to push: %s\n", kit.Count(len(s.nowhere), "moved layer"), strings.Join(s.nowhere, ", "))
 	}
+}
+
+// SayPushLater ends what a run or a resume prints about its push with the
+// command that pushes what it left in the record, once SettleStackPush has
+// checked there is a record and it holds something that command sends; for a
+// record no push takes, with the command that says why.
+func SayPushLater(w io.Writer, s *Stack) {
+	switch {
+	case s == nil:
+	case s.blocked:
+		fmt.Fprintf(w, "no push takes the record: %s lists why\n", stackPushCommand(s.work, "--dry-run"))
+	case s.pushLater != nil:
+		fmt.Fprintf(w, "push: %s\n", stackPushCommand(s.work))
+	}
+}
+
+// stackPushCommand is wt sync push <work> --stack with flags, as printed for
+// pasting into a shell. A work name that reads as a flag goes last, after --.
+func stackPushCommand(work string, flags ...string) string {
+	args := append([]string{"--stack"}, flags...)
+	if strings.HasPrefix(work, "-") {
+		args = append(args, "--", workArg(work))
+	} else {
+		args = append([]string{workArg(work)}, args...)
+	}
+	return "wt sync push " + strings.Join(args, " ")
+}
+
+// undoCommand is wt sync undo <work>, as stackPushCommand prints a command.
+func undoCommand(work string) string {
+	if strings.HasPrefix(work, "-") {
+		return "wt sync undo -- " + workArg(work)
+	}
+	return "wt sync undo " + workArg(work)
+}
+
+// workArg is a work name as a printed command takes it: quoted where a shell
+// would read it as anything but itself.
+func workArg(work string) string {
+	plain := func(r rune) bool {
+		return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_./@+=:,-", r)
+	}
+	// zsh expands a word that starts with = to a command's path.
+	if work != "" && !strings.HasPrefix(work, "=") && strings.IndexFunc(work, func(r rune) bool { return !plain(r) }) < 0 {
+		return work
+	}
+	return kit.ShellQuote(work)
 }
 
 // recoveryNote is what a reader of the result has to be told about a record
 // the result cannot name, "" when there is nothing.
 func (s *Stack) recoveryNote() string {
 	if s.kept != nil && !s.settled {
-		return fmt.Sprintf("the run ended before it settled its push; wt sync push %s --stack --dry-run shows what is left to push", s.work)
+		return fmt.Sprintf("the run ended before it settled its push; %s shows what is left to push", stackPushCommand(s.work, "--dry-run"))
 	}
 	return s.recordNote
 }
@@ -129,19 +181,39 @@ func (s *Stack) recoveryNote() string {
 // that push sends: the line's own branch, left out when it would create its
 // remote branch, is named with the flag that includes it.
 func (s *Stack) laterLine(next *wtsync.PushRecord, left []string) string {
+	var line string
 	sends := laterSends(next, left)
-	if len(sends) == 0 {
-		return fmt.Sprintf("%s kept for wt sync push %s --stack --push-line", next.Branch, s.work)
+	switch conflicts := destinationConflicts(next); {
+	case len(conflicts) > 0:
+		line = fmt.Sprintf("%s: the recorded runs push %s to different remote branches or endpoints", s.unpushedLine(left), strings.Join(conflicts, ", "))
+	case len(sends) == 0:
+		line = fmt.Sprintf("%s kept for %s", next.Branch, stackPushCommand(s.work, "--push-line"))
+	default:
+		line = fmt.Sprintf("%s: %s pushes %s later", s.unpushedLine(sends), stackPushCommand(s.work), itOrThem(len(sends)))
+		if len(sends) < len(left) {
+			line += fmt.Sprintf("; the line's own branch, %s, goes with --push-line", next.Branch)
+		}
 	}
-	pronoun := "it"
-	if len(sends) > 1 {
-		pronoun = "them"
+	return line + s.nowhereClause()
+}
+
+// nowhereClause ends the line that counts what is left with the moved layers
+// that count leaves out, as nothing says where they push; "" with none.
+func (s *Stack) nowhereClause() string {
+	if len(s.nowhere) == 0 {
+		return ""
 	}
-	line := fmt.Sprintf("%s: wt sync push %s --stack pushes %s later", s.unpushedLine(sends), s.work, pronoun)
-	if len(sends) < len(left) {
-		line += fmt.Sprintf("; the line's own branch, %s, goes with --push-line", next.Branch)
+	return fmt.Sprintf("; %d more with nowhere to push: %s", len(s.nowhere), strings.Join(s.nowhere, ", "))
+}
+
+// destinationConflicts is the branches rec's runs push to more than one place.
+func destinationConflicts(rec *wtsync.PushRecord) []string {
+	_, conflicts := rec.Merged()
+	out := make([]string, len(conflicts))
+	for i, c := range conflicts {
+		out[i] = c.Branch
 	}
-	return line
+	return out
 }
 
 // laterSends is what of left a plain wt sync push --stack sends: all of it
@@ -159,6 +231,7 @@ func laterSends(next *wtsync.PushRecord, left []string) []string {
 // there is no command, and the push says it is left out, unless it tried that
 // branch.
 func (s *Stack) nameLater(rec *wtsync.PushRecord, left []string) {
+	s.blocked = len(destinationConflicts(rec)) > 0
 	if len(laterSends(rec, left)) > 0 {
 		s.pushLater = []string{"wt", "sync", "push", s.work, "--stack"}
 		return
@@ -241,14 +314,15 @@ type LaterOptions struct {
 
 // PushRecorded is wt sync push <work> --stack: the push a --stack run left
 // for later, from the record it kept for the line whose own branch is branch.
-// Nothing is read from a remote and nothing fetched: each branch goes over the
-// lease the run took. It refuses, before anything is pushed, a line with no
-// record, a branch that is no longer at the tip the run left it (somebody
-// worked on it since), and a remote that no longer pushes where the run
-// recorded. A record several unpushed runs kept is pushed as one: each branch
-// over the oldest run's lease that moved it, to the newest run's tip, and a
-// branch whose runs disagree is refused with the whole push. The returned
-// Stack carries the push, for --json.
+// Nothing is fetched: each branch goes over a lease a run took. A remote is
+// read for a branch whose runs took different ones, and by a dry run, which
+// holds every branch to what git will. It refuses, before anything is pushed, a line with no record, a branch that is no longer
+// at the tip the run left it (somebody worked on it since), and a remote that
+// no longer pushes where the run recorded. A record several unpushed runs kept
+// is pushed as one: each branch to the newest run's tip over the oldest run's
+// lease that moved it, or over the newest's where the leases differ and the
+// remote is at it; any other branch whose runs disagree is refused with the
+// whole push. The returned Stack carries the push, for --json.
 func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts LaterOptions) (*Stack, error) {
 	main := ctx.Repo.MainRoot
 	rec, ok, err := wtsync.ReadPushRecord(main, branch)
@@ -267,12 +341,16 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 			s.Push = &StackPush{Branches: []StackPushed{}, Conflicted: conflicted}
 		}
 		fmt.Fprintf(w, "  ✗ not pushed: %s; nothing was pushed, and the record is kept\n", why)
+		if len(conflicted) > 0 {
+			return s, saidRefusal{why}
+		}
 		return s, errors.New("not pushed: " + why)
 	}
-	items, merged, conflicts, why := recordedItems(ctx, rec)
-	for _, c := range conflicts {
+	read := recordedItems(ctx, rec)
+	for _, c := range read.conflicts {
 		conflicted = append(conflicted, StackConflicted{Branch: c.Branch, Why: c.Why})
 	}
+	items, merged, why := read.items, read.merged, read.why
 	// The line's own branch is left out when pushing it would create its
 	// remote branch, unless asked for.
 	isLeftOut := func(it stackItem) bool { return it.Top && it.Creates() && !opts.PushLine }
@@ -296,17 +374,22 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 			}
 		}
 	}
-	if opts.DryRun && len(conflicts) > 0 {
-		// The refusal says why; what else would go is shown first.
-		printWouldPush(w, pushing, merged, len(runs) > 1)
+	if opts.DryRun {
+		for _, c := range read.conflicts {
+			fmt.Fprintf(w, "  ✗ %s: %s\n", c.Branch, c.Why)
+		}
 	}
 	if why != "" {
 		return refuse(why)
 	}
 	if opts.DryRun {
-		printWouldPush(w, pushing, merged, len(runs) > 1)
+		going, err := predictPushes(w, main, byRemote(pushing))
+		if notice := read.staleNotice(true, going); notice != "" {
+			fmt.Fprintf(w, "  %s\n", notice)
+		}
+		printWouldPush(w, slices.DeleteFunc(slices.Clone(pushing), func(it stackItem) bool { return !going[it.Remote] }), merged, len(runs) > 1)
 		fmt.Fprintf(w, "  --dry-run: nothing pushed\n")
-		return s, nil
+		return s, err
 	}
 	if len(pushing) == 0 {
 		fmt.Fprintf(w, "  nothing to push, and the record is kept\n")
@@ -333,13 +416,22 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 		if !ok || now.Rev != rec.Rev || now.Epoch != rec.Epoch || !now.Written.Equal(rec.Written) {
 			return refuse("the record changed while the question waited")
 		}
-		if items, merged, _, why = recordedItems(ctx, rec); why != "" {
-			return refuse(why)
+		again := recordedItems(ctx, rec)
+		if again.why != "" {
+			conflicted = conflicted[:0]
+			for _, c := range again.conflicts {
+				conflicted = append(conflicted, StackConflicted{Branch: c.Branch, Why: c.Why})
+			}
+			return refuse(again.why)
 		}
+		read, items, merged = again, again.items, again.merged
 		pushing = slices.DeleteFunc(slices.Clone(items), isLeftOut)
 		remotes = byRemote(pushing)
 	}
 	fmt.Fprintln(w)
+	if notice := read.staleNotice(false, nil); notice != "" {
+		fmt.Fprintf(w, "  %s\n", notice)
+	}
 	results, allIn := pushRemotes(ctx, w, remotes, work)
 	s.Push = &StackPush{Branches: []StackPushed{}, LineLeftOut: lineWhy, Conflicted: []StackConflicted{}}
 	pushedOK := map[string]bool{}
@@ -367,15 +459,111 @@ func PushRecorded(ctx *kit.Context, w io.Writer, work, branch string, opts Later
 	return s, nil
 }
 
+// predictPushes asks git for a dry run of each remote's atomic push, over the
+// leases and refspecs the push would carry. It says what stops each branch of
+// one that would fail, and returns the remotes whose push would go, with an
+// error for the others.
+func predictPushes(w io.Writer, main string, remotes map[string][]stackItem) (map[string]bool, error) {
+	going := map[string]bool{}
+	var failing []string
+	for _, remote := range slices.Sorted(maps.Keys(remotes)) {
+		group := remotes[remote]
+		err := wtsync.PushAtomicDryRun(main, group[0].Endpoint, atomicRefs(group), kit.NetworkTimeout)
+		if err == nil {
+			going[remote] = true
+			continue
+		}
+		reasons := refusals(err)
+		why := pushReason(err)
+		if strings.Contains(err.Error(), noAtomic) {
+			why = "it " + noAtomic + " push"
+		}
+		for _, it := range group {
+			switch r := reasons[it.RemoteBranch]; {
+			case len(reasons) == 0:
+				fmt.Fprintf(w, "  ✗ %s: the push to %s would fail: %s\n", it.Branch, remote, why)
+			case r == "stale info":
+				fmt.Fprintf(w, "  ✗ %s: %s/%s is not at %s, the lease the push goes over (git: stale info)\n", it.Branch, remote, it.RemoteBranch, leaseWord(it.Lease))
+			case r == "" || r == "atomic push failed":
+				fmt.Fprintf(w, "  ✗ %s: not pushed, as %s takes its branches in one atomic push\n", it.Branch, remote)
+			default:
+				fmt.Fprintf(w, "  ✗ %s: %s would refuse it: %s\n", it.Branch, remote, r)
+			}
+		}
+		if len(reasons) > 0 {
+			why = "git rejects it"
+		}
+		failing = append(failing, "to "+remote+", "+why)
+	}
+	if len(failing) > 0 {
+		return going, errors.New("the push would fail: " + strings.Join(failing, "; "))
+	}
+	return going, nil
+}
+
+// saidRefusal is a refusal PushRecorded has printed: it ends the command
+// with a failure and is not printed a second time.
+type saidRefusal struct{ why string }
+
+func (e saidRefusal) Error() string { return "not pushed: " + e.why }
+func (e saidRefusal) Unwrap() error { return kit.ExitError{Code: 1} }
+
+// recordedPush is what a record comes to as a push, read now.
+type recordedPush struct {
+	items  []stackItem
+	merged []wtsync.MergedItem
+	// conflicts are the branches the push is refused for because the runs
+	// disagree about them.
+	conflicts []wtsync.PushConflict
+	// stale are the branches whose push goes over a newer run's lease in place
+	// of older ones, each remote read to be at it.
+	stale []wtsync.MergedItem
+	// why is why the push is refused, "" when it goes.
+	why string
+}
+
+// staleNotice says whose leases replace the stale ones, "" when none do. A
+// remote goes marks out, when it is not nil, is one whose push does not go.
+func (p recordedPush) staleNotice(dryRun bool, goes map[string]bool) string {
+	var runs []int64
+	for _, it := range p.stale {
+		if (goes == nil || goes[it.Remote]) && !slices.Contains(runs, it.LeaseFrom.Epoch) {
+			runs = append(runs, it.LeaseFrom.Epoch)
+		}
+	}
+	slices.Sort(runs)
+	if len(runs) == 0 {
+		return ""
+	}
+	verb := "pushing over"
+	if dryRun {
+		verb = "would push over"
+	}
+	matched, whose := fmt.Sprintf("run %d", runs[0]), fmt.Sprintf("run %d's", runs[0])
+	if n := len(runs); n > 1 {
+		names := make([]string, n)
+		for i, e := range runs {
+			names[i] = fmt.Sprint(e)
+		}
+		matched, whose = "runs "+strings.Join(names[:n-1], ", ")+" and "+names[n-1], "their"
+	}
+	return fmt.Sprintf("older runs' leases are stale: the remote matches %s; %s %s leases", matched, verb, whose)
+}
+
 // recordedItems is the record's branches as a push takes them (see
-// wtsync.PushRecord.Merged), each with the runs it came from, the branches
-// the runs disagree on, and why not when the push is refused: a branch that is
-// no longer at the tip the newest run left it at, a conflicted branch, or a
-// remote that no longer pushes where the leases were taken.
-func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) ([]stackItem, []wtsync.MergedItem, []wtsync.PushConflict, string) {
+// wtsync.PushRecord.Merged), each with the runs it came from, and why not when
+// the push is refused: the runs push a branch to different places, a branch is
+// no longer at the tip the newest run left it at, a remote no longer pushes
+// where the leases were taken, or, for a branch whose runs took different
+// leases, the remote cannot be read or is not at the newest run's.
+func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) recordedPush {
 	main := ctx.Repo.MainRoot
 	merged, conflicts := rec.Merged()
 	var moved, names, reasons []string
+	if n := len(conflicts); n > 0 {
+		reasons = append(reasons, fmt.Sprintf("%s: the recorded runs push %s to different remote branches or endpoints; %s",
+			kit.Count(n, "branch", "branches"), itOrThem(n), forgetAndRunAgain(rec.Work)))
+	}
 	for _, it := range merged {
 		tip, err := git.Run(main, "rev-parse", "--verify", "refs/heads/"+it.Branch)
 		switch {
@@ -391,30 +579,100 @@ func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) ([]stackItem, []wts
 	if len(moved) > 0 {
 		reasons = append(reasons, strings.Join(names, ", ")+" moved since the run: "+strings.Join(moved, "; "))
 	}
-	reasons = append(reasons, unsentLayers(ctx, rec, merged)...)
+	reasons = append(reasons, unsentLayers(ctx, rec, merged, conflicts)...)
 	if unread := runsWithoutLayers(rec); len(unread) > 0 {
-		reasons = append(reasons, "the record of "+strings.Join(unread, ", ")+" was written by a wt that did not keep the line's layers, so it cannot show that every moved layer is in it; push the layers it names by hand over the leases it recorded, or wt sync push "+rec.Work+" --stack --forget drops the record, and a fresh --no-push run records the line again")
+		reasons = append(reasons, "the record of "+strings.Join(unread, ", ")+" was written by a wt that did not keep the line's layers, so it cannot show that every moved layer is in it; push the layers it names by hand over the leases it recorded, or "+stackPushCommand(rec.Work, "--forget")+" drops the record, and a fresh --no-push run records the line again")
+	}
+	out := recordedPush{items: make([]stackItem, len(merged)), merged: merged, conflicts: conflicts}
+	for i, it := range merged {
+		out.items[i] = stackItem{BranchPush: it.BranchPush, New: it.New, Top: it.Top}
 	}
 	if len(conflicts) > 0 {
-		var parts, cn []string
-		for _, c := range conflicts {
-			cn = append(cn, c.Branch)
-			parts = append(parts, c.Why)
-		}
-		reasons = append(reasons, strings.Join(cn, ", ")+" conflicted between the unpushed runs: "+strings.Join(parts, "; ")+
-			"; wt sync push --stack --forget drops the record, and a fresh --no-push run records the line again")
-	}
-	items := make([]stackItem, len(merged))
-	for i, it := range merged {
-		items[i] = stackItem{BranchPush: it.BranchPush, New: it.New, Top: it.Top}
+		reasons = append(reasons, stackPushCommand(rec.Work, "--dry-run")+" lists them")
 	}
 	if len(reasons) > 0 {
-		return items, merged, conflicts, strings.Join(reasons, "; ")
+		out.why = strings.Join(reasons, "; ")
+		return out
 	}
-	if err := checkEndpoints(main, byRemote(items)); err != nil {
-		return nil, merged, conflicts, err.Error()
+	if err := checkEndpoints(main, byRemote(out.items)); err != nil {
+		out.items, out.why = nil, err.Error()
+		return out
 	}
-	return items, merged, conflicts, ""
+	out.settleLeases(main, rec.Work)
+	return out
+}
+
+// settleLeases reads from their remotes the branches whose runs took
+// different leases, all of them before anything is pushed: each must be at
+// the newest run's, which a push made between the runs explains. The push is
+// still leased on that commit, so git refuses a remote that moves after this.
+func (p *recordedPush) settleLeases(main, work string) {
+	disputed := map[string][]wtsync.MergedItem{}
+	for _, it := range p.merged {
+		if it.LeasesDiffer != "" {
+			disputed[it.Remote] = append(disputed[it.Remote], it)
+		}
+	}
+	var off, unread int
+	var unreadWhy []string
+	for _, remote := range slices.Sorted(maps.Keys(disputed)) {
+		group := disputed[remote]
+		names := make([]string, len(group))
+		for i, it := range group {
+			names[i] = it.RemoteBranch
+		}
+		at, err := wtsync.RemoteRefs(main, group[0].Endpoint, names, kit.NetworkTimeout)
+		if err != nil {
+			unreadWhy = append(unreadWhy, fmt.Sprintf("%s could not be read (%s)", remote, pushReason(err)))
+		}
+		for _, it := range group {
+			switch {
+			case err != nil:
+				unread++
+				p.conflicts = append(p.conflicts, wtsync.PushConflict{Branch: it.Branch,
+					Why: fmt.Sprintf("the leases differ (%s), and %s could not be read", it.LeasesDiffer, remote)})
+			case at[it.RemoteBranch] != it.Lease:
+				off++
+				p.conflicts = append(p.conflicts, wtsync.PushConflict{Branch: it.Branch,
+					Why: fmt.Sprintf("the leases differ (%s), and %s/%s is %s", it.LeasesDiffer, remote, it.RemoteBranch, leaseWhere(at[it.RemoteBranch]))})
+			default:
+				p.stale = append(p.stale, it)
+			}
+		}
+	}
+	const differ = "the recorded runs' leases differ and"
+	list := stackPushCommand(work, "--dry-run") + " lists them"
+	switch {
+	case off > 0:
+		p.why = fmt.Sprintf("%s: %s the remote is not at the newest run's", kit.Count(off, "branch", "branches"), differ)
+		if unread > 0 {
+			p.why += fmt.Sprintf("; %d more could not be checked, as %s", unread, strings.Join(unreadWhy, " and "))
+		}
+		p.why += "; " + forgetAndRunAgain(work) + "; " + list
+	case unread > 0:
+		p.why = fmt.Sprintf("%s: %s %s; push again once it can be read; %s", kit.Count(unread, "branch", "branches"), differ, strings.Join(unreadWhy, " and "), list)
+	}
+	if p.why != "" {
+		p.stale = nil
+	}
+}
+
+func leaseWhere(at string) string {
+	if at == "" {
+		return "absent"
+	}
+	return "at " + git.ShortID(at, 7)
+}
+
+func forgetAndRunAgain(work string) string {
+	return stackPushCommand(work, "--forget") + ", then a fresh --no-push run"
+}
+
+func itOrThem(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "them"
 }
 
 // unsentLayers is why the layers the runs name that the push does not send
@@ -424,7 +682,7 @@ func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) ([]stackItem, []wts
 // the stack split on the remote. A layer a run left out is named by the push
 // instead, and one with nowhere to push or no remote branch yet has nothing
 // to be level with.
-func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.MergedItem) []string {
+func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.MergedItem, conflicts []wtsync.PushConflict) []string {
 	main := ctx.Repo.MainRoot
 	own := wtsync.ReadOwnOrUnknown(main, ctx.Config.MainBranch)
 	var reasons []string
@@ -439,10 +697,11 @@ func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.Merg
 			// Left out by the newest run that names it: held, or moved with no
 			// safe push. What an older run left out does not count.
 			leftNow := l.Result == wtsync.MoveHeld || slices.ContainsFunc(runs[i].Left, func(p wtsync.PushLeft) bool { return p.Branch == l.Branch })
-			if l.Branch == rec.Branch || leftNow || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == l.Branch }) {
+			conflicted := slices.ContainsFunc(conflicts, func(c wtsync.PushConflict) bool { return c.Branch == l.Branch })
+			if l.Branch == rec.Branch || leftNow || conflicted || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == l.Branch }) {
 				continue
 			}
-			way := "push " + l.Branch + " first, then push again, or wt sync push " + rec.Work + " --stack --forget drops the record"
+			way := "push " + l.Branch + " first, then push again, or " + stackPushCommand(rec.Work, "--forget") + " drops the record"
 			if why := unsentLayer(ctx, own, l, "the run of "+runLabel(runs[i].Written),
 				"the runs left it unchanged, so it was already off its remote branch before them", way); why != "" {
 				reasons = append(reasons, why)

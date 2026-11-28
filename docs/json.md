@@ -162,7 +162,7 @@ generating types from it:
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
 | `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.20.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
 | `wt sync move --json` | [`schema/sync-move.v1.json`](../schema/sync-move.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-move.v1.json` |
-| `wt sync rebase\|resume\|undo\|steps\|push --json` | [`schema/sync-run.v2.json`](../schema/sync-run.v2.json) | 2.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v2.json` |
+| `wt sync rebase\|resume\|undo\|steps\|push --json` | [`schema/sync-run.v2.json`](../schema/sync-run.v2.json) | 2.1.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v2.json` |
 | `wt up --json` | [`schema/up.v1.json`](../schema/up.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/up.v1.json` |
 <!-- json-docs:end -->
 
@@ -2342,11 +2342,11 @@ checked under its lock as the run settles its push:
 | `worktrees[].stack.push.branches[].rule` | string | yes | Since 1.23.0: what decided the remote branch: recorded (wt sync push-to), or its own name. Empty for a push recorded before 1.23.0. |
 | `worktrees[].stack.push.branches[].remote` | string | yes | The remote it was pushed to. |
 | `worktrees[].stack.push.branches[].remoteBranch` | string | yes | Its name on the remote. |
-| `worktrees[].stack.push.branches[].old` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The lease: the commit the remote branch had to be at, as last fetched before the run moved anything. Null for a branch that must not exist on the remote yet. |
+| `worktrees[].stack.push.branches[].old` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The lease the push went over: the commit the remote branch had to be at, as a run last fetched it before moving anything; for wt sync push --stack and a push of several recorded runs, the oldest run's lease, or the newest run's when the older ones were stale. Null for a branch that must not exist on the remote yet. |
 | `worktrees[].stack.push.branches[].new` | string, matching `^[0-9a-f]{40,64}$` | yes | The commit pushed: the branch's new tip. |
 | `worktrees[].stack.push.branches[].outcome` | `"pushed"` \| `"leaseFailed"` \| `"notSent"` \| `"unknown"` | yes | pushed: the remote branch is at new. leaseFailed: git rejected it as stale: the remote branch was not at old any more, somebody pushed to it since; this is the branch that moved under the push. Any other refusal (a hook, a policy) is notSent, with git's own reason in why. notSent: nothing on its remote moved: another branch of the same push failed its lease, or the remote refused the push as a whole (a remote that does not accept --atomic is refused, never pushed branch by branch). unknown: the push ended in a transport failure (a timeout, a dropped connection) and the remote's own refs, read back, show the branch at neither old nor new, or could not be read: whether it moved is not known. A transport failure whose read-back shows the branch at new is pushed, and at old notSent. |
 | `worktrees[].stack.push.branches[].why` | string \| null | yes | For an outcome other than pushed, what git said. Null for pushed. |
-| `worktrees[].stack.push.branches[].from` | object \| null | yes | Since 1.25.0: for wt sync push --stack, the run the pushed tip (new) is from: the newest unpushed run that moved the branch; old is the lease of the oldest. Null for a run's own push. |
+| `worktrees[].stack.push.branches[].from` | object \| null | yes | Since 1.25.0: for wt sync push --stack, the run the pushed tip (new) is from: the newest unpushed run that moved the branch; old says whose lease the push went over. Null for a run's own push. |
 | `worktrees[].stack.push.branches[].from.epoch` | integer | yes | The run's epoch. |
 | `worktrees[].stack.push.branches[].from.time` | string (date-time) | yes | When the run wrote its record. |
 | `worktrees[].stack.push.conflicted` | array of object | yes | Since 1.25.0: for wt sync push --stack refused because the runs the line's record holds disagree about a branch (see why), the branches that disagree, and branches is empty: nothing was pushed, and the record is kept. Empty for a run's own push and when no branch disagrees. |
@@ -2487,7 +2487,8 @@ exist.
 Since `sync-run` 1.27.0, when the line's record holds earlier runs of it that
 nobody pushed (`--no-push` runs, or pushes refused), a run's or resume's own push
 sends the whole record as `wt sync push <work> --stack` does, under the same
-checks: each branch over the oldest run's lease, to the newest run's tip, so a
+checks: each branch to the newest run's tip, over the oldest run's lease (the
+newest's, since `sync-run` 2.1.0, where the older ones are stale), so a
 layer only an earlier run moved is not left behind on the remote. A layer the
 push sent has a null `pushCommand` in `layers[]`: a layer carries one only while
 its push is owed.
@@ -2524,7 +2525,10 @@ question, nobody to ask) in this same shape: one worktree row, the line's, whose
 `old` and `new` as above. `stack.skipped` names the layers the run left out
 (held, or nowhere safe to push), `reason` saying why; the rest of `stack` is what
 the record kept of the line and `layers` is empty, since the push moves none.
-Nothing is fetched. Before anything is pushed it is refused (`refusal`, result
+Nothing is fetched; a remote is read only for a branch whose runs took
+different leases, and by `--dry-run`, which runs git's own dry run of each
+atomic push (no hooks) and is `refused`, with its `reason`, where git would
+refuse one: a stale lease, a remote that takes no atomic push. Before anything is pushed it is refused (`refusal`, result
 `refused`) when the line has no record, a branch of it is no longer at the tip the
 run left, a remote no longer pushes to the recorded URL, or the runs the record
 holds disagree about a branch (`stack.push.conflicted`, then with an empty
@@ -2534,9 +2538,12 @@ for what was not sent.
 Runs that were not pushed add up (`sync-run` 1.25.0): the record holds a
 contribution per run, and the push sends each branch to the newest run's tip over
 the oldest run's lease. `stack.push.branches[].from` names the run the pushed tip
-is from (epoch and time); it is null for a run's own push. A branch whose runs
-push it to different remote branches or took different leases (the remote moved
-between the runs) is `conflicted`: the whole push is refused and nothing moves.
+is from (epoch and time); it is null for a run's own push. Where the runs took
+different leases for a branch (a push made between them, say), its remote is read
+before anything is pushed (`sync-run` 2.1.0): at the newest run's lease, the
+branch goes over that one, which `old` then names; anywhere else, or unreadable,
+the branch is `conflicted`, as is one the runs push to different remote branches
+or endpoints. The whole push is then refused and nothing moves.
 
 `wt sync push <work> --stack --forget --json` drops the line's record and nothing
 else. Its row is `skipped`, and `droppedRecord` gives the `runs` (epoch and time,
@@ -3437,3 +3444,4 @@ change made it.
 | `sync` 1.18.0, `sync-run` 1.29.0 | `lines` on a fold's moves: the line ranges a `move!` commit moves (`Move-Lines`), beside `paths`, the paths moved whole |
 | `sync-run` 2.0.0 | a new major. [The summary](#detail--the-summary-and---full) is the default: `stack.layers`, `stack.sideBranches`, `stack.push.branches` and `layerSteps` hold only the rows that need attention, and `timings.slowest` is empty; `--full` holds every row. New in both forms: `detail`, `stack.counts` and `stack.pushLaterCommand`. The object is written on one line |
 | `sync` 1.20.0 | `analysis`, `fixups`, `appliesAtTarget`, `aheadOfContext`, `conflicts` and `notAnalysed` on the look's `fold`: how many fixups there are and what the analysis finds of each |
+| `sync-run` 2.1.0 | no new field: `stack.push.branches[].old` is the lease the push went over, which is the newest run's, no longer always the oldest's, where [the recorded runs' leases differ](#push--a-stacks-push) and the remote is at the newest |

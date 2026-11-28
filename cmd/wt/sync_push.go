@@ -21,7 +21,7 @@ func newSyncPushCmd() *cobra.Command {
 			"that a wt sync rebase --stack run moved and left unpushed (--no-push, a no\n" +
 			"to the question, or nobody to ask): for when the result is checked first\n" +
 			"and pushed after. Each branch goes over a --force-with-lease on the commit\n" +
-			"the run recorded for its remote branch, so nothing is fetched and nothing\n" +
+			"a run recorded for its remote branch, so nothing is fetched and nothing\n" +
 			"a teammate pushed since is replaced: if any remote branch moved, nothing on\n" +
 			"that remote moves and the branch is named.\n\n" +
 			"The line's own branch is left out, and named, when pushing it would create\n" +
@@ -35,15 +35,20 @@ func newSyncPushCmd() *cobra.Command {
 			"to the record, and the push sends each branch to the newest run's tip over\n" +
 			"the oldest run's lease, so a later run of the top layers does not drop the\n" +
 			"lower layers an earlier run moved. wt sync undo takes back the last run\n" +
-			"only and says when earlier ones are still recorded. A line with no record\n" +
-			"is refused. It is also refused, before anything is pushed, when a branch\n" +
-			"of the record is no longer at the tip the newest run left it at (somebody\n" +
-			"worked on it since), a remote no longer pushes to the URL the leases were\n" +
-			"taken for, or the runs disagree about a branch: they push it to different\n" +
-			"remote branches, or took different leases because the remote moved between\n" +
-			"them. That branch is named; --forget and a fresh --no-push run get out of\n" +
-			"it. Layers the run held, or that had nowhere safe to push, are left out and\n" +
-			"named.\n\n" +
+			"only and says when earlier ones are still recorded.\n\n" +
+			"Where the runs took different leases for a branch, as after a push made by\n" +
+			"hand between them, its remote is read first: at the newest run's lease, the\n" +
+			"older ones are stale and the branch goes over the newest, which is said in\n" +
+			"one line; anywhere else, or unreadable, the push is refused. Every such\n" +
+			"branch is read before anything is pushed.\n\n" +
+			"A line with no record is refused. It is also refused, before anything is\n" +
+			"pushed, when a branch of the record is no longer at the tip the newest run\n" +
+			"left it at (somebody worked on it since), a remote no longer pushes to the\n" +
+			"URL the leases were taken for, or the runs push a branch to different\n" +
+			"remote branches. A refusal for what the runs disagree on is one line, and\n" +
+			"--dry-run lists the branches; --forget and a fresh --no-push run get out\n" +
+			"of it. Layers the run held, or that had nowhere safe to push, are left out\n" +
+			"and named.\n\n" +
 			"--forget drops the line's record, and only that: no ref moves and nothing\n" +
 			"is pushed. It says what it dropped; with --dry-run it says what it would.\n" +
 			"It never asks, so --yes is accepted and changes nothing; it does not take\n" +
@@ -52,7 +57,9 @@ func newSyncPushCmd() *cobra.Command {
 			"It asks first on a terminal (default no); --yes skips the question, and\n" +
 			"with no terminal and no --yes nothing is pushed. --dry-run says what each\n" +
 			"branch would push, lease \u2192 new, and, for a record of several runs, the\n" +
-			"run each came from, and changes nothing. --json prints one\n" +
+			"run each came from, and changes nothing. It runs git's own dry run of each\n" +
+			"atomic push, with no hook, and fails where git would: a stale lease, or a\n" +
+			"remote that takes no atomic push. --json prints one\n" +
 			"result object on stdout, as wt sync rebase --json does: the worktree's\n" +
 			"stack.push is the push, as for a run that pushed. It is a summary, which\n" +
 			"leaves out of stack.push the branches that were pushed; --full has them.",

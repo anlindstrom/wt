@@ -744,6 +744,7 @@ func (r *resume) complete(res wtsync.Result) error {
 			r.sayKeptNoPush()
 			syncrun.KeepStackPush(r.ctx, r.w, r.stack, []syncrun.PushTarget{{Work: name, Branch: st.Branch, Path: r.target.Path}}, "")
 			syncrun.SettleStackPush(r.ctx, r.w, r.stack)
+			syncrun.SayPushLater(r.w, r.stack)
 		}
 		return fmt.Errorf("not completed: %s", strings.Join(failures, ", "))
 	}
@@ -1035,6 +1036,7 @@ func (r *resume) push() error {
 	if err != nil {
 		return err
 	}
+	syncrun.SayPushLater(r.w, r.stack)
 	pushed, failed = append(pushed, stackPushed...), append(append(slices.Clone(r.held), failed...), stackFailed...)
 	r.j.Set(st.Branch, func(p *syncrun.UpParticipant) {
 		// An answer to the push question may have given it a destination.

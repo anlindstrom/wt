@@ -438,6 +438,7 @@ func (r *RunPlan) run(works []string) error {
 	if err != nil {
 		return err
 	}
+	syncrun.SayPushLater(w, r.stack)
 	pushed = append(pushed, more...)
 	pushFailed = append(pushFailed, moreFailed...)
 	r.Pushed = pushed

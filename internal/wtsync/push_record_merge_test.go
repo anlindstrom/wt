@@ -53,7 +53,6 @@ func TestMergedTakesTheOldestLeaseAndTheNewestTip(t *testing.T) {
 
 func TestMergedRefusesWhatTheRunsDisagreeOn(t *testing.T) {
 	for name, mutate := range map[string]func(*PushRecordItem){
-		"lease":    func(i *PushRecordItem) { i.Lease = "other" },
 		"remote":   func(i *PushRecordItem) { i.RemoteBranch = "elsewhere" },
 		"endpoint": func(i *PushRecordItem) { i.Endpoint = "v" },
 	} {
@@ -69,6 +68,28 @@ func TestMergedRefusesWhatTheRunsDisagreeOn(t *testing.T) {
 				t.Errorf("items %+v, want s1 alone", items)
 			}
 		})
+	}
+}
+
+// Leases that differ are not a conflict: the branch goes over the newest
+// run's lease, which the push has to find the remote at.
+func TestMergedTakesTheNewestLeaseWhenTheLeasesDiffer(t *testing.T) {
+	rec := withRuns("line", "line", []PushRun{run(1, item("s1", "l0", "a1")).Run(), run(2, item("s1", "l1", "b1")).Run()})
+	items, conflicts := rec.Merged()
+	if len(conflicts) != 0 || len(items) != 1 || items[0].Lease != "l1" || items[0].LeaseFrom.Epoch != 2 || items[0].New != "b1" {
+		t.Errorf("items %+v conflicts %+v, want s1 over run 2's lease l1 to b1", items, conflicts)
+	}
+}
+
+// A lease that differs in one run does not hide a destination that differs in
+// a later one.
+func TestMergedRefusesAChangedDestinationBehindAChangedLease(t *testing.T) {
+	third := item("s1", "l1", "c1")
+	third.RemoteBranch = "elsewhere"
+	rec := withRuns("line", "line", []PushRun{run(1, item("s1", "l0", "a1")).Run(), run(2, item("s1", "l1", "b1")).Run(), run(3, third).Run()})
+	items, conflicts := rec.Merged()
+	if len(items) != 0 || len(conflicts) != 1 || !strings.Contains(conflicts[0].Why, "origin/elsewhere") {
+		t.Errorf("items %+v conflicts %+v, want s1 refused for its destination", items, conflicts)
 	}
 }
 

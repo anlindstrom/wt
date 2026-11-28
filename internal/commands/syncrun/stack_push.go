@@ -40,8 +40,8 @@ type StackPush struct {
 	// was left out; null otherwise.
 	LineLeftOut *string `json:"lineLeftOut"`
 	// Conflicted are the branches a push from a record of several runs
-	// refused for: the runs disagree about the branch's lease or where it
-	// pushes. Empty for a run's own push and when none did.
+	// refused for: the runs push it to different places, or took different
+	// leases and the remote is not at the newest. Empty when none did.
 	Conflicted []StackConflicted `json:"conflicted"`
 }
 
@@ -80,7 +80,7 @@ type StackPushed struct {
 // LineLeftOutWhy is why a stack push leaves the line's own branch out, and the
 // flag that includes it.
 func LineLeftOutWhy(bp wtsync.BranchPush, work string) string {
-	return fmt.Sprintf("pushing it would create %s/%s on %s; wt sync push %s --stack --push-line, or --push-line on the run, pushes it", bp.Remote, bp.RemoteBranch, bp.Remote, work)
+	return fmt.Sprintf("pushing it would create %s/%s on %s; %s, or --push-line on the run, pushes it", bp.Remote, bp.RemoteBranch, bp.Remote, stackPushCommand(work, "--push-line"))
 }
 
 // stackItem is one branch that goes into a stack's push.
@@ -134,6 +134,8 @@ func (s *Stack) HasPush() bool {
 // returned are for OfferPush, with the mode to offer them in.
 func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s *Stack, targets []PushTarget) (rest []PushTarget, restMode PushMode, pushed, failed []string) {
 	rest, restMode = targets, mode
+	// Whatever way this ends, what is left to print or ask about.
+	defer func() { rest = s.withoutUnwanted(ctx, w, ask.PushLine, rest) }()
 	asking := mode == PushAsk && ask.ConfirmPush != nil
 	if s == nil || mode == PushNever || mode == PushAsk && !asking {
 		return
@@ -172,7 +174,7 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	if err != nil {
 		return refuse("the tip of " + top.Branch + " could not be read: " + pushReason(err))
 	}
-	items, leftOut, why := s.pushItems(ctx, head, ask.PushLine)
+	items, leftOut, stale, why := s.pushItems(ctx, head, ask.PushLine)
 	if why != "" {
 		return refuse(why)
 	}
@@ -200,9 +202,13 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 		}
 		// A fetch while the question waited may have moved a remote branch;
 		// the push still goes to the endpoints recorded.
-		if _, _, why := s.pushItems(ctx, head, ask.PushLine); why != "" {
+		var why string
+		if _, _, stale, why = s.pushItems(ctx, head, ask.PushLine); why != "" {
 			return refuse(why)
 		}
+	}
+	if stale != "" {
+		fmt.Fprintf(w, "  %s\n", stale)
 	}
 	results, allIn := pushRemotes(ctx, w, remotes, s.work)
 	// In item order, whatever the remotes: layers bottom first, then the line.
@@ -223,6 +229,32 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	return rest, restMode, pushed, failed
 }
 
+// withoutUnwanted is targets without the line's own branch when a push of it
+// could create a remote branch nobody asked for: the run did not see one,
+// nothing records where it goes, and --push-line was not given. A run with no
+// record to name it says so here.
+func (s *Stack) withoutUnwanted(ctx *kit.Context, w io.Writer, pushLine bool, targets []PushTarget) []PushTarget {
+	if s == nil || pushLine {
+		return targets
+	}
+	return slices.DeleteFunc(slices.Clone(targets), func(t PushTarget) bool {
+		if t.Branch != s.Branch {
+			return false
+		}
+		to := PushOf(ctx, t)
+		if to.Remote == "" || to.Rule == "recorded" {
+			return false
+		}
+		if endpoint, err := wtsync.PushEndpoint(ctx.Repo.MainRoot, to.Remote); err == nil && s.top != nil && s.top.SawAt(to.Remote, to.Branch, endpoint) {
+			return false
+		}
+		if s.kept == nil {
+			fmt.Fprintf(w, "  = %s not pushed, and no push of it is printed: the run saw no remote branch %s; --push-line on a run, or wt sync %s, says to push it\n", t.Branch, to.Ref(), PushToName)
+		}
+		return true
+	})
+}
+
 // settleLayerPushes takes the push command off each layer the push sent: a
 // layer carries one only while its push is still owed.
 func (s *Stack) settleLayerPushes() {
@@ -234,34 +266,36 @@ func (s *Stack) settleLayerPushes() {
 }
 
 // pushItems is what the push of a run sends, whether the line's own branch
-// is left out because pushing it would create its remote branch, and why the
-// push refuses, "" when it does not. It is the layers the run moved and the
+// is left out because pushing it would create its remote branch, what to say
+// of stale leases it goes without, and why the push refuses, "" when it does
+// not. It is the layers the run moved and the
 // line's own branch; or, when the record holds earlier runs of the line that
 // nobody pushed, everything the record holds, as wt sync push --stack sends
 // it and under the same checks, so a layer only an earlier run moved is not
 // left behind on the remote (wt#223). A line with a record this run is not in
 // (it could not be added) refuses: this run's branches alone could leave
 // what the record holds behind.
-func (s *Stack) pushItems(ctx *kit.Context, head string, pushLine bool) (items []stackItem, leftOut bool, why string) {
+func (s *Stack) pushItems(ctx *kit.Context, head string, pushLine bool) (items []stackItem, leftOut bool, stale, why string) {
 	if s.kept == nil {
 		if why := s.unkeptRecord(ctx); why != "" {
-			return nil, false, why
+			return nil, false, "", why
 		}
 	}
 	if s.kept != nil && len(s.kept.Earlier) > 0 {
-		all, _, _, why := recordedItems(ctx, s.kept)
-		if why != "" {
-			return nil, false, why
+		read := recordedItems(ctx, s.kept)
+		if read.why != "" {
+			return nil, false, "", read.why
 		}
-		items = slices.DeleteFunc(all, func(it stackItem) bool { return it.Top && it.Creates() && !pushLine })
-		return items, len(items) < len(all), ""
+		all := len(read.items)
+		items = slices.DeleteFunc(read.items, func(it stackItem) bool { return it.Top && it.Creates() && !pushLine })
+		return items, len(items) < all, read.staleNotice(false, nil), ""
 	}
 	items = slices.Clone(s.items)
 	leftOut = s.top.Creates() && !pushLine
 	if !leftOut {
 		items = append(items, stackItem{BranchPush: *s.top, New: head, Top: true})
 	}
-	return items, leftOut, s.unchangedOffRemote(ctx)
+	return items, leftOut, "", s.unchangedOffRemote(ctx)
 }
 
 // unkeptRecord is why a run whose own record was not kept may not push, ""
@@ -276,7 +310,7 @@ func (s *Stack) unkeptRecord(ctx *kit.Context) string {
 		return ""
 	}
 	return "this run could not be added to the record of what earlier runs left unpushed (" + strings.Join(rec.Branches(), ", ") +
-		"), so pushing only this run's branches could leave theirs behind on the remote; wt sync undo " + s.work + " puts this run back, and wt sync push " + s.work + " --stack then pushes the record"
+		"), so pushing only this run's branches could leave theirs behind on the remote; " + undoCommand(s.work) + " puts this run back, and " + stackPushCommand(s.work) + " then pushes the record"
 }
 
 // unchangedOffRemote is why a layer the run left unchanged stops the push of
@@ -289,7 +323,7 @@ func (s *Stack) unchangedOffRemote(ctx *kit.Context) string {
 			continue
 		}
 		pl := wtsync.PushLayer{Branch: l.Branch, Result: wtsync.MoveUnchanged, Tip: l.OldTip}
-		way := "push " + l.Branch + " first, then wt sync push " + s.work + " --stack"
+		way := "push " + l.Branch + " first, then " + stackPushCommand(s.work)
 		if why := unsentLayer(ctx, own, pl, "this run", "the run left it unchanged, so it was already off its remote branch before it", way); why != "" {
 			return why
 		}
@@ -338,14 +372,22 @@ func byRemote(items []stackItem) map[string][]stackItem {
 	return out
 }
 
-// pushGroup is the one atomic push to remote: every ref carries a lease on
-// the commit the run recorded, and git moves all of them or none. It returns
-// what came of each branch and whether every one is at its new commit.
-func pushGroup(ctx *kit.Context, w io.Writer, remote string, group []stackItem, work string) (map[string]StackPushed, bool) {
+// atomicRefs is group as one atomic push takes it.
+func atomicRefs(group []stackItem) []wtsync.AtomicRef {
 	refs := make([]wtsync.AtomicRef, len(group))
 	for i, it := range group {
 		refs[i] = wtsync.AtomicRef{RemoteBranch: it.RemoteBranch, Lease: it.Lease, New: it.New}
 	}
+	return refs
+}
+
+// noAtomic is in git's error for a remote that takes no atomic push.
+const noAtomic = "does not support --atomic"
+
+// pushGroup is the one atomic push to remote: every ref carries a lease on
+// the commit the run recorded, and git moves all of them or none. It returns
+// what came of each branch and whether every one is at its new commit.
+func pushGroup(ctx *kit.Context, w io.Writer, remote string, group []stackItem, work string) (map[string]StackPushed, bool) {
 	noun := "branches"
 	if len(group) == 1 {
 		noun = "branch"
@@ -365,7 +407,7 @@ func pushGroup(ctx *kit.Context, w io.Writer, remote string, group []stackItem, 
 	// To the URL the leases were recorded for, which PushStack has checked the
 	// remote still pushes to, and not to the remote's name.
 	endpoint := group[0].Endpoint
-	err := wtsync.PushAtomic(ctx.Repo.MainRoot, endpoint, refs, kit.NetworkTimeout)
+	err := wtsync.PushAtomic(ctx.Repo.MainRoot, endpoint, atomicRefs(group), kit.NetworkTimeout)
 	if err == nil {
 		for _, it := range group {
 			record(it, PushedOK, "")
@@ -378,9 +420,9 @@ func pushGroup(ctx *kit.Context, w io.Writer, remote string, group []stackItem, 
 		}
 		return out, true
 	}
-	undo := fmt.Sprintf("every local branch stays where the rebase put it; wt sync undo %s puts back the line and every layer moved", work)
+	undo := fmt.Sprintf("every local branch stays where the rebase put it; %s puts back the line and every layer moved", undoCommand(work))
 	reasons := refusals(err)
-	if len(reasons) == 0 && !strings.Contains(err.Error(), "does not support --atomic") {
+	if len(reasons) == 0 && !strings.Contains(err.Error(), noAtomic) {
 		reconcile(ctx, w, remote, endpoint, group, err, record, undo)
 		return out, allAt(out, group)
 	}
@@ -397,7 +439,7 @@ func pushGroup(ctx *kit.Context, w io.Writer, remote string, group []stackItem, 
 			fmt.Fprintf(w, "  ✗ %s was refused by %s: %s; nothing on %s was pushed\n", it.Branch, remote, r, remote)
 		}
 	}
-	if strings.Contains(err.Error(), "does not support --atomic") {
+	if strings.Contains(err.Error(), noAtomic) {
 		fmt.Fprintf(w, "  ✗ %s does not accept an atomic push: nothing was pushed to it, and wt does not push a stack branch by branch\n", remote)
 	}
 	fmt.Fprintf(w, "      %s\n", undo)

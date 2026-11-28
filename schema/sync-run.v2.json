@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-run.v2.json",
-  "x-version": "2.0.0",
+  "x-version": "2.1.0",
   "title": "wt sync rebase|resume|undo|steps|push --json",
   "description": "What a wt sync rebase, resume, undo, steps or push did. Printed by `wt sync rebase [<work>...] --json`, `wt sync resume <work> --json`, `wt sync undo <work> --json`, `wt sync steps <work> --json` and `wt sync push <work> --stack --json` on one line, as the only thing on stdout, also when a handled SIGINT or SIGTERM ends it. By default a summary (detail): some arrays hold only the rows that need attention, and stack.counts counts every row; --full prints every row. Schema 2: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "type": "object",
@@ -304,11 +304,11 @@
         "rule": { "type": "string", "description": "Since 1.23.0: what decided the remote branch: recorded (wt sync push-to), or its own name. Empty for a push recorded before 1.23.0." },
         "remote": { "type": "string", "description": "The remote it was pushed to." },
         "remoteBranch": { "type": "string", "description": "Its name on the remote." },
-        "old": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The lease: the commit the remote branch had to be at, as last fetched before the run moved anything. Null for a branch that must not exist on the remote yet." },
+        "old": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The lease the push went over: the commit the remote branch had to be at, as a run last fetched it before moving anything; for wt sync push --stack and a push of several recorded runs, the oldest run's lease, or the newest run's when the older ones were stale. Null for a branch that must not exist on the remote yet." },
         "new": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The commit pushed: the branch's new tip." },
         "outcome": { "enum": ["pushed", "leaseFailed", "notSent", "unknown"], "description": "pushed: the remote branch is at new. leaseFailed: git rejected it as stale: the remote branch was not at old any more, somebody pushed to it since; this is the branch that moved under the push. Any other refusal (a hook, a policy) is notSent, with git's own reason in why. notSent: nothing on its remote moved: another branch of the same push failed its lease, or the remote refused the push as a whole (a remote that does not accept --atomic is refused, never pushed branch by branch). unknown: the push ended in a transport failure (a timeout, a dropped connection) and the remote's own refs, read back, show the branch at neither old nor new, or could not be read: whether it moved is not known. A transport failure whose read-back shows the branch at new is pushed, and at old notSent." },
         "why": { "type": ["string", "null"], "description": "For an outcome other than pushed, what git said. Null for pushed." },
-        "from": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/runRef" }], "description": "Since 1.25.0: for wt sync push --stack, the run the pushed tip (new) is from: the newest unpushed run that moved the branch; old is the lease of the oldest. Null for a run's own push." }
+        "from": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/runRef" }], "description": "Since 1.25.0: for wt sync push --stack, the run the pushed tip (new) is from: the newest unpushed run that moved the branch; old says whose lease the push went over. Null for a run's own push." }
       }
     },
     "stackContextGap": {
