@@ -547,7 +547,7 @@ func (r *resume) rebase() (wtsync.Result, error) {
 	if hasRec && rec.Autosquash {
 		// A later stop at a fixup ahead of its context says so too, and
 		// the report keeps them.
-		if r.gaps, r.unchecked, err = syncrun.ContextGapsOf(r.ctx.Repo.MainRoot, rec.Line.Commits); err != nil {
+		if r.gaps, r.unchecked, err = syncrun.ContextGapsOf(r.ctx.Repo.MainRoot, rec.Line.Commits, r.cfg); err != nil {
 			r.unchecked = []string{"which fixups lack their context could not be read: " + err.Error()}
 			fmt.Fprintf(r.w, "  note: %s\n", r.unchecked[0])
 		}
@@ -949,9 +949,15 @@ func (r *resume) checkDropped() error {
 		fmt.Fprintf(r.w, "  ⚠ --allow-dropped: %s; going on as resolved\n", line)
 		return nil
 	}
+	// A commit to move the hunk to is named only where no gap here is in
+	// doubt.
+	back := "puts everything back"
+	if !slices.ContainsFunc(wtsync.GapsAt(st.Context, p.Commit), func(g wtsync.ContextGap) bool { return g.Doubt != "" }) {
+		back = "and move that hunk into a fixup of " + git.ShortID(fixup.Needs, 7)
+	}
 	return fmt.Errorf("%s: %s, and no later commit brings them; nothing is resumed: put them in the resolution, git add it and wt sync resume %s, "+
-		"or wt sync undo %s and move that hunk into a fixup of %s; --allow-dropped goes on when the drop is meant",
-		name, line, name, name, git.ShortID(fixup.Needs, 7))
+		"or wt sync undo %s %s; --allow-dropped goes on when the drop is meant",
+		name, line, name, name, back)
 }
 
 // finishStack checks and moves the layers of a stack held on the line, when

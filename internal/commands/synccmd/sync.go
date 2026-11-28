@@ -273,7 +273,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	}
 	if opts.Stack != nil {
 		if stack == nil {
-			if stack, err = stackLookAt(ctx, base, onto, target, look, listed, progress); err != nil {
+			if stack, err = stackLookAt(ctx, base, onto, cfg, target, look, listed, progress); err != nil {
 				return err
 			}
 		}

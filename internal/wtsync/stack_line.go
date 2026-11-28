@@ -770,11 +770,12 @@ func FixupOfCarried(dir, onto, upstream, branch string, commits []string) (strin
 	if err != nil {
 		return "", err
 	}
-	type entry struct{ sha, subject string }
-	var all []entry
+	var all []lineCommit
+	index := map[string]int{}
 	for _, l := range strings.Split(subjects, "\n") {
 		if sha, subject, ok := strings.Cut(l, " "); ok {
-			all = append(all, entry{sha, subject})
+			index[sha] = len(all)
+			all = append(all, lineCommit{sha, subject})
 		}
 	}
 	ancestor := func(a, of string) (bool, error) {
@@ -808,14 +809,7 @@ func FixupOfCarried(dir, onto, upstream, branch string, commits []string) (strin
 		return why, nil
 	}
 	for i, e := range all {
-		target, folding := e.subject, false
-		for {
-			rest, ok := cutFoldPrefix(target)
-			if !ok {
-				break
-			}
-			target, folding = strings.TrimSpace(rest), true
-		}
+		target, folding := foldName(e.subject)
 		if !folding {
 			continue
 		}
@@ -826,36 +820,14 @@ func FixupOfCarried(dir, onto, upstream, branch string, commits []string) (strin
 			return fmt.Sprintf("the fixup %q (%s) %s; drop it or fold it by hand, then run again; nothing is rebased",
 				e.subject, git.ShortID(e.sha, 7), fmt.Sprintf(format, a...)), nil
 		}
-		var named *entry
-		if sha, err := gitEnv(dir, nil, nil, "rev-parse", "--verify", "--quiet", target+"^{commit}"); err == nil {
-			for j := range all[:i] {
-				if all[j].sha == strings.TrimSpace(sha) {
-					named = &all[j]
-				}
-			}
-		}
-		if named == nil {
-			var exact, prefix []*entry
-			for j := range all[:i] {
-				switch c := &all[j]; {
-				case c.subject == target:
-					exact = append(exact, c)
-				case strings.HasPrefix(c.subject, target):
-					prefix = append(prefix, c)
-				}
-			}
-			candidates := exact
-			if len(candidates) == 0 {
-				candidates = prefix
-			}
-			switch len(candidates) {
-			case 0:
-				return refuse("names no commit earlier on the line (%q)", target)
-			case 1:
-				named = candidates[0]
-			default:
-				return refuse("names more than one commit on the line (%q)", target)
-			}
+		var named lineCommit
+		switch candidates := foldMatches(dir, all[:i], target, index); len(candidates) {
+		case 0:
+			return refuse("names no commit earlier on the line (%q)", target)
+		case 1:
+			named = all[candidates[0]]
+		default:
+			return refuse("names more than one commit on the line (%q)", target)
 		}
 		why, err := notReplayed(named.sha)
 		if err != nil {

@@ -187,8 +187,8 @@ func probeUnchecked(t *testing.T) string {
 	t.Helper()
 	line := "probe: not analysed"
 	was := syncrun.ContextGapsOf
-	syncrun.ContextGapsOf = func(dir string, commits []string) ([]wtsync.ContextGap, []string, error) {
-		gaps, unchecked, err := was(dir, commits)
+	syncrun.ContextGapsOf = func(dir string, commits []string, cfg *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
+		gaps, unchecked, err := was(dir, commits, cfg)
 		return gaps, append(unchecked, line), err
 	}
 	t.Cleanup(func() { syncrun.ContextGapsOf = was })
@@ -378,7 +378,7 @@ func TestTheLookSaysWhenItCannotTellTheContext(t *testing.T) {
 	}
 	ctx, _ := synccmdtest.ContextLine(t, false)
 	was := syncrun.ContextGapsOf
-	syncrun.ContextGapsOf = func(string, []string) ([]wtsync.ContextGap, []string, error) {
+	syncrun.ContextGapsOf = func(string, []string, *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
 		return nil, nil, errors.New("merge-tree: out of cheese")
 	}
 	t.Cleanup(func() { syncrun.ContextGapsOf = was })

@@ -343,7 +343,7 @@ func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
 		if target != nil {
 			base = target.cutoff()
 		}
-		if o.Stack, err = stackLookAt(ctx, base, sha, target, opts.Stack, listed, lookProgress{}); err != nil {
+		if o.Stack, err = stackLookAt(ctx, base, sha, cfg, target, opts.Stack, listed, lookProgress{}); err != nil {
 			o.Error = jsonout.Strp(err.Error())
 		} else if opts.Stack.Autosquash {
 			if o.Fold, err = foldLookFor(ctx.Repo.MainRoot, cfg, o.Stack, target, opts.Stack.Alone || opts.Alone); err != nil {

@@ -39,6 +39,15 @@ something else stops it first, the run will refuse the fold: …`); the look the
 The examples include a stack held on one line:
 `wt sync top --stack --autosquash --layer 'feat/*'`.
 
+## 2026-11-27 12:12 — A fixup of a file an earlier fixup creates is analysed
+
+A fold's look no longer says "not analysed" for a fixup whose context an earlier fixup
+adds, when the fold is clean up to it. Where wt still cannot analyse a fixup, the note says
+whether the fold in place conflicts there or wt cannot tell. Where the fold's order does not
+confirm the commit a warning names, a note says so and a stop offers no retarget. A warning
+for a fixup the fold in place applies says it does. A fixup's target is found by subject before
+revision, as git does.
+
 ## 2026-11-26 11:53 — A `move!` commit folds with `--onto`
 
 `wt sync rebase <work> --stack --autosquash --onto <ref> --each-commit=targets` moves

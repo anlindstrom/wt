@@ -2,8 +2,10 @@ package wtsync
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -28,6 +30,12 @@ type ContextGap struct {
 	// has the hunk's context.
 	Needs        string `json:"needs"`
 	NeedsSubject string `json:"needsSubject"`
+	// Doubt is why Needs is no place to retarget the hunk to, "" when the
+	// order the fold takes confirms it. Kept with a stop; not in --json.
+	Doubt string `json:"doubt,omitempty"`
+	// Applies is set when the fold in place applies the fixup, so only
+	// another run may stop at the gap. Not in --json.
+	Applies bool `json:"applies,omitempty"`
 }
 
 // Line is what a person is told about the gap.
@@ -36,8 +44,12 @@ func (g ContextGap) Line() string {
 		g.Path, g.Lines, git.ShortID(g.Needs, 7), oneLinePlan(g.NeedsSubject))
 }
 
-// Retarget is the way out of a stop at the gap: not a resolution.
+// Retarget is the way out of a stop at the gap: not a resolution. It names
+// no commit to retarget to when Needs is in doubt.
 func (g ContextGap) Retarget(work string) string {
+	if g.Doubt != "" {
+		return fmt.Sprintf("not a resolution: wt sync undo %s puts everything back; no retarget is offered: %s", work, g.Doubt)
+	}
 	return fmt.Sprintf("not a resolution: wt sync undo %s, then move that hunk of %s into a fixup of %s (git commit --fixup=%s) and run again",
 		work, git.ShortID(g.Fixup, 7), git.ShortID(g.Needs, 7), git.ShortID(g.Needs, 7))
 }
@@ -58,15 +70,17 @@ func GapsAt(gaps []ContextGap, c string) []ContextGap {
 type FixupState string
 
 const (
-	// FixupApplies means the fold reaches the fixup, and it merges clean there.
+	// FixupApplies means the fold of the line on its own base reaches the fixup,
+	// which merges clean there, behind its target.
 	FixupApplies FixupState = "applies"
-	// FixupAheadOfContext means a hunk needs a later commit of the line (a
-	// ContextGap).
+	// FixupAheadOfContext means the fold does not apply the fixup, and a hunk
+	// of it needs a later commit of the line (a ContextGap).
 	FixupAheadOfContext FixupState = "ahead-of-context"
-	// FixupConflicts means the fold stops at the fixup, and no later commit
-	// explains why.
+	// FixupConflicts means that fold first conflicts at the fixup, and no later
+	// commit explains why. What .wt-sync.yaml resolves is not consulted.
 	FixupConflicts FixupState = "conflicts"
-	// FixupNotAnalysed means wt cannot say, for the reason in Why.
+	// FixupNotAnalysed means wt cannot say, for the reason in Why. Gaps may
+	// still name it.
 	FixupNotAnalysed FixupState = "not-analysed"
 )
 
@@ -93,22 +107,27 @@ type FixupAnalysis struct {
 }
 
 // ContextGaps is the gaps AnalyseFixups finds, and its notes.
-func ContextGaps(dir string, commits []string) ([]ContextGap, []string, error) {
-	a, err := AnalyseFixups(dir, commits, nil)
+func ContextGaps(dir string, commits []string, cfg *Config) ([]ContextGap, []string, error) {
+	a, err := AnalyseFixups(dir, commits, cfg)
 	return a.Gaps, a.Unchecked, err
 }
 
-// AnalyseFixups is every hunk of the line's fixups that lacks its context at
-// its target. commits is the line, oldest first. Each fixup is merged, in
-// the object store, onto its target's tree with the fixups of the same
-// target before it already folded, from its own parent, as the rebase will
-// merge it; a file that does not merge clean is looked at hunk by hunk, and
-// a hunk whose lines before the change are not in the target's file but are
-// in a later commit's names the first such commit. A conflict no later
-// commit explains is not a gap. The trees are the line's own, before any
-// move onto another base. Nothing but objects in the store is written: no
-// ref, no index and no worktree.
-func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, error) {
+// AnalyseFixups says what each fixup of the line comes to in the fold, names
+// every hunk that lacks its context at its target, and notes what of that it
+// could not tell. commits is the line, oldest first, and cfg the declaration
+// a run of it reads, nil when none: its version lifts and layer steps are
+// asked about.
+//
+// The gaps are read from the line's own trees (lineGaps), so that a run
+// stopping at one finds it whatever order it takes, and, for a fixup only the
+// fold's order stops, from the tree it stops on (stopGaps). The outcomes are
+// read
+// from the line replayed on its own base as the fold orders it (replayFold),
+// before any move onto another base. A fixup that replay applies, behind a
+// target git keeps, applies, and has no note; its gaps stand, for a run onto
+// another base. Nothing but objects in the store is written: no ref, no index
+// and no worktree. An error means nothing was analysed.
+func AnalyseFixups(dir string, commits []string, cfg *Config) (FixupAnalysis, error) {
 	var none FixupAnalysis
 	if len(commits) == 0 {
 		return none, nil
@@ -127,7 +146,163 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 	for i, e := range all {
 		index[e.sha] = i
 	}
+	targetOf := map[int]int{} // the commit each fixup folds into
+	for i, e := range all {
+		if j, ok := foldTarget(dir, all[:i], e.subject, index); ok {
+			targetOf[i] = j
+		}
+	}
 	blobs := blobCache{dir: dir, got: map[string]*string{}}
+	lines, err := lineGaps(dir, blobs, all, targetOf)
+	if err != nil {
+		return none, err
+	}
+	run, err := replayFold(dir, all, targetOf, cfg)
+	if err != nil {
+		return none, err
+	}
+	paths := pathCache{dir: dir, got: map[string][]string{}}
+	var a FixupAnalysis
+	for i, e := range all {
+		j, ok := targetOf[i]
+		if !ok {
+			if isFold(e.subject) {
+				a.Fixups = append(a.Fixups, FixupOutcome{Fixup: e.sha, Subject: e.subject, State: FixupNotAnalysed,
+					Why: "its subject names no one commit earlier on the line"})
+			}
+			continue
+		}
+		line := lines[i]
+		outcome := FixupOutcome{Fixup: e.sha, Subject: e.subject, Target: all[j].sha, State: FixupNotAnalysed}
+		_, applied := run.after[e.sha]
+		stopsHere, unreached := run.stop == i, run.unreached
+		if applied {
+			step, err := layerStepOver(cfg, paths, run.upTo(all, i))
+			if err != nil {
+				return none, err
+			}
+			if step != "" {
+				applied, unreached = false, fmt.Sprintf("the layer step %q may change what it, or a commit before it, is merged onto", step)
+			}
+		}
+		if applied {
+			if run.emptied[all[j].sha] {
+				outcome.Why = fmt.Sprintf("git drops its target %s as empty, so it folds into the commit below", git.ShortID(all[j].sha, 7))
+			} else {
+				outcome.State = FixupApplies
+			}
+			for _, g := range line.gaps {
+				g.Applies = outcome.State == FixupApplies
+				g.Doubt = "the fold in place applies this fixup, which says nothing of where another run needs it"
+				a.Gaps = append(a.Gaps, g)
+			}
+			a.Fixups = append(a.Fixups, outcome)
+			continue
+		}
+		verdict := "; wt cannot tell whether this fixup applies: " + unreached
+		if stopsHere {
+			verdict = "; the fold in place conflicts at this fixup (a run with --onto may differ, and .wt-sync.yaml may resolve the file)"
+		}
+		who := fmt.Sprintf("%s %q", git.ShortID(e.sha, 7), oneLinePlan(e.subject))
+		// Where the fold stops, its own tree may lack what the line's trees
+		// have, or stop in a file the note of the line says nothing of.
+		var whole laterFile
+		if stopsHere {
+			more, hunks, w, err := stopGaps(dir, blobs, all, j, i, run.tree, run.conflicted)
+			if err != nil {
+				return none, err
+			}
+			whole = w
+			for n, g := range more {
+				if !slices.ContainsFunc(line.gaps, func(have ContextGap) bool { return have.Path == g.Path && have.Lines == g.Lines }) {
+					line.gaps, line.hunks = append(line.gaps, g), append(line.hunks, hunks[n])
+				}
+			}
+		}
+		switch {
+		case len(line.gaps) > 0 || line.note != "":
+			cur := line.onto
+			if stopsHere {
+				cur = run.tree
+			}
+			view := foldView{dir: dir, all: all, targetOf: targetOf, blobs: blobs, paths: paths,
+				j: j, i: i, cur: cur, stopsHere: stopsHere, conflicted: run.conflicted}
+			outcome.State = FixupAheadOfContext
+			var said []string
+			if line.note != "" {
+				outcome.State = FixupNotAnalysed
+				said = append(said, line.note)
+			}
+			for n, g := range line.gaps {
+				h := line.hunks[n]
+				m, found, err := view.placed(g.Path, h.before, isFold(all[h.first].subject))
+				if err != nil {
+					return none, err
+				}
+				switch {
+				case !found:
+					g.Doubt = "wt cannot tell which commit first has the context in the fold"
+					outcome.State = FixupNotAnalysed
+				case all[m].sha != g.Needs:
+					g.Doubt = fmt.Sprintf("the fold first has the context at %s %q", git.ShortID(all[m].sha, 7), oneLinePlan(all[m].subject))
+				case isFold(g.NeedsSubject):
+					g.Doubt = "the commit it needs is a fixup, which a retarget cannot name"
+				}
+				if g.Doubt != "" {
+					said = append(said, fmt.Sprintf("%s:%s: %s", g.Path, g.Lines, g.Doubt))
+				}
+				a.Gaps = append(a.Gaps, g)
+			}
+			if len(said) > 0 {
+				note := strings.Join(said, "; ") + verdict
+				a.Unchecked = append(a.Unchecked, who+": "+note)
+				if outcome.State == FixupNotAnalysed {
+					outcome.Why = note
+				}
+			}
+		case whole.path != "":
+			has := "has " + whole.path + " as the fixup changes it"
+			if whole.absent {
+				has = "is without " + whole.path + ", as the fixup finds it"
+			}
+			outcome.Why = fmt.Sprintf("%s %q %s%s", git.ShortID(all[whole.k].sha, 7), oneLinePlan(all[whole.k].subject), has, verdict)
+		case stopsHere:
+			outcome.State = FixupConflicts
+		default:
+			outcome.Why = unreached
+		}
+		a.Fixups = append(a.Fixups, outcome)
+	}
+	return a, nil
+}
+
+// lineFixup is what the line's own trees say of one fixup.
+type lineFixup struct {
+	// onto is the tree it was merged onto.
+	onto string
+	// gaps is its hunks that lack their context there, and hunks, for each,
+	// what lineGaps read.
+	gaps  []ContextGap
+	hunks []gapHunk
+	// note is what of it could not be told, in place of its gaps.
+	note string
+}
+
+// gapHunk is the lines a gap's hunk needs, and the first commit of the line
+// after the target whose tree has them.
+type gapHunk struct {
+	before []string
+	first  int
+}
+
+// lineGaps is, per fixup, what lacks its context behind its target. Each
+// fixup is merged, in the object store, onto its target's tree with the
+// fixups of the same target before it already folded, from its own parent; a
+// file that does not merge clean is looked at hunk by hunk, and a hunk whose
+// lines before the change are not in the target's file but are in a later
+// commit's names the first such commit. A conflict no later commit explains
+// is not a gap.
+func lineGaps(dir string, blobs blobCache, all []lineCommit, targetOf map[int]int) (map[int]lineFixup, error) {
 	folded := map[int]string{} // a target's tree with its fixups so far
 	// conflicted is, per target, the first fixup of it that conflicted
 	// there: what a fixup after it lacks may be that one's conflicting part,
@@ -136,36 +311,34 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 	isFoldAt := map[int]bool{}
 	// cleanFold is the fixups that merge clean onto their target.
 	cleanFold := map[int]bool{}
-	// targetOf is the commit each fixup seen so far folds into.
-	targetOf := map[int]int{}
 	for i, e := range all {
 		isFoldAt[i] = isFold(e.subject)
 	}
-	var gaps []ContextGap
-	var unchecked []string
+	found := map[int]lineFixup{}
+	var err error
 	for i, e := range all {
-		j, ok := foldTarget(dir, all[:i], e.subject, index)
+		j, ok := targetOf[i]
 		if !ok {
 			continue
 		}
-		targetOf[i] = j
 		cur, ok := folded[j]
 		if !ok {
 			if cur, err = gitEnv(dir, nil, nil, "rev-parse", all[j].sha+"^{tree}"); err != nil {
-				return none, err
+				return nil, err
 			}
 		}
 		parent, err := gitEnv(dir, nil, nil, "rev-parse", e.sha+"^^{tree}")
 		if err != nil {
-			return none, err
+			return nil, err
 		}
 		tree, clean, conflicts, _, err := mergeTree(dir, parent, cur, e.sha)
 		if err != nil {
-			return none, err
+			return nil, err
 		}
 		if clean {
 			folded[j] = tree
 			cleanFold[i] = true
+			found[i] = lineFixup{onto: cur}
 			continue
 		}
 		// The fixups after this one are checked against its clean part:
@@ -186,6 +359,7 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 		atRiskFiles, atRiskLater := map[string]bool{}, map[int]bool{}
 		atRiskHunks := 0
 		var mine []ContextGap
+		var read []gapHunk
 		// replayed is the trees the commits after the target come to when
 		// the fixups before this one are folded: built once, on first use.
 		var replayed map[int]string
@@ -193,14 +367,14 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 		for _, c := range conflicts {
 			hunks, err := fixupHunks(dir, e.sha, c.Path)
 			if err != nil {
-				return none, err
+				return nil, err
 			}
 			for _, h := range hunks {
 				if len(h.before) == 0 {
 					continue
 				}
 				if has, err := blobs.has(cur, c.Path, h.before); err != nil {
-					return none, err
+					return nil, err
 				} else if has {
 					continue
 				}
@@ -221,7 +395,7 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 					later := all[k]
 					has, err := blobs.has(later.sha+"^{tree}", c.Path, h.before)
 					if err != nil {
-						return none, err
+						return nil, err
 					}
 					if !has {
 						continue
@@ -241,7 +415,7 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 						// A fixup of a later commit folds into that commit,
 						// so what it adds is that commit's. Any other
 						// fixup's share of it cannot be told.
-						t, ok := foldTarget(dir, all[:k], later.subject, index)
+						t, ok := targetOf[k]
 						laterFold := ok && t > j && cleanFold[k]
 						if laterFold && foldedHas(t) {
 							needs = t
@@ -252,12 +426,12 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 							// commits up to a later one come to together.
 							if !replayDone {
 								replayDone = true
-								if replayed, err = replayAfter(dir, all, targetOf, cur, j, i); err != nil {
-									return none, err
+								if replayed, err = replayAfter(dir, all, isFoldAt, targetOf, cleanFold, cur, j, i); err != nil {
+									return nil, err
 								}
 							}
 							if m, found, err := firstReplayedWith(blobs, replayed, j, i, c.Path, h.before); err != nil {
-								return none, err
+								return nil, err
 							} else if found {
 								needs = m
 								break
@@ -270,19 +444,217 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 					atRiskLater[needs] = true
 					mine = append(mine, ContextGap{Fixup: e.sha, FixupSubject: e.subject, Target: all[j].sha, TargetSubject: all[j].subject,
 						Path: c.Path, Lines: h.lines(), Needs: all[needs].sha, NeedsSubject: all[needs].subject})
+					read = append(read, gapHunk{before: h.before, first: k})
 					break
 				}
 			}
 		}
 		if why != "" {
-			unchecked = append(unchecked, fmt.Sprintf("%s %q: not analysed: %s (%s) lack context behind %s that %s %s; %s",
-				git.ShortID(e.sha, 7), oneLinePlan(e.subject), plural(len(atRiskFiles), "file"), plural(atRiskHunks, "hunk"),
-				git.ShortID(all[j].sha, 7), plural(len(atRiskLater), "later commit"), addVerb(len(atRiskLater)), why))
+			found[i] = lineFixup{onto: cur, note: fmt.Sprintf("not analysed: %s (%s) lack context behind %s that %s %s; %s",
+				plural(len(atRiskFiles), "file"), plural(atRiskHunks, "hunk"),
+				git.ShortID(all[j].sha, 7), plural(len(atRiskLater), "later commit"), addVerb(len(atRiskLater)), why)}
 			continue
 		}
-		gaps = append(gaps, mine...)
+		found[i] = lineFixup{onto: cur, gaps: mine, hunks: read}
 	}
-	return FixupAnalysis{Gaps: gaps, Unchecked: unchecked}, nil
+	return found, nil
+}
+
+// foldReplay is the line replayed on its own base as the fold orders it.
+type foldReplay struct {
+	// replayedLine is what was replayed; nothing when the line was not.
+	replayedLine
+	// stop is the commit the replay conflicts at, -1 when there is none, and
+	// conflicted the files it conflicts in.
+	stop       int
+	conflicted []string
+	// unreached is why a fixup the replay did not apply may not be reached.
+	unreached string
+	// first is the commit the replay starts at, and order the foldOrder from
+	// there.
+	first int
+	order []int
+}
+
+// upTo is the commits of the fold of all up to fixup i: those below the
+// replay, which are no fold's, then the replay's own as far as i.
+func (r foldReplay) upTo(all []lineCommit, i int) []string {
+	var commits []string
+	for m := range r.first {
+		if !isFold(all[m].subject) {
+			commits = append(commits, all[m].sha)
+		}
+	}
+	for _, c := range r.order {
+		commits = append(commits, all[c].sha)
+		if c == i {
+			break
+		}
+	}
+	return commits
+}
+
+// replayFold replays all for AnalyseFixups, from the first commit a fixup
+// folds into to the last. A line the run refuses is not replayed, nor one
+// whose fold takes an order wt does not follow, and the replay ends where
+// the run may lift a version.
+func replayFold(dir string, all []lineCommit, targetOf map[int]int, cfg *Config) (foldReplay, error) {
+	r := foldReplay{stop: -1}
+	for i, c := range all {
+		if _, ok := targetOf[i]; !ok && isFold(c.subject) {
+			r.unreached = fmt.Sprintf("the run refuses the line: %s %q names no one commit earlier on it", git.ShortID(c.sha, 7), oneLinePlan(c.subject))
+			return r, nil
+		}
+	}
+	if len(targetOf) == 0 {
+		return r, nil
+	}
+	if r.unreached = unfollowed(all, targetOf); r.unreached != "" {
+		return r, nil
+	}
+	targets := slices.Collect(maps.Values(targetOf))
+	first, last := slices.Min(targets), slices.Max(targets)
+	start, err := gitEnv(dir, nil, nil, "rev-parse", all[first].sha+"^^{tree}")
+	if err != nil {
+		return r, err
+	}
+	order := foldOrder(all, targetOf, first, last)
+	r.first, r.order = first, order
+	if r.replayedLine, r.stop, r.conflicted, err = replayCommits(dir, all, order, start); err != nil {
+		return r, err
+	}
+	if r.stop >= 0 {
+		r.unreached = fmt.Sprintf("the fold in place conflicts at %s %q first", git.ShortID(all[r.stop].sha, 7), oneLinePlan(all[r.stop].subject))
+	}
+	at, err := mayLiftAt(dir, cfg, all, targetOf, order, start, r.after)
+	if err != nil || at < 0 {
+		return r, err
+	}
+	for _, c := range order[at:] {
+		delete(r.after, all[c].sha)
+	}
+	c := all[order[at]]
+	r.stop, r.conflicted = -1, nil
+	r.unreached = fmt.Sprintf("the run may lift a version at %s %q, which changes what later fixups are merged onto", git.ShortID(c.sha, 7), oneLinePlan(c.subject))
+	return r, nil
+}
+
+// unfollowed is why the order the fold takes all in is not one wt replays,
+// "" when it is: a move! commit, or a fold into a fold, which autosquash
+// places after the later folds of that one's own target.
+func unfollowed(all []lineCommit, targetOf map[int]int) string {
+	for i, c := range all {
+		if isMove(c.subject) {
+			return "the line has a move! commit, whose part wt does not fold in here"
+		}
+		if j, ok := targetOf[i]; ok && isFold(all[j].subject) {
+			return fmt.Sprintf("the line folds %s into the fixup %s, an order wt does not replay", git.ShortID(c.sha, 7), git.ShortID(all[j].sha, 7))
+		}
+	}
+	return ""
+}
+
+// foldOrder is the commits from first to last that are no fold, each followed
+// by the folds into it, in line order.
+func foldOrder(all []lineCommit, targetOf map[int]int, first, last int) []int {
+	folds := map[int][]int{}
+	for i := range all {
+		if j, ok := targetOf[i]; ok {
+			folds[j] = append(folds[j], i)
+		}
+	}
+	var order []int
+	for m := first; m <= last; m++ {
+		if !isFold(all[m].subject) {
+			order = append(append(order, m), folds[m]...)
+		}
+	}
+	return order
+}
+
+// replayCommits replays the commits order names, a foldOrder, onto the tree
+// start (replayLine): what came of it, the commit it conflicts at, -1 when
+// none, and the files of that conflict.
+func replayCommits(dir string, all []lineCommit, order []int, start string) (replayedLine, int, []string, error) {
+	in := slices.Sorted(slices.Values(order))
+	line := make([]moveCommit, len(in))
+	for k, i := range in {
+		line[k] = moveCommit{sha: all[i].sha, subject: all[i].subject}
+	}
+	stop := -1
+	var conflicted []string
+	res, _, err := replayLine(dir, line, nil, replayFrom{tree: start,
+		conflict: func(k int, conflicts []Conflict) string {
+			stop = in[k]
+			for _, c := range conflicts {
+				conflicted = append(conflicted, c.Path)
+			}
+			return "conflict"
+		},
+	})
+	return res, stop, conflicted, err
+}
+
+// mayLiftAt is the first place in order, replayed from start with the trees
+// after, where the run may lift a version (liftAt): a commit it picks, which
+// is no fold, that changes a file a lifting rule claims and is applied on
+// another copy of it than its parent's. -1 when there is none. A fold is
+// lifted only where it conflicts, and nothing is said to apply past that.
+func mayLiftAt(dir string, cfg *Config, all []lineCommit, targetOf map[int]int, order []int, start string, after map[string]string) (int, error) {
+	patterns := cfg.liftPatterns()
+	if len(patterns) == 0 {
+		return -1, nil
+	}
+	on := start
+	for at, i := range order {
+		c := all[i].sha
+		if _, fold := targetOf[i]; !fold {
+			changed, err := changedBlobs(dir, c+"^", c)
+			if err != nil {
+				return -1, err
+			}
+			var claimed []string
+			for p := range changed {
+				if matchesAny(patterns, p) {
+					claimed = append(claimed, p)
+				}
+			}
+			if len(claimed) > 0 {
+				differs, err := changedBlobs(dir, c+"^", on, claimed...)
+				if err != nil || len(differs) > 0 {
+					return at, err
+				}
+			}
+		}
+		tree, ok := after[c]
+		if !ok {
+			break
+		}
+		on = tree
+	}
+	return -1, nil
+}
+
+// rootOf is the commit that is no fold behind which i ends up: i itself, or
+// the end of the targets from it.
+func rootOf(targetOf map[int]int, i int) int {
+	for {
+		j, ok := targetOf[i]
+		if !ok {
+			return i
+		}
+		i = j
+	}
+}
+
+// nestedUnder is whether the folds behind root include one into another fold.
+func nestedUnder(targetOf map[int]int, root int) bool {
+	for i, j := range targetOf {
+		if _, ok := targetOf[j]; ok && rootOf(targetOf, i) == root {
+			return true
+		}
+	}
+	return false
 }
 
 // replayAfter is the tree each ordinary commit between target j and fixup i
@@ -292,7 +664,7 @@ func AnalyseFixups(dir string, commits []string, _ *Config) (FixupAnalysis, erro
 // established: a commit or a fixup of one that does not merge clean, a
 // fixup of one that conflicted, or a fixup of a commit below j seen before i,
 // whose fold changes the trees from j on in a way the replay does not apply.
-func replayAfter(dir string, all []lineCommit, targetOf map[int]int, start string, j, i int) (map[int]string, error) {
+func replayAfter(dir string, all []lineCommit, isFoldAt map[int]bool, targetOf map[int]int, cleanFold map[int]bool, start string, j, i int) (map[int]string, error) {
 	for f := 0; f < i; f++ {
 		if t, ok := targetOf[f]; ok && t < j {
 			return nil, nil
@@ -313,7 +685,7 @@ func replayAfter(dir string, all []lineCommit, targetOf map[int]int, start strin
 		return true, nil
 	}
 	for m := j + 1; m < i; m++ {
-		if isFold(all[m].subject) {
+		if isFoldAt[m] {
 			continue
 		}
 		if ok, err := apply(m); err != nil || !ok {
@@ -322,6 +694,9 @@ func replayAfter(dir string, all []lineCommit, targetOf map[int]int, start strin
 		for f := m + 1; f < i; f++ {
 			if t, ok := targetOf[f]; !ok || t != m {
 				continue
+			}
+			if !cleanFold[f] {
+				return nil, nil
 			}
 			if ok, err := apply(f); err != nil || !ok {
 				return nil, err
@@ -349,6 +724,303 @@ func firstReplayedWith(blobs blobCache, trees map[int]string, j, i int, path str
 		}
 	}
 	return 0, false, nil
+}
+
+// pathCache reads the files each commit changes once.
+type pathCache struct {
+	dir string
+	got map[string][]string
+}
+
+func (p pathCache) of(c string) ([]string, error) {
+	if paths, ok := p.got[c]; ok {
+		return paths, nil
+	}
+	paths, err := pathsOfCommit(p.dir, c)
+	if err == nil {
+		p.got[c] = paths
+	}
+	return paths, err
+}
+
+// layerStepOver is the command of a layer step of cfg that owns a file one of
+// commits changes, "" when none: it commits at a layer's end, and what comes
+// above is merged onto its output. A step with no paths owns every file.
+func layerStepOver(cfg *Config, paths pathCache, commits []string) (string, error) {
+	for _, step := range cfg.LayerSteps() {
+		if len(step.Paths) == 0 {
+			return step.Run, nil
+		}
+		for _, c := range commits {
+			changed, err := paths.of(c)
+			if err != nil {
+				return "", err
+			}
+			if slices.ContainsFunc(changed, func(p string) bool { return matchesAny(step.Paths, p) }) {
+				return step.Run, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// laterFile is a file with no lines to look for, a binary one or one the
+// fixup adds, as the fixup finds it in a commit of the line: "" path when
+// there is none.
+type laterFile struct {
+	k      int
+	path   string
+	absent bool
+}
+
+// stopGaps is what of the files fixup i conflicts in, on the tree the fold
+// stops it on, a commit between its target j and it has: a gap for each hunk
+// whose lines that tree lacks, at the first commit of the line with them, as
+// lineGaps reads one, and the first file with no hunk that a commit has as
+// the fixup finds it.
+func stopGaps(dir string, blobs blobCache, all []lineCommit, j, i int, tree string, conflicted []string) ([]ContextGap, []gapHunk, laterFile, error) {
+	var gaps []ContextGap
+	var read []gapHunk
+	var whole laterFile
+	blob := func(rev string) (string, error) {
+		// An absent path is exit 1 under --quiet: absence, not an error.
+		out, code, err := gitEnvAllow(dir, nil, nil, 1, "rev-parse", "--verify", "--quiet", rev)
+		if err != nil || code != 0 {
+			return "", err
+		}
+		return out, nil
+	}
+	for _, path := range conflicted {
+		hunks, err := fixupHunks(dir, all[i].sha, path)
+		if err != nil {
+			return nil, nil, whole, err
+		}
+		for _, h := range hunks {
+			if len(h.before) == 0 {
+				continue
+			}
+			if has, err := blobs.has(tree, path, h.before); err != nil {
+				return nil, nil, whole, err
+			} else if has {
+				continue
+			}
+			for k := j + 1; k < i; k++ {
+				has, err := blobs.has(all[k].sha+"^{tree}", path, h.before)
+				if err != nil {
+					return nil, nil, whole, err
+				}
+				if has {
+					gaps = append(gaps, ContextGap{Fixup: all[i].sha, FixupSubject: all[i].subject, Target: all[j].sha, TargetSubject: all[j].subject,
+						Path: path, Lines: h.lines(), Needs: all[k].sha, NeedsSubject: all[k].subject})
+					read = append(read, gapHunk{before: h.before, first: k})
+					break
+				}
+			}
+		}
+		if whole.path != "" || slices.ContainsFunc(hunks, func(h hunk) bool { return len(h.before) > 0 }) {
+			continue
+		}
+		before, err := blob(all[i].sha + "^:" + path)
+		if err != nil {
+			return nil, nil, whole, err
+		}
+		have, err := blob(tree + ":" + path)
+		if err != nil {
+			return nil, nil, whole, err
+		}
+		if before == have {
+			continue
+		}
+		for k := j + 1; k < i; k++ {
+			got, err := blob(all[k].sha + ":" + path)
+			if err != nil {
+				return nil, nil, whole, err
+			}
+			if got == before {
+				whole = laterFile{k, path, before == ""}
+				break
+			}
+		}
+	}
+	return gaps, read, whole, nil
+}
+
+// foldView is where the fold has the context of fixup i's hunks, behind its
+// target j: cur is the tree the fixup is merged onto, stopsHere whether the
+// replayed fold conflicts at it, and conflicted the files of that conflict.
+type foldView struct {
+	dir        string
+	all        []lineCommit
+	targetOf   map[int]int
+	blobs      blobCache
+	paths      pathCache
+	j, i       int
+	cur        string
+	stopsHere  bool
+	conflicted []string
+	// after is made on first use, and shared by the fixup's files.
+	after *afterReplay
+}
+
+// placed is the first commit after the target that has before in path as the
+// fold orders the line; false when that cannot be told. inFold is whether a
+// fixup is the first on the line to have it.
+func (v *foldView) placed(path string, before []string, inFold bool) (int, bool, error) {
+	// Past the stop, what the stop leaves of a file is unknown.
+	if !v.stopsHere && slices.Contains(v.conflicted, path) {
+		return 0, false, nil
+	}
+	// A fixup of a commit below the target changes what the commits after it
+	// come to. At the stop cur has it, and it is in doubt only where the
+	// context comes from another fixup.
+	if !v.stopsHere || inFold {
+		if below, err := v.foldedBelow(path); err != nil || below {
+			return 0, false, err
+		}
+	}
+	// The order within a group with a fold of a fold is git's own, so what cur
+	// has of it is not what the fold has.
+	if nestedUnder(v.targetOf, rootOf(v.targetOf, v.j)) {
+		return 0, false, nil
+	}
+	if v.after == nil {
+		v.after = newAfterReplay(v.dir, v.all, v.targetOf, v.cur, v.j, v.i)
+	}
+	return v.after.first(v.blobs, path, before)
+}
+
+// foldedBelow is whether a fixup of a commit below the target changes path.
+func (v *foldView) foldedBelow(path string) (bool, error) {
+	for f := range v.targetOf {
+		if rootOf(v.targetOf, f) >= v.j {
+			continue
+		}
+		paths, err := v.paths.of(v.all[f].sha)
+		if err != nil || slices.Contains(paths, path) {
+			return err == nil, err
+		}
+	}
+	return false, nil
+}
+
+// afterReplay replays the commits between target j and fixup i as the fold
+// takes them, each with its folds, from the target's tree: one commit at a
+// time, as far as the files looked for need. A file that does not merge clean
+// is left as it was and the replay goes on, but says nothing more of that
+// file. A commit git drops as empty is passed over; the replay ends at one
+// that has folds, which land elsewhere, and after a commit whose folds take
+// an order of git's own.
+type afterReplay struct {
+	dir      string
+	all      []lineCommit
+	targetOf map[int]int
+	// order is what is still to replay, a foldOrder.
+	order []int
+	cur   string
+	done  []replayedGroup
+	ended bool
+}
+
+// replayedGroup is a commit with its folds replayed: the tree they left, and
+// for each file that conflicted among them the tree before it did, "" when
+// the commit itself conflicts there.
+type replayedGroup struct {
+	m    int
+	tree string
+	held map[string]string
+}
+
+// newAfterReplay is an afterReplay with nothing replayed yet. A line with a
+// move! commit takes an order wt does not follow, so it replays nothing.
+func newAfterReplay(dir string, all []lineCommit, targetOf map[int]int, start string, j, i int) *afterReplay {
+	r := &afterReplay{dir: dir, all: all, targetOf: targetOf, cur: start}
+	r.ended = slices.ContainsFunc(all, func(c lineCommit) bool { return isMove(c.subject) })
+	r.order = foldOrder(all, targetOf, j+1, i-1)
+	return r
+}
+
+// first is the first commit whose replayed tree has before in path; false
+// when the replay cannot tell of one.
+func (r *afterReplay) first(blobs blobCache, path string, before []string) (int, bool, error) {
+	for k := 0; ; k++ {
+		if k == len(r.done) {
+			if ok, err := r.next(); err != nil || !ok {
+				return 0, false, err
+			}
+		}
+		g := r.done[k]
+		tree, held := g.held[path]
+		if !held {
+			tree = g.tree
+		}
+		if tree != "" {
+			if has, err := blobs.has(tree, path, before); err != nil || has {
+				return g.m, has, err
+			}
+		}
+		if held {
+			return 0, false, nil
+		}
+	}
+}
+
+// next replays one more commit and its folds; false when there is none to
+// replay.
+func (r *afterReplay) next() (bool, error) {
+	for !r.ended && len(r.order) > 0 {
+		m := r.order[0]
+		g := replayedGroup{m: m, held: map[string]string{}}
+		n := 1
+		for n < len(r.order) && r.targetOf[r.order[n]] == m && isFold(r.all[r.order[n]].subject) {
+			n++
+		}
+		group := r.order[:n]
+		r.order = r.order[n:]
+		if nestedUnder(r.targetOf, m) {
+			group, r.ended = group[:1], true
+		}
+		dropped := false
+		for _, c := range group {
+			parent, err := gitEnv(r.dir, nil, nil, "rev-parse", r.all[c].sha+"^^{tree}")
+			if err != nil {
+				return false, err
+			}
+			tree, clean, conflicts, _, err := mergeTree(r.dir, parent, r.cur, r.all[c].sha)
+			if err != nil {
+				return false, err
+			}
+			if !clean {
+				for _, f := range conflicts {
+					if _, ok := g.held[f.Path]; !ok {
+						g.held[f.Path] = ""
+						if c != m {
+							g.held[f.Path] = r.cur
+						}
+					}
+				}
+				if tree, err = cleanPart(r.dir, tree, r.cur, conflicts); err != nil {
+					return false, err
+				}
+			} else if c == m && tree == r.cur {
+				own, err := gitEnv(r.dir, nil, nil, "rev-parse", r.all[c].sha+"^{tree}")
+				if err != nil {
+					return false, err
+				}
+				if dropped = own != parent; dropped {
+					break
+				}
+			}
+			r.cur = tree
+		}
+		if dropped {
+			r.ended = r.ended || n > 1
+			continue
+		}
+		g.tree = r.cur
+		r.done = append(r.done, g)
+		return true, nil
+	}
+	return false, nil
 }
 
 // cleanPart is merged, a merge-tree result, with each conflicted file as
@@ -388,45 +1060,60 @@ func cleanPart(dir, merged, cur string, conflicts []Conflict) (string, error) {
 // lineCommit is a commit of the line and its subject.
 type lineCommit struct{ sha, subject string }
 
-// foldTarget is the commit of earlier a fold subject names, found as git's
-// autosquash finds it: after the prefixes and their whitespace, a commit
-// named by revision, else one with that subject, else one whose subject
-// begins with it. ok is false for a commit that is no fold, and for a name
-// that finds no commit or more than one: the run refuses those itself.
+// foldTarget is the commit of earlier a fold subject names, as git's
+// autosquash finds it (foldMatches). ok is false for a commit that is no
+// fold, and for a name that finds no commit or more than one: the run
+// refuses those itself.
 func foldTarget(dir string, earlier []lineCommit, subject string, index map[string]int) (int, bool) {
-	target, folding := subject, false
-	for {
-		rest, ok := cutFoldPrefix(target)
-		if !ok {
-			break
-		}
-		target, folding = strings.TrimSpace(rest), true
-	}
-	if !folding || target == "" {
+	name, ok := foldName(subject)
+	if !ok {
 		return 0, false
 	}
-	if sha, err := gitEnv(dir, nil, nil, "rev-parse", "--verify", "--quiet", "--end-of-options", target+"^{commit}"); err == nil {
-		if j, ok := index[strings.TrimSpace(sha)]; ok && j < len(earlier) {
-			return j, true
-		}
+	found := foldMatches(dir, earlier, name, index)
+	if len(found) != 1 {
+		return 0, false
 	}
+	return found[0], true
+}
+
+// foldName is what a fold subject names, after its prefixes and their
+// whitespace; false for a subject that is no fold, or names nothing.
+func foldName(subject string) (string, bool) {
+	name, folding := subject, false
+	for {
+		rest, ok := cutFoldPrefix(name)
+		if !ok {
+			return name, folding && name != ""
+		}
+		name, folding = strings.TrimSpace(rest), true
+	}
+}
+
+// foldMatches is the commits of earlier a fold's name may mean, looked for in
+// autosquash's order: those with that subject; else the one the name, with no
+// space in it, is a revision of; else those whose subject begins with it.
+// index places each commit of the line.
+func foldMatches(dir string, earlier []lineCommit, name string, index map[string]int) []int {
 	var exact, prefix []int
 	for j, c := range earlier {
 		switch {
-		case c.subject == target:
+		case c.subject == name:
 			exact = append(exact, j)
-		case strings.HasPrefix(c.subject, target):
+		case strings.HasPrefix(c.subject, name):
 			prefix = append(prefix, j)
 		}
 	}
-	candidates := exact
-	if len(candidates) == 0 {
-		candidates = prefix
+	if len(exact) > 0 {
+		return exact
 	}
-	if len(candidates) != 1 {
-		return 0, false
+	if !strings.Contains(name, " ") {
+		if sha, err := gitEnv(dir, nil, nil, "rev-parse", "--verify", "--quiet", "--end-of-options", name+"^{commit}"); err == nil {
+			if j, ok := index[strings.TrimSpace(sha)]; ok && j < len(earlier) {
+				return []int{j}
+			}
+		}
 	}
-	return candidates[0], true
+	return prefix
 }
 
 // hunk is one hunk of a fixup's diff: the lines its change needs before it

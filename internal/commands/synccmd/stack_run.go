@@ -68,7 +68,7 @@ func (r *RunPlan) readStack() error {
 	}
 	if r.opts.Stack.Autosquash {
 		// Named before anything replays; a warning, so the run goes ahead.
-		r.gaps = syncrun.ContextGaps(r.ctx.Repo.MainRoot, line, s)
+		r.gaps, _ = syncrun.ContextGaps(r.ctx.Repo.MainRoot, line, s, r.cfg, r.target == nil)
 		r.gapsUnchecked = s.ContextUnchecked
 	}
 	syncrun.PrintLayers(r.w, s)

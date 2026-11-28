@@ -122,7 +122,7 @@ func runStopsAhead(cfg *wtsync.Config, line wtsync.Line, path string, listed []a
 // foldLookAt reads the stack of look and the fold a run of it makes; a nil
 // fold for a run onto target with no move! commit on the line.
 func foldLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent, progress lookProgress) (*syncrun.Stack, *FoldLook, error) {
-	s, err := stackLookAt(ctx, base, trunkSHA, target, look, listed, progress)
+	s, err := stackLookAt(ctx, base, trunkSHA, cfg, target, look, listed, progress)
 	if err != nil {
 		return nil, nil, err
 	}

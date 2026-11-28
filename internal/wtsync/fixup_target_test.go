@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/anlindstrom/wt/internal/git"
 	"github.com/anlindstrom/wt/internal/gittest"
 )
 
@@ -66,6 +67,22 @@ func TestFixupOfCarriedMatchesGitsTargetResolution(t *testing.T) {
 				t.Errorf("refusal %q, want one mentioning %q", why, c.refuse)
 			}
 		})
+	}
+}
+
+// A subject is looked for before a revision: with "release" both a commit's
+// subject and a tag on a later one, the fixup is of the subject's commit, here
+// below the replayed range.
+func TestFixupOfCarriedResolvesASubjectBeforeARevision(t *testing.T) {
+	t.Parallel()
+	dir, _, commits := fixupRepo(t, "release", "feat: three", "fixup! release")
+	gitIn(t, dir, "tag", "release", commits[3])
+	why, err := FixupOfCarried(dir, "main", commits[2], "feature", commits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(why, `is for "release" (`+git.ShortID(commits[2], 7)+`)`) {
+		t.Errorf("refusal %q, want one for the commit with the subject", why)
 	}
 }
 

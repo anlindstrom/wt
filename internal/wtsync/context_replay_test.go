@@ -2,6 +2,7 @@ package wtsync
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestContextGapsReplayAFoldAndTheCommitsBetweenTargets(t *testing.T) {
 		{"fixup! feat: b", "list.txt", list("one # b", "two # a", "three # c")},
 		{"fixup! feat: a", "list.txt", list("one # b", "two", "three # c")},
 	})
-	gaps, unchecked, err := ContextGaps(dir, commits)
+	gaps, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +67,34 @@ func TestContextGapsReplayAFoldAndTheCommitsBetweenTargets(t *testing.T) {
 	}
 }
 
+// A fixup written after the one asked about does not change the answer: the
+// commits are replayed with the fixups that come before it.
+func TestContextGapsReplayOnlyTheFixupsBeforeTheOneAskedAbout(t *testing.T) {
+	t.Parallel()
+	list := func(first, second, third string) string {
+		return "head\n" + first + "\n" + second + "\n" + third + "\ntail\n"
+	}
+	dir, commits, sha := foldPreviewLine(t, [][]string{
+		{"base", "list.txt", list("one # a", "two # a", "three # a"), "g.txt", "g\n"},
+		{"feat: a", "a.txt", "a\n"},
+		{"feat: b", "g.txt", "g\nb\n"},
+		{"feat: c", "list.txt", list("one # a", "two # a", "three # c")},
+		{"fixup! feat: b", "list.txt", list("one # b", "two # a", "three # c")},
+		{"fixup! feat: a", "list.txt", list("one # b", "two", "three # c")},
+		{"feat: restore", "list.txt", list("one # b", "two # a", "three # c")},
+		{"fixup! feat: c", "list.txt", list("one # x", "two # a", "three # c")},
+	})
+	gaps, _, err := ContextGaps(dir, commits, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(gaps, func(g ContextGap) bool {
+		return g.Fixup == sha["fixup! feat: a"] && g.Needs == sha["feat: c"]
+	}) {
+		t.Errorf("gaps %+v, want the fixup of feat: a needing feat: c", gaps)
+	}
+}
+
 // A fixup whose context is in the fixup of an earlier commit than its own
 // target is not predicted: it stays not analysed, with the reason.
 func TestContextGapsStayNotAnalysedWhenTheContextIsAnEarlierCommitsFold(t *testing.T) {
@@ -77,7 +106,7 @@ func TestContextGapsStayNotAnalysedWhenTheContextIsAnEarlierCommitsFold(t *testi
 		{"fixup! feat: a", "y.txt", "y\na\nb\na2\n"},
 		{"fixup! feat: b", "y.txt", "y\na\nb\na2\nb2\n"},
 	})
-	gaps, unchecked, err := ContextGaps(dir, commits)
+	gaps, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +115,9 @@ func TestContextGapsStayNotAnalysedWhenTheContextIsAnEarlierCommitsFold(t *testi
 			t.Errorf("gap %+v: the last fixup is answered, want it not analysed", g)
 		}
 	}
-	if len(unchecked) != 1 || !strings.Contains(unchecked[0], "not analysed") || !strings.Contains(unchecked[0], "whose own fold wt cannot predict") {
+	first := commits[len(commits)-2]
+	want := "whose own fold wt cannot predict; wt cannot tell whether this fixup applies: the fold in place conflicts at " + git.ShortID(first, 7) + ` "fixup! feat: a" first`
+	if len(unchecked) != 1 || !strings.Contains(unchecked[0], "not analysed") || !strings.HasSuffix(unchecked[0], want) {
 		t.Errorf("unchecked %q; want the fixup of feat: b not analysed", unchecked)
 	}
 }
@@ -95,7 +126,7 @@ func TestContextGapsStayNotAnalysedWhenTheContextIsAnEarlierCommitsFold(t *testi
 // target and the commits after it come to, which the replay does not apply:
 // here fixup! X restores the line C changes, so the context is already at B
 // and C becomes empty. The replay would name C, so the fixup stays not
-// analysed.
+// answered.
 func TestContextGapsStayNotAnalysedWhenAnAncestorFoldChangesTheReplay(t *testing.T) {
 	t.Parallel()
 	list := func(first, second, third string) string {
@@ -112,20 +143,26 @@ func TestContextGapsStayNotAnalysedWhenAnAncestorFoldChangesTheReplay(t *testing
 		{"fixup! feat: b", "list.txt", list("one # b", "two # a", "three # c")},
 		{"fixup! feat: a", "list.txt", list("one # b", "two", "three # c")},
 	})
-	gaps, unchecked, err := ContextGaps(dir, commits)
+	gaps, unchecked, err := ContextGaps(dir, commits, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fixup := commits[len(commits)-1]
+	// The stop's gap names the first commit on the line with the context, in
+	// doubt, never C.
 	for _, g := range gaps {
-		if g.Fixup == fixup {
-			t.Errorf("gap %+v: the last fixup is answered, want it not analysed (feat: c is %s)", g, git.ShortID(sha["feat: c"], 7))
+		if g.Fixup == fixup && (g.Doubt == "" || g.Needs == sha["feat: c"]) {
+			t.Errorf("gap %+v: the last fixup is answered (feat: c is %s)", g, git.ShortID(sha["feat: c"], 7))
 		}
 	}
 	want := git.ShortID(fixup, 7) + ` "fixup! feat: a": not analysed: 1 file (1 hunk) lack context behind ` + git.ShortID(sha["feat: a"], 7) +
-		` that 1 later commit adds; the context is in the fixup ` + git.ShortID(commits[len(commits)-2], 7) + `, whose own fold wt cannot predict`
+		` that 1 later commit adds; the context is in the fixup ` + git.ShortID(commits[len(commits)-2], 7) + `, whose own fold wt cannot predict; ` +
+		`list.txt:3: wt cannot tell which commit first has the context in the fold; the fold in place conflicts at this fixup (a run with --onto may differ, and .wt-sync.yaml may resolve the file)`
 	if len(unchecked) != 1 || unchecked[0] != want {
 		t.Errorf("unchecked %q, want [%q]", unchecked, want)
+	}
+	if stop := realFold(t, dir, commits); stop != fixup {
+		t.Errorf("the fold stopped at %q, want the fixup of feat: a", stop)
 	}
 }
 
@@ -141,9 +178,10 @@ func TestReplayAfterStopsAtAnOrdinaryCommitThatConflicts(t *testing.T) {
 		{"fixup! feat: a", "a.txt", "a\nf\n"},
 	})
 	all := []lineCommit{{commits[0], "feat: a"}, {commits[1], "feat: c"}, {commits[2], "fixup! feat: a"}}
+	isFold := map[int]bool{2: true}
 	startA := gitIn(t, dir, "rev-parse", sha["feat: a"]+"^{tree}")
 
-	trees, err := replayAfter(dir, all, map[int]int{}, startA, 0, 2)
+	trees, err := replayAfter(dir, all, isFold, map[int]int{}, map[int]bool{}, startA, 0, 2)
 	if err != nil || trees[1] == "" {
 		t.Fatalf("trees %v, err %v; want feat: c's tree from the target's", trees, err)
 	}
@@ -155,7 +193,7 @@ func TestReplayAfterStopsAtAnOrdinaryCommitThatConflicts(t *testing.T) {
 	gittest.WriteFile(t, filepath.Join(dir, "f.txt"), "1\nS\n3\n")
 	gitIn(t, dir, "commit", "-q", "-a", "-m", "side")
 	startSide := gitIn(t, dir, "rev-parse", "HEAD^{tree}")
-	trees, err = replayAfter(dir, all, map[int]int{}, startSide, 0, 2)
+	trees, err = replayAfter(dir, all, isFold, map[int]int{}, map[int]bool{}, startSide, 0, 2)
 	if err != nil || trees != nil {
 		t.Errorf("trees %v, err %v; want nil, nil at the conflicting feat: c", trees, err)
 	}
