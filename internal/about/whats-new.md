@@ -4,6 +4,11 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-28 06:12 — `wt sync push --forget` accepts `--yes`
+
+`wt sync push <work> --stack --forget --yes` now works as without `--yes`, since `--forget`
+never asks. `--forget` with `--push-line` is still refused.
+
 ## 2026-11-27 22:33 — An in-place fold no longer replays onto trunk
 
 `wt sync <work> --stack --autosquash` is faster: neither the look nor the run replays the line

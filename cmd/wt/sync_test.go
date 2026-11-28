@@ -216,7 +216,7 @@ func TestSyncFlagMistakesDoNotShowUsage(t *testing.T) {
 // -y is --yes on every verb, as on wt remove, wt sweep and wt init.
 func TestSyncVerbsTakeYForYes(t *testing.T) {
 	root := newRootCmd()
-	for _, path := range [][]string{{"sync", "rebase"}, {"sync", "resume"}, {"sync", "undo"}} {
+	for _, path := range [][]string{{"sync", "rebase"}, {"sync", "resume"}, {"sync", "undo"}, {"sync", "push"}} {
 		c, _, err := root.Find(path)
 		if err != nil {
 			t.Fatal(err)
