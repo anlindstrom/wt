@@ -4,6 +4,12 @@ Newest first, each heading stamped with the local date and time of the change
 (several land per day). `wt about` prints the newest 5 entries, so keep each entry to a few lines a human
 would want read out to them; the full story is in git history.
 
+## 2026-11-28 10:05 — A fold's look says what becomes of every fixup
+
+`wt sync <work> --stack --autosquash` now ends its list of folds with a summary such as
+`fold: 7 fixups, each applies at its target`, or counts the ones ahead of their context, in
+conflict or not analysed, naming the last two. `--json` has the same counts on `fold` (sync 1.20.0).
+
 ## 2026-11-28 06:52 — `wt sync` run results are summaries by default
 
 `--json` on `wt sync rebase`, `resume`, `undo`, `steps` and `push` now holds only the stack rows

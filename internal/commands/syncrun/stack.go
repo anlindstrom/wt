@@ -158,6 +158,9 @@ type Stack struct {
 	// Fold is what a fold's tree guard compared, for the run's own
 	// `fold` field; it is not part of the look, so it is not serialized here.
 	Fold *StackFold `json:"-"`
+	// Fixups is, for a fold, what ContextGaps read of each fixup, which the
+	// look sums up in its `fold`; nil when no analysis ran.
+	Fixups *FixupsRead `json:"-"`
 	// Push is what a run that pushed the line's moved layers did: one atomic
 	// push per remote, each branch with its lease and the commit pushed. Null
 	// in the look, and for a run that pushed nothing.
@@ -404,12 +407,14 @@ func ReadSideHolders(ctx *kit.Context, sides []wtsync.SideBranch, listed []agent
 // ContextGaps is, for a fold of line read in dir, its worktree, under the
 // run's declaration cfg, the hunks of its fixups that lack
 // their context behind their targets, set on s as --json reports them, with
-// what could not be analysed, and returned for the rebase. An analysis that
-// fails is noted on s and the look or run goes on without: the gaps are a
-// warning, and read is false. PrintLayers says both, and for a fold in place,
-// inPlace, which gaps are of fixups it applies.
+// what could not be analysed, and returned for the rebase. What the analysis
+// finds of each fixup is s.Fixups. An analysis that fails is noted on s and
+// the look or run goes on without: the gaps are a warning, and read is false.
+// PrintLayers says the gaps and notes, and for a fold in place, inPlace, which
+// gaps are of fixups it applies.
 func ContextGaps(dir string, line wtsync.Line, s *Stack, cfg *wtsync.Config, inPlace bool) (read []wtsync.ContextGap, ok bool) {
 	a, err := AnalyseFixupsOf(dir, line.Commits, cfg)
+	s.Fixups = &FixupsRead{Outcomes: a.Fixups, Err: err}
 	if err != nil {
 		s.ContextUnchecked = append(s.ContextUnchecked, "which fixups lack their context could not be read: "+err.Error())
 		return nil, false
@@ -425,6 +430,13 @@ func ContextGaps(dir string, line wtsync.Line, s *Stack, cfg *wtsync.Config, inP
 		}
 	}
 	return a.Gaps, true
+}
+
+// FixupsRead is what ContextGaps found of each fixup of a fold, or Err, why
+// it could analyse none.
+type FixupsRead struct {
+	Outcomes []wtsync.FixupOutcome
+	Err      error
 }
 
 // AnalyseFixupsOf is wtsync.AnalyseFixups, replaced in a test.

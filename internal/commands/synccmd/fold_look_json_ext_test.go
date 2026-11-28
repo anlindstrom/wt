@@ -50,4 +50,5 @@ func TestFoldLookJSONCarriesTheRefusal(t *testing.T) {
 	if o.Fold == nil || o.Fold.Refusal == nil || !strings.Contains(*o.Fold.Refusal, "names no commit earlier on the line") || len(o.Fold.Folds) != 0 {
 		t.Errorf("fold %+v", o.Fold)
 	}
+	wantSummary(t, o.Fold, "none 0 0 0 0 0")
 }

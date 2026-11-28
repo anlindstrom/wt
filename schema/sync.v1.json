@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json",
-  "x-version": "1.19.0",
+  "x-version": "1.20.0",
   "title": "wt sync --json",
   "description": "What a rebase onto trunk would do to every worktree of a repository, as `wt sync --json` prints it on stdout: one overview object, or with --all, --roots or --profile an array of them, one per repository. It fetches trunk and each worktree branch's own remote (unless --no-fetch) and writes nothing else. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "oneOf": [
@@ -228,10 +228,10 @@
     "foldLook": {
       "type": "object",
       "description": "Since 1.15.0: what a fold in place does to the line, read from the line as it is; since 1.19.0 also what a fold with --onto does to a line with a move! commit.",
-      "required": ["base", "refusal", "folds", "unchanged", "repointed", "held"],
+      "required": ["base", "refusal", "folds", "analysis", "fixups", "appliesAtTarget", "aheadOfContext", "conflicts", "notAnalysed", "unchanged", "repointed", "held"],
       "properties": {
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's own base, which a fold in place stays on: stack.base." },
-        "refusal": { "type": ["string", "null"], "description": "Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, a declaration the line cannot take, or (since 1.17.0) a move! commit the fold cannot take: its target or source does not name one commit below it, a path the source does not change, a range that splits a hunk or selects none (since 1.18.0), a hunk two move! commits take, the whole source in one move, a part that does not apply at the target or would land elsewhere than the source has it, a fold that does not merge clean or would end in another tree with it. Also what keeps the run off the line or its worktree: no layer branch, tracked changes, a busy agent session, its own remote, a need of a step it may run that does not answer. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty." },
+        "refusal": { "type": ["string", "null"], "description": "Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, a declaration the line cannot take, or (since 1.17.0) a move! commit the fold cannot take: its target or source does not name one commit below it, a path the source does not change, a range that splits a hunk or selects none (since 1.18.0), a hunk two move! commits take, the whole source in one move, a part that does not apply at the target or would land elsewhere than the source has it, a fold that does not merge clean or would end in another tree with it. Also what keeps the run off the line or its worktree: no layer branch, tracked changes, a busy agent session, its own remote, a need of a step it may run that does not answer. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty, and since 1.20.0 analysis is none and the counts are 0." },
         "folds": {
           "type": "array",
           "description": "Every fixup!, squash! or amend! commit of the line with the commit it folds into, and since 1.17.0 every move! commit with the commit its part goes into, oldest first. A fixup whose name finds no commit, or more than one, is left out: the run refuses it.",
@@ -266,6 +266,12 @@
             }
           }
         },
+        "analysis": { "enum": ["done", "failed", "none"], "description": "Since 1.20.0: whether the fixups of folds were analysed. done: the four outcome counts add up to fixups. failed: the analysis failed as a whole, the outcome counts are 0 and stack.contextUnchecked says why. none: no summary, because folds has no fixup commit (a refused fold, which is none even when the analysis ran or failed, or a line with no fixup!, squash! or amend! commit)." },
+        "fixups": { "type": "integer", "minimum": 0, "description": "Since 1.20.0: the fixup!, squash! and amend! commits in folds, one each whatever their hunks; no move! commit." },
+        "appliesAtTarget": { "type": "integer", "minimum": 0, "description": "Since 1.20.0: the fixups the fold of the line on its own base applies behind their targets. .wt-sync.yaml conflict strategies are not consulted. One may still have a hunk in stack.contextGaps, for a run onto another base." },
+        "aheadOfContext": { "type": "integer", "minimum": 0, "description": "Since 1.20.0: the fixups that fold does not apply because a hunk needs a later commit of the line; stack.contextGaps names the hunks." },
+        "conflicts": { "type": "integer", "minimum": 0, "description": "Since 1.20.0: the fixups that fold first conflicts at, with no later commit that explains it. .wt-sync.yaml may resolve the file in a run." },
+        "notAnalysed": { "type": "integer", "minimum": 0, "description": "Since 1.20.0: the fixups wt cannot say this of, such as one reached only after a stop, or any on a line with a move! commit. The look's text names each with its reason." },
         "unchanged": { "type": "array", "items": { "type": "string" }, "description": "The layers whose commits all lie below every fold target: the fold leaves them as they are. All layers when there is no fold, none with --alone." },
         "repointed": { "type": "array", "items": { "type": "string" }, "description": "The layers that get new commits, bottom first: not those in held." },
         "held": {
