@@ -395,6 +395,22 @@ conflict with trunk is not shown, and a line divergent from trunk folds. A run
 given either does replay, and refuses as a plain run does. The `--json` look
 still surveys every worktree against trunk, so it can say divergent; the
 `--expect` token comes from that survey.
+
+A fold's look lists the commits the run stops to check: each once its fixups
+are folded in, by what it then changes. A matching commit in a layer the fold
+leaves unchanged is listed as not checked (below). With a `move!` commit the run
+is one under `--each-commit=targets`, and the look lists those stops. Where the
+run may check fewer than listed (a fold onto another commit, a per-layer step
+that may commit or fold, a script a commit does not hold yet), the count reads
+`up to N`. The look and the run probe the needs of every step the run may reach,
+erring toward more, and a need that does not answer refuses the fold in the look
+as in the run.
+
+A fold, an `--edit` and `wt sync steps` rewrite a line that is already on trunk,
+so a line diverged from its own remote is refused there as anywhere, unless
+`wt sync rebase` is given `--allow-diverged`; `wt sync steps` takes no such
+flag, so pull the remote's commits in first.
+
 When the content check at the end passes it prints
 `✓ tip tree equal to <old tip>`, naming the step paths it left out. The replayed
 trees can predate a script trunk declared since. A step whose `run` starts
@@ -817,7 +833,9 @@ string counts as missing.
 Before a run moves any branch, it probes each need once, and only when a step
 with it may run: an `each_commit` step with a commit to check, or a `defer`
 step whose `paths` match a path the rebase may change (what trunk changed
-since the branch's merge base, or what the branch's commits change). A need
+since the branch's merge base, or what the branch's commits change). A fold on
+the line's own base (`--stack --autosquash`, without `--onto`) counts only what
+the line changes since that base, `--if-ready` and `--expect` included. A need
 that does not answer refuses the worktrees whose steps need it, and what sits
 on them in a stack, before anything moves: the line names the step, the need
 and what the probe said. `--allow-owed` rebases them anyway: the step is not

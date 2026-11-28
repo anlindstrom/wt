@@ -123,58 +123,40 @@ func TestFoldAssessedAgainstTrunkStillRefusesADivergentLine(t *testing.T) {
 }
 
 // A lower layer checked out in its own worktree is still part of the line a
-// fold checks: for a need only its commit has, the look says a run refuses, and
-// the run does.
+// fold checks, whether or not trunk has moved: for a need only its commit has,
+// the look lists the commit and says a run refuses, and the run does.
 func TestInPlaceFoldLookChecksTheCommitsBelowACheckedOutLayer(t *testing.T) {
 	t.Parallel()
 	skipShort(t)
-	ctx, _ := synccmdtest.OpenLine(t, func(main, wtDir string) {
-		write := func(rel, content string) { gittest.WriteFile(t, filepath.Join(main, rel), content) }
-		commit := func(msg string) {
-			gittest.Git(t, main, "add", "-A")
-			gittest.Git(t, main, "commit", "-q", "--no-verify", "-m", msg)
-		}
-		write(".wt-sync.yaml", "conflicts: []\neach_commit:\n  - run: 'true'\n    paths: [low.txt]\n    needs: [docker]\n")
-		commit("base")
-		gittest.Git(t, main, "checkout", "-q", "-b", "tmp/low")
-		write("low.txt", "low\n")
-		commit("feat: low")
-		gittest.Git(t, main, "branch", "low1")
-		write("top.txt", "top\n")
-		commit("feat: top")
-		write("top.txt", "top fixed\n")
-		commit("fixup! feat: top")
-		gittest.Git(t, main, "checkout", "-q", "main")
-		write("trunk.txt", "trunk\n")
-		commit("feat: trunk's own")
-		gittest.Git(t, main, "remote", "add", "origin", main)
-		gittest.Git(t, main, "fetch", "-q", "origin")
-		for _, b := range []string{"tmp/low", "low1"} {
-			gittest.Git(t, main, "worktree", "add", "-q", filepath.Join(wtDir, strings.ReplaceAll(b, "/", "_")), b)
-		}
-	})
-	var look bytes.Buffer
-	if err := synccmd.SyncWorktree(ctx, "tmp/low", synccmd.SyncOptions{NoFetch: true, Probes: synccmdtest.DockerDown().Probes(),
-		Stack: &synccmd.StackLook{Work: "tmp/low", Autosquash: true}}, &look); err != nil {
-		t.Fatalf("%v\n%s", err, look.String())
-	}
-	for _, want := range []string{"docker did not answer", "a run refuses the worktrees whose steps need it"} {
-		if !strings.Contains(look.String(), want) {
-			t.Errorf("the look lacks %q:\n%s", want, look.String())
-		}
-	}
-	old := tipsOf(t, ctx.Repo.MainRoot, "tmp/low", "low1")
-	opts := synccmdtest.NoAgents()
-	opts.Stack = &synccmd.StackOptions{Autosquash: true}
-	opts.Probes = synccmdtest.DockerDown().Probes()
-	_, human, err := synccmdtest.StackRun(t, ctx, "tmp/low", opts)
-	if err == nil || !strings.Contains(human, "refused") || !strings.Contains(human, "needs docker") {
-		t.Fatalf("the run was not refused for the need: %v\n%s", err, human)
-	}
-	for b, tip := range tipsOf(t, ctx.Repo.MainRoot, "tmp/low", "low1") {
-		if tip != old[b] {
-			t.Errorf("a refused run moved %s", b)
-		}
+	for name, trunkMoved := range map[string]bool{"behind trunk": true, "current with trunk": false} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := fixedLine(t, "low", "each_commit:\n  - run: 'true'\n    paths: [low.txt]\n    needs: [docker]\n", func(_ string, commit func(string, string)) {
+				if trunkMoved {
+					commit("trunk.txt", "feat: trunk's own")
+				}
+			})
+			got := needLook(t, ctx)
+			for _, want := range []string{"docker did not answer", "a run refuses the worktrees whose steps need it"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("the look lacks %q:\n%s", want, got)
+				}
+			}
+			if list := checkSection(got); !strings.Contains(list, "feat: low") || strings.Contains(list, "not checked") {
+				t.Errorf("the each_commit section lacks the lower commit:\n%s", got)
+			}
+			// The need refuses the fold in both looks, so neither plans a move.
+			wantAll(t, got, "refused: ", "needs docker")
+			if strings.Contains(got, "1 fixup folds") || strings.Contains(got, "the rebase moves it") {
+				t.Errorf("the refused look plans the fold:\n%s", got)
+			}
+			o := synccmdtest.OverviewJSONWith(t, ctx, synccmd.SyncOptions{NoFetch: true, Probes: synccmdtest.DockerDown().Probes(),
+				Stack: &synccmd.StackLook{Work: "tmp/low", Autosquash: true}})
+			if f := o.Fold; f == nil || f.Refusal == nil || !strings.Contains(*f.Refusal, "needs docker") || len(f.Folds) != 0 {
+				t.Errorf("--json fold %+v", o.Fold)
+			}
+			refusedForDocker(t, ctx, func(o *synccmd.RunOptions) { o.Stack = &synccmd.StackOptions{Autosquash: true} })
+		})
 	}
 }
 

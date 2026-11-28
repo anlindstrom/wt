@@ -454,7 +454,13 @@ func ReadHolders(ctx *kit.Context, line wtsync.Line, listed []agents.Agent) ([]w
 }
 
 // PrintLayers is the look's list of the layers, bottom first.
-func PrintLayers(w io.Writer, s *Stack) {
+func PrintLayers(w io.Writer, s *Stack) { printLayers(w, s, false) }
+
+// PrintRefusedLayers is PrintLayers for a look of a fold the run refuses: what
+// is there, with nothing said of what a run would move.
+func PrintRefusedLayers(w io.Writer, s *Stack) { printLayers(w, s, true) }
+
+func printLayers(w io.Writer, s *Stack, refused bool) {
 	fmt.Fprintf(w, "  %s on the line of %s, bottom first:\n", kit.Count(len(s.Layers), "layer"), s.Branch)
 	for _, l := range s.Layers {
 		where := "no worktree"
@@ -464,7 +470,11 @@ func PrintLayers(w io.Writer, s *Stack) {
 		fmt.Fprintf(w, "    %-24s %s  %3d  %-50s  %s\n", l.Branch, git.ShortID(l.OldTip, 7), l.Commits, l.Subject, where)
 	}
 	if t := s.Top; t != nil {
-		fmt.Fprintf(w, "    %-24s %s  %3d  %-50s  %s\n", t.Branch, git.ShortID(t.OldTip, 7), t.Commits, t.Subject, "the top: the rebase moves it")
+		what := "the top: the rebase moves it"
+		if refused {
+			what = "the top"
+		}
+		fmt.Fprintf(w, "    %-24s %s  %3d  %-50s  %s\n", t.Branch, git.ShortID(t.OldTip, 7), t.Commits, t.Subject, what)
 	}
 	for _, k := range s.Skipped {
 		fmt.Fprintf(w, "    %-24s %s  not taken: %s\n", k.Branch, git.ShortID(k.Tip, 7), k.Reason)
@@ -473,7 +483,14 @@ func PrintLayers(w io.Writer, s *Stack) {
 		fmt.Fprintf(w, "  %s off the line:\n", countSides(len(s.SideBranches)))
 	}
 	for _, x := range s.SideBranches {
-		fmt.Fprintf(w, "    %-24s %s  %s\n", x.Branch, git.ShortID(x.OldTip, 7), sideWhere(x))
+		where := sideWhere(x)
+		if refused {
+			where = sidePlace(x)
+		}
+		fmt.Fprintf(w, "    %-24s %s  %s\n", x.Branch, git.ShortID(x.OldTip, 7), where)
+	}
+	if refused {
+		return
 	}
 	stops := false
 	for _, g := range s.ContextGaps {
@@ -496,9 +513,9 @@ func PrintLayers(w io.Writer, s *Stack) {
 	}
 }
 
-// sideWhere is the look's line for a side branch: where it hangs off the
-// line, its own commits, its worktree, and whether the run carries it.
-func sideWhere(x StackSide) string {
+// sidePlace is where a side branch hangs off the line, its own commits and its
+// worktree.
+func sidePlace(x StackSide) string {
 	where := "forks at " + git.ShortID(x.Fork, 7) + " " + x.ForkSubject
 	switch {
 	case x.On != nil:
@@ -518,6 +535,13 @@ func sideWhere(x StackSide) string {
 			where += ": " + *x.StateDetail
 		}
 	}
+	return where
+}
+
+// sideWhere is the look's line for a side branch: sidePlace, and whether the
+// run carries it.
+func sideWhere(x StackSide) string {
+	where := sidePlace(x)
 	switch {
 	case x.Backup:
 		return where + "; a backup: stays where it is"

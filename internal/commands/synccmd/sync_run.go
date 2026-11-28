@@ -894,15 +894,7 @@ func (r *RunPlan) triage() (proceed bool, err error) {
 				p.work, kit.WhoLabel(p.forced))
 		}
 		p.a = r.allow(p.a)
-		p.verdict, p.reason = wtsync.Preflight(p.a)
-		if r.opts.Steps != nil && p.verdict == wtsync.SkipRun {
-			// In place, onto its own base: trunk being there already is no
-			// reason to skip it.
-			p.verdict, p.reason = wtsync.Proceed, ""
-		}
-		if st := r.opts.Stack; st != nil {
-			p.verdict, p.reason = stackVerdict(p.a, p.verdict, p.reason, st.Autosquash || st.Edit != "")
-		}
+		p.a, p.verdict, p.reason = r.verdictMode().verdict(p.a)
 		own, refused := p.a.Own, p.verdict == wtsync.RefuseRun
 		r.opts.Journal.Set(b, func(jp *syncrun.UpParticipant) {
 			jp.OwnRemoteSync = syncrun.OwnRemoteSyncOf(own)
@@ -967,17 +959,12 @@ func (r *RunPlan) probeNeeds() {
 	prober := r.opts.Prober()
 	for _, b := range r.branches {
 		p := r.parts[b]
-		if p.verdict != wtsync.Proceed || p.refused != "" || p.a.OnlyFastForward() {
+		// wt sync steps runs its steps on a branch another run would only
+		// fast-forward.
+		if p.verdict != wtsync.Proceed || p.refused != "" || (p.a.OnlyFastForward() && r.opts.Steps == nil) {
 			continue
 		}
-		base := r.trunkSHA
-		if r.target != nil {
-			base = r.target.cutoff()
-		}
-		if parent, ok := r.parents[b]; ok && r.parts[parent] != nil {
-			base = "refs/heads/" + parent
-		}
-		due, err := wtsync.StepsDue(p.wt.Path, r.cfg, base, rebasedTip(b, p.a), r.tgt.Onto, r.tgt.Upstream)
+		due, err := r.dueOf(b, p)
 		if err != nil {
 			p.refused = p.work + ": could not tell which steps a rebase runs: " + err.Error()
 			r.refuseAbove(b, p.work+" was refused")
@@ -995,6 +982,44 @@ func (r *RunPlan) probeNeeds() {
 		}
 		p.unavailable = unavailable
 	}
+}
+
+// dueOf is what of the declaration's steps may run for b: for a run that
+// rewrites the branch, read from the rebase it makes.
+func (r *RunPlan) dueOf(b string, p *participant) (wtsync.Due, error) {
+	if !r.verdictMode().rewrites {
+		base := r.trunkSHA
+		if r.target != nil {
+			base = r.target.cutoff()
+		}
+		if parent, ok := r.parents[b]; ok && r.parts[parent] != nil {
+			base = "refs/heads/" + parent
+		}
+		due, err := wtsync.StepsDue(p.wt.Path, r.cfg, base, rebasedTip(b, p.a), r.tgt.Onto, r.tgt.Upstream)
+		return due.WithOwed(r.ctx.Repo.MainRoot, r.cfg, b), err
+	}
+	req := wtsync.Request{Path: p.wt.Path, Branch: b, Trunk: r.trunkSHA, Onto: r.tgt.Onto, Upstream: r.tgt.Upstream,
+		EachCommit: r.eachCommit}
+	if st := r.opts.Stack; st != nil {
+		req.Stack = &wtsync.StackRequest{Line: r.line, Autosquash: st.Autosquash}
+		// In place unless --onto names where the line goes.
+		if r.target == nil || r.opts.Steps != nil || r.edit != nil {
+			req.Onto, req.Upstream = r.line.Base, ""
+		}
+		req.Edit = r.edit
+	}
+	if r.opts.Steps != nil {
+		req.ForceSteps, req.Steps = true, r.stepSet
+		if r.opts.Stack == nil {
+			base, err := git.Run(r.ctx.Repo.MainRoot, "merge-base", r.trunkSHA, "refs/heads/"+b)
+			if err != nil {
+				return wtsync.Due{}, err
+			}
+			req.Onto = base
+		}
+	}
+	due, _, err := wtsync.RewriteDue(r.ctx.Repo.MainRoot, r.cfg, req, nil)
+	return due, err
 }
 
 // lockAll locks every member of every proceeding stack before touching any,
@@ -1311,18 +1336,60 @@ func (r *RunPlan) passOver(b string, p *participant) bool {
 	return false
 }
 
-// stackVerdict is the verdict of a --stack run for a worktree whose own is v
-// and why: a fold or an edit is onto the line's own base, so trunk being
-// there already is no reason to skip it, and a line behind its own remote is
-// refused, as the layers were read from it as it is here.
-func stackVerdict(a wtsync.Assessment, v wtsync.Verdict, why string, onOwnBase bool) (wtsync.Verdict, string) {
-	switch {
-	case onOwnBase && v == wtsync.SkipRun:
-		return wtsync.Proceed, ""
-	case v == wtsync.Proceed && a.Own.FastForwards():
-		return wtsync.RefuseRun, "behind its own remote (" + a.Own.Ref + "): the layers were read from the line as it is here; bring it up to date first"
+// verdictMode is what of a run changes the verdict wtsync.Preflight gives a
+// worktree. A look and its run read the same one.
+type verdictMode struct {
+	// stack is a --stack run: its layers are read from the line as it is here.
+	stack bool
+	// rewrites is a fold, an edit or wt sync steps: it rewrites the branch on
+	// a base of its own, wherever trunk is.
+	rewrites bool
+	// steps is wt sync steps, which takes no --allow-diverged.
+	steps bool
+}
+
+// verdictMode is the run's own.
+func (r *RunPlan) verdictMode() verdictMode {
+	st := r.opts.Stack
+	steps := r.opts.Steps != nil
+	return verdictMode{stack: st != nil, rewrites: steps || (st != nil && (st.Autosquash || st.Edit != "")), steps: steps}
+}
+
+// verdict is the run's verdict for a worktree assessed as a, and a as that
+// verdict reads it: a branch the run rewrites although trunk has nothing for
+// it is kept off by its own remote like any other.
+func (m verdictMode) verdict(a wtsync.Assessment) (wtsync.Assessment, wtsync.Verdict, string) {
+	v, why := wtsync.Preflight(a)
+	if m.rewrites && v == wtsync.SkipRun {
+		v, why = wtsync.Proceed, ""
+		// The assessment drops the block of a branch it expects a run to skip.
+		if a.Own.State == wtsync.OwnDiverged {
+			a.Own.Blocks = wtsync.OwnBlockDiverged
+			if a.Own.Refuses() {
+				v, why = wtsync.RefuseRun, a.Own.Refusal()
+			}
+		}
 	}
-	return v, why
+	if m.steps && v == wtsync.RefuseRun && a.Own.Blocks == wtsync.OwnBlockDiverged && why == a.Own.Refusal() {
+		why = stepsDivergedRefusal(a.Own)
+	}
+	if m.stack && v == wtsync.Proceed && a.Own.FastForwards() {
+		v, why = wtsync.RefuseRun, "behind its own remote ("+a.Own.Ref+"): the layers were read from the line as it is here; bring it up to date first"
+	}
+	return a, v, why
+}
+
+// stepsDivergedRefusal is OwnRemote.Refusal for wt sync steps.
+func stepsDivergedRefusal(o wtsync.OwnRemote) string {
+	has := o.Ref + " has " + kit.Count(o.Behind, "commit") + " this branch never had"
+	if o.Elsewhere {
+		return has + ", with every commit of this branch in another form: git reset --hard " + o.Ref + " takes the remote's, then run wt sync steps again"
+	}
+	them := "them"
+	if o.Behind == 1 {
+		them = "it"
+	}
+	return has + ": pull " + them + " in, then run wt sync steps again"
 }
 
 // request is b's rebase as the run asks for it, and what its line calls

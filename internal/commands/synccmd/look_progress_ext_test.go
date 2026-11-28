@@ -166,7 +166,8 @@ func TestFoldLookNamesAnAmbiguousFixupAhead(t *testing.T) {
 			if fmt.Sprint(progress.early) != fmt.Sprint(want) {
 				t.Errorf("notices ahead of the replay: %v, want %v", progress.early, want)
 			}
-			refused := c.second == "feat: a" && !c.noLook && (c.onto == "" || c.notice)
+			// A dirty worktree is refused before its fixups are, by the run too.
+			refused := c.second == "feat: a" && !c.noLook && c.name != "dirty"
 			if strings.Contains(look.String(), "names more than one commit") != refused {
 				t.Errorf("the look's stdout refuses the fixup: %v, want %v\n%s", !refused, refused, look.String())
 			}

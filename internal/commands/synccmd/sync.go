@@ -252,8 +252,38 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 			return noLayerRefusal(kit.BranchWorkName(ctx, wt.Branch))
 		}
 	}
+	// What the fold may run is read before it is shown: an unmet need
+	// refuses it, as a fixup the run cannot take does.
+	prober := syncrun.StepOptions{Probes: opts.Probes}.Prober()
+	var refusal string
+	var folded wtsync.Due
+	var checks checkView
+	if look != nil && look.Autosquash {
+		refusal = stackRefusal(cfg, stack, kit.BranchWorkName(ctx, wt.Branch), a)
+		if refusal == "" && (fold == nil || fold.Refusal == nil) {
+			progress.phase("reading each_commit checks and needs")
+			var stops []wtsync.FoldStop
+			var each string
+			if folded, stops, each, err = foldDue(ctx.Repo.MainRoot, wt.Path, cfg, stack, target, fold); err != nil {
+				return err
+			}
+			checks = foldedChecks(stops, each, folded.AtMost)
+			// The run probes the needs before it reads the fixups.
+			if refusal = needRefusal(prober, folded); refusal == "" && fold == nil {
+				if refusal, err = ontoFoldRefusal(ctx.Repo.MainRoot, stack, target); err != nil {
+					return err
+				}
+			}
+		}
+		if fold != nil && refusal != "" {
+			fold.refuse(refusal)
+		}
+	}
 	if fold != nil {
 		printFoldDetail(w, work, a, fold)
+	} else if look != nil {
+		mode := verdictMode{stack: true, rewrites: look.Autosquash}
+		printDetailRun(w, work, a, stackRunLine(work, a, mode, target, look, refusal))
 	} else {
 		printDetail(w, work, a)
 	}
@@ -277,7 +307,11 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 				return err
 			}
 		}
-		syncrun.PrintLayers(w, stack)
+		if refusal != "" || fold != nil && fold.Refusal != nil {
+			syncrun.PrintRefusedLayers(w, stack)
+		} else {
+			syncrun.PrintLayers(w, stack)
+		}
 		if opts.Alone {
 			fmt.Fprintln(w, "  --alone  a run folds and rebases the line and moves no layer: each stays on its old commits, its worktree untouched")
 		}
@@ -289,9 +323,13 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		if target == nil && !tgt.InPlace {
 			parents = parentsOf(ctx, onto)
 		}
-		due := stepsDue(tgt, cfg, parents, wt, a)
-		printChecks(w, due)
-		printNeeds(w, needProbes(cfg, []wtsync.Due{due}, syncrun.StepOptions{Probes: opts.Probes}.Prober()))
+		due := folded
+		if look == nil || !look.Autosquash {
+			due = stepsDueIn(verdictMode{stack: look != nil}, tgt, cfg, parents, wt, a)
+			checks = replayedChecks(due)
+		}
+		printChecks(w, checks, due)
+		printNeeds(w, needProbes(cfg, []wtsync.Due{due}, prober))
 	}
 	return nil
 }
@@ -784,10 +822,15 @@ func printFacts(w io.Writer, a wtsync.Assessment) {
 // printDetail is wt sync <work>: the row, where the worktree is and what a run
 // would do with it, then each kind of finding under its own heading.
 func printDetail(w io.Writer, work string, a wtsync.Assessment) {
+	printDetailRun(w, work, a, runVerdict(work, a))
+}
+
+// printDetailRun is printDetail with run as its run line.
+func printDetailRun(w io.Writer, work string, a wtsync.Assessment, run string) {
 	e := syncEntry{work: work, a: a}
 	fmt.Fprintf(w, "\n%s\n", measureRows([]syncEntry{e}).row(e))
 	printFacts(w, a)
-	fmt.Fprintf(w, "  run     %s\n", runVerdict(work, a))
+	fmt.Fprintf(w, "  run     %s\n", run)
 	if a.PlanFile != "" {
 		fmt.Fprintf(w, "  plan    %s\n", a.PlanFile)
 	}

@@ -454,6 +454,10 @@ func (r *resume) probeNeeds() error {
 	st := r.st
 	base := cmp.Or(st.Upstream, st.Onto)
 	due, err := wtsync.StepsDue(r.target.Path, r.cfg, base, st.OldTip, st.Onto, st.Upstream)
+	due = due.WithOwed(r.ctx.Repo.MainRoot, r.cfg, st.Branch)
+	if r.busy && (st.EachCommit == "" || st.EachCommit == wtsync.EachAll) {
+		due = wtsync.DueAtStop(r.target.Path, r.cfg, due)
+	}
 	if a := r.adopt; a != nil && err == nil {
 		// What the adopt runs: the checks at the tips, which the adopted
 		// commits may call for, and the deferred steps over the line as it
