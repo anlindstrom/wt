@@ -204,6 +204,9 @@ type Request struct {
 	// treats every commit it cannot match as unmatched.
 	ReportLine *Line
 	ReportPlan *ReplayPlan
+	// look records the checks instead of stopping at one that fails; set only
+	// by LookAtChecks.
+	look *checkLook
 	// planReplay replaces replayPlanOf in a test.
 	planReplay func(dir string, line Line, todo string) (*ReplayPlan, error)
 	// HandedHead is HEAD as that handover recorded it: a stop a person
@@ -794,8 +797,11 @@ func planLift(wtPath string, cfg *Config, t Target, branch string) (liftPlan, er
 // writeScript writes a sequence editor to a private directory and returns
 // its path and what removes it. git runs it once, for the one command it is
 // handed to; nothing reads it after.
-func writeScript(body string) (string, func(), error) {
-	dir, cleanup, err := tempDir("wtsync-todo-")
+func writeScript(body string) (string, func(), error) { return writeScriptIn(tempDir, body) }
+
+// writeScriptIn is writeScript in a directory temp makes.
+func writeScriptIn(temp func(pattern string) (string, func(), error), body string) (string, func(), error) {
+	dir, cleanup, err := temp("wtsync-todo-")
 	if err != nil {
 		return "", nil, err
 	}
@@ -1062,7 +1068,7 @@ func (d *driver) markTodo() error {
 	}
 	var b strings.Builder
 	todoEditor(&b, plan)
-	return editTodo(d.req.Path, b.String())
+	return editTodo(tempDir, d.req.Path, b.String())
 }
 
 // StripMarks takes the run's own stops out of the rest of a rebase's list:
@@ -1071,7 +1077,14 @@ func (d *driver) markTodo() error {
 // the run would have. A list with no such line, or no rebase in progress,
 // is left alone. It runs wherever the run lets go of a rebase mid-way: a
 // handover, a resume that fails, an interrupt.
-func StripMarks(wtPath string) error {
+func StripMarks(wtPath string) error { return stripMarks(wtPath, tempDir) }
+
+// StripMarksOnExit is StripMarks for the handler of a signal, which is given
+// no temporary directory after CloseTempDirs and removes its own before it
+// exits.
+func StripMarksOnExit(wtPath string) error { return stripMarks(wtPath, handlerTempDir) }
+
+func stripMarks(wtPath string, temp func(pattern string) (string, func(), error)) error {
 	dir, err := rebaseDir(wtPath)
 	if err != nil {
 		return err
@@ -1100,7 +1113,7 @@ func StripMarks(wtPath string) error {
 	}
 	var b strings.Builder
 	plainEditorKeeping(&b, keep)
-	return editTodo(wtPath, b.String())
+	return editTodo(temp, wtPath, b.String())
 }
 
 // MarksLeft is what a person is told when the run's stops could not be taken
@@ -1110,8 +1123,8 @@ func MarksLeft(err error) string {
 }
 
 // editTodo runs git's --edit-todo with script as the sequence editor.
-func editTodo(wtPath, script string) error {
-	path, cleanup, err := writeScript(script)
+func editTodo(temp func(pattern string) (string, func(), error), wtPath, script string) error {
+	path, cleanup, err := writeScriptIn(temp, script)
 	if err != nil {
 		return err
 	}
@@ -1414,6 +1427,11 @@ func (d *driver) drive(err error) (Result, error) {
 		conflicts, cerr := StagedConflicts(d.req.Path)
 		if cerr != nil {
 			return d.fail(cerr)
+		}
+		if l := d.req.look; l != nil {
+			for i := range conflicts {
+				conflicts[i].helpers = l.root
+			}
 		}
 		unmerged := pathsOf(conflicts)
 		if p.Index == lastIndex && (len(conflicts) == 0 || unmerged == lastUnmerged) {

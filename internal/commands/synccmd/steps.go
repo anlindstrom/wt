@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/anlindstrom/wt/internal/commands/kit"
@@ -88,21 +89,11 @@ func foldDue(main, path string, cfg *wtsync.Config, s *syncrun.Stack, target *On
 	} else if commits, err = lineCommits(main, s); err != nil {
 		return wtsync.Due{}, nil, "", err
 	}
-	line := wtsync.Line{Branch: s.Branch, Head: s.Head, Base: s.Base, Commits: commits}
-	for _, l := range s.Layers {
-		line.Layers = append(line.Layers, wtsync.LineLayer{Branch: l.Branch, Tip: l.OldTip, Count: l.Commits})
-	}
-	req := wtsync.Request{Path: path, Branch: s.Branch, Onto: s.Base, EachCommit: wtsync.EachAll,
-		Stack: &wtsync.StackRequest{Line: line, Autosquash: true}}
-	if target != nil {
-		req.Onto, req.Upstream = target.SHA, target.Upstream
-	}
+	req := lineRequest(path, s, target, commits)
 	var known *wtsync.Folds
 	if fl != nil {
 		known = &fl.analysis
-		if len(fl.analysis.Moves) > 0 {
-			req.EachCommit = wtsync.EachTargets
-		}
+		req.EachCommit = fl.mode()
 	}
 	due, stops, err := wtsync.RewriteDue(main, cfg, req, known)
 	return due, stops, req.EachCommit, err
@@ -246,6 +237,12 @@ func needProbes(cfg *wtsync.Config, dues []wtsync.Due, prober *syncrun.Prober) [
 	return out
 }
 
+// dueNeeds is needProbes for the needs of due alone.
+func dueNeeds(cfg *wtsync.Config, due wtsync.Due, prober *syncrun.Prober) []NeedProbe {
+	needed := due.Needs()
+	return slices.DeleteFunc(needProbes(cfg, []wtsync.Due{due}, prober), func(p NeedProbe) bool { return !slices.Contains(needed, p.Need) })
+}
+
 // printNeeds says which probed needs did not answer, for the overview.
 func printNeeds(w io.Writer, probes []NeedProbe) {
 	for _, p := range probes {
@@ -253,4 +250,35 @@ func printNeeds(w io.Writer, probes []NeedProbe) {
 			fmt.Fprintf(w, "\n⚠ %s did not answer: %s; a run refuses the worktrees whose steps need it, or owes those steps with --allow-owed\n", p.Need, *p.Error)
 		}
 	}
+}
+
+// lineRequest is the rebase a fold of s's line, with the commits of it,
+// checked out at path, makes: in place, or onto target.
+func lineRequest(path string, s *syncrun.Stack, target *OntoTarget, commits []string) wtsync.Request {
+	line := wtsync.Line{Branch: s.Branch, Head: s.Head, Base: s.Base, Commits: commits}
+	for _, l := range s.Layers {
+		line.Layers = append(line.Layers, wtsync.LineLayer{Branch: l.Branch, Tip: l.OldTip, Count: l.Commits})
+	}
+	req := wtsync.Request{Path: path, Branch: s.Branch, Onto: s.Base, EachCommit: wtsync.EachAll,
+		Stack: &wtsync.StackRequest{Line: line, Autosquash: true}}
+	if target != nil {
+		req.Onto, req.Upstream = target.SHA, target.Upstream
+	}
+	return req
+}
+
+// foldRequest is lineRequest for the fold fl, under the mode it runs in.
+func foldRequest(path string, s *syncrun.Stack, target *OntoTarget, fl *FoldLook) wtsync.Request {
+	req := lineRequest(path, s, target, fl.commits)
+	req.EachCommit = fl.mode()
+	return req
+}
+
+// mode is where the checks of a run of the fold go: targets when the look
+// asks for it or a move! commit needs it.
+func (fl *FoldLook) mode() string {
+	if len(fl.analysis.Moves) > 0 || fl.look.replaysChecks() {
+		return wtsync.EachTargets
+	}
+	return wtsync.EachAll
 }

@@ -37,7 +37,7 @@ const (
 // result into text and conflict blocks. git decides what conflicts; this
 // package only decides what to do about it.
 func Merge3(c Conflict) ([]Segment, error) {
-	dir, cleanup, err := tempDir("wtsync-merge3-")
+	dir, cleanup, err := tempDirIn(c.helpers, "wtsync-merge3-")
 	if err != nil {
 		return nil, err
 	}

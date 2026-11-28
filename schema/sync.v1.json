@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json",
-  "x-version": "1.20.0",
+  "x-version": "1.21.0",
   "title": "wt sync --json",
-  "description": "What a rebase onto trunk would do to every worktree of a repository, as `wt sync --json` prints it on stdout: one overview object, or with --all, --roots or --profile an array of them, one per repository. It fetches trunk and each worktree branch's own remote (unless --no-fetch) and writes nothing else. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
+  "description": "What a rebase onto trunk would do to every worktree of a repository, as `wt sync --json` prints it on stdout: one overview object, or with --all, --roots or --profile an array of them, one per repository. It fetches trunk and each worktree branch's own remote (unless --no-fetch) and writes nothing else; with --each-commit=targets it does not fetch. Schema 1: fields may be added and enumerations may gain values; nothing is renamed or removed. See docs/json.md.",
   "oneOf": [
     { "$ref": "#/$defs/overview" },
     { "type": "array", "items": { "$ref": "#/$defs/overview" } }
@@ -70,7 +70,7 @@
         "eachCommitDeclared": { "type": "array", "items": { "$ref": "#/$defs/declaredStep" }, "description": "Since 1.6.0. The each_commit checks .wt-sync.yaml declares on the trunk commit in onto, in the declared order: each runs after every replayed commit that changes a path its paths match, every commit when it lists none. Empty when trunk declares none." },
         "needs": {
           "type": "array",
-          "description": "Since 1.6.0. Every need a declared step has, once each, with what its probe said. A need is probed only when a step with it would run for some worktree of the overview: an each_commit step with a commit to check, or a deferred step whose paths match a path the rebase may change. A run probes the same way before it moves anything, and refuses a worktree whose step needs one that did not answer, unless started with --allow-owed.",
+          "description": "Since 1.6.0. Every need a declared step has, once each, with what its probe said; since 1.21.0, for a look with --each-commit=targets, only the needs of the steps the run of that fold may run, each env: need probed against the environment its checks get. A need is probed only when a step with it would run for some worktree of the overview: an each_commit step with a commit to check, or a deferred step whose paths match a path the rebase may change. A run probes the same way before it moves anything, and refuses a worktree whose step needs one that did not answer, unless started with --allow-owed.",
           "items": {
             "type": "object",
             "required": ["need", "probed", "ok", "error"],
@@ -228,7 +228,7 @@
     "foldLook": {
       "type": "object",
       "description": "Since 1.15.0: what a fold in place does to the line, read from the line as it is; since 1.19.0 also what a fold with --onto does to a line with a move! commit.",
-      "required": ["base", "refusal", "folds", "analysis", "fixups", "appliesAtTarget", "aheadOfContext", "conflicts", "notAnalysed", "unchanged", "repointed", "held"],
+      "required": ["base", "refusal", "folds", "analysis", "fixups", "appliesAtTarget", "aheadOfContext", "conflicts", "notAnalysed", "unchanged", "repointed", "held", "checks", "hooksNotRun"],
       "properties": {
         "base": { "type": "string", "pattern": "^[0-9a-f]{40,64}$", "description": "The line's own base, which a fold in place stays on: stack.base." },
         "refusal": { "type": ["string", "null"], "description": "Why the run refuses the fold before it moves anything, in the run's own words: a fixup whose name finds no commit or more than one, one for a commit trunk or the line's base already carries, a declaration the line cannot take, or (since 1.17.0) a move! commit the fold cannot take: its target or source does not name one commit below it, a path the source does not change, a range that splits a hunk or selects none (since 1.18.0), a hunk two move! commits take, the whole source in one move, a part that does not apply at the target or would land elsewhere than the source has it, a fold that does not merge clean or would end in another tree with it. Also what keeps the run off the line or its worktree: no layer branch, tracked changes, a busy agent session, its own remote, a need of a step it may run that does not answer. Null when it does not. When it is set, folds, unchanged, repointed and held are all empty, and since 1.20.0 analysis is none and the counts are 0." },
@@ -281,6 +281,41 @@
             "type": "object",
             "required": ["branch", "why"],
             "properties": { "branch": { "type": "string" }, "why": { "type": "string" } }
+          }
+        },
+        "hooksNotRun": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "description": "Since 1.21.0: for --each-commit=targets, the active hooks the run would run and the replay did not, files and configured ones. pre-rebase, and once a per-layer step came to commit pre-commit, prepare-commit-msg and commit-msg, make the checks incomplete (the overview's error says so, exit 1); the others change no outcome. Empty when there is none, and when the fold is refused. Null for a look without that flag."
+        },
+        "checks": {
+          "type": ["array", "null"],
+          "description": "Since 1.21.0: what the checks of the fold came to, replayed on a scratch copy of the repository, for --each-commit=targets: one entry per stop that ran or owed a step, in the order the rebase made them, a commit visited twice twice. Null for a look without that flag. Empty when the fold is refused (refusal) or no check is due. A stop the run skips is not listed, nor one after a conflict (the overview's error says so).",
+          "items": {
+            "type": "object",
+            "required": ["kind", "target", "targetSubject", "layer", "fixups", "afterStep", "steps"],
+            "properties": {
+              "kind": { "enum": ["stop", "recheck", "layerStep"], "description": "stop: a stop the rebase made to run each_commit steps. recheck: a commit checked again after a per-layer step folded its output. layerStep: a per-layer step that failed or is owed." },
+              "target": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$", "description": "The commit of the line the visit is for, by the id it has now: folds[].target for a fold target, else a layer's tip or a move's source. Null for a layerStep, and for the recheck of a commit a per-layer step made." },
+              "targetSubject": { "type": ["string", "null"], "description": "Its subject, or that of the commit a per-layer step made. Null for a layerStep." },
+              "layer": { "type": "string", "description": "The layer branch, or the line's own branch above the top layer." },
+              "fixups": { "type": "array", "items": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }, "description": "The fixup!, squash!, amend! and move! commits folded into target. Empty for a commit nothing is folded into, and for a layerStep." },
+              "afterStep": { "type": ["string", "null"], "description": "For a recheck, the per-layer step whose fold it follows. Null otherwise." },
+              "steps": {
+                "type": "array",
+                "description": "The visit's steps, in the order declared.",
+                "items": {
+                  "type": "object",
+                  "required": ["run", "result", "why", "log"],
+                  "properties": {
+                    "run": { "type": "string", "description": "The step's run line from .wt-sync.yaml." },
+                    "result": { "enum": ["pass", "fail", "owed", "notRun", "indeterminate"], "description": "pass. fail. owed: not run, as the run would owe it. notRun: an earlier step of the visit failed. indeterminate: run after a failed step whose changes the look could not take back, so it says nothing." },
+                    "why": { "type": ["string", "null"], "description": "Why a step failed, is owed or is indeterminate. Null for pass and notRun." },
+                    "log": { "type": ["string", "null"], "description": "For fail, the absolute path of a file with everything the step printed, kept after wt exits. Null otherwise, and where that file could not be written (the overview's error says why)." }
+                  }
+                }
+              }
+            }
           }
         }
       }

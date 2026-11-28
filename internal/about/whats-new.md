@@ -21,6 +21,13 @@ shared, so the fold does not refuse it later. Unstaged changes stay and no commi
 their layers. `--into <rev>` says whether a change there folds into an older commit, and if
 not, which later commit carries its context.
 
+## 2026-11-28 12:43 — Run a fold's checks without moving anything
+
+`wt sync <work> --stack --autosquash --each-commit=targets` replays the fold on a scratch copy
+of the repository, runs the checks the real run would at every layer tip and fold target, and
+lists every failure with its log. Exit 4 when a check fails. Nothing in your repository moves.
+`--json` has the results in `fold.checks` (sync 1.21.0).
+
 ## 2026-11-28 10:05 — A fold's look says what becomes of every fixup
 
 `wt sync <work> --stack --autosquash` now ends its list of folds with a summary such as

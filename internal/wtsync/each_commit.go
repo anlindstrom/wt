@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -740,23 +741,32 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 	if err != nil {
 		return nil, err
 	}
+	var visit *LookVisit
+	if l := d.req.look; l != nil {
+		if visit, err = l.visit(d, LookStop, sha, "", steps); err != nil {
+			return nil, err
+		}
+	}
 	var run []EachCommit
-	for _, s := range steps {
+	var at []int // run's places in steps
+	for i, s := range steps {
 		if why := d.unavailable(s.Needs); why != "" {
 			d.uncheck(s.Run, why)
+			d.lookOwed(visit, i, why)
 			continue
 		}
-		run = append(run, s)
+		run, at = append(run, s), append(at, i)
 	}
 	if len(run) == 0 {
 		return nil, nil
 	}
 	started := false
-	for _, s := range run {
+	for j, s := range run {
 		// Judged now, not before the first step ran: an earlier step may
 		// have generated the executable this one runs.
 		if why := d.scriptMissing(s.Run, head); why != "" {
 			d.uncheck(s.Run, why)
+			d.lookOwed(visit, at[j], why)
 			continue
 		}
 		if !started {
@@ -770,8 +780,24 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 				fmt.Fprintf(d.log, "  ▸ check %d/%d %s %s\n", at, max(len(d.checks), at), git.ShortID(head, 7), subject)
 			}
 		}
+		var full bytes.Buffer
+		var snap *snapshot
+		if l := d.req.look; l != nil {
+			snap = l.before(d)
+			s.full = &full
+		}
 		why, output, retried, took := runTimed(d.res.Timings, git.ShortID(head, 7)+" "+subject, d.req.Path, s, EachCommitTimeout)
 		logCheck(d.log, d.cfg, s, why, retried, took)
+		if l := d.req.look; l != nil {
+			l.ran(visit, at[j], why, full.Bytes())
+			if why != "" {
+				// The stop's other steps are not run, as in a run.
+				l.restore(d, snap, head, s.Run)
+				return nil, nil
+			}
+			l.drop(snap)
+			continue
+		}
 		if why == "" {
 			continue
 		}
@@ -786,6 +812,13 @@ func (d *driver) atCheck(sha string, edited bool, p Progress, forced bool) (*Che
 		return f, nil
 	}
 	return nil, nil
+}
+
+// lookOwed records on a look's visit that its step i is owed.
+func (d *driver) lookOwed(v *LookVisit, i int, why string) {
+	if d.req.look != nil {
+		d.req.look.owed(v, i, why)
+	}
 }
 
 // unavailable is why a step with needs cannot run in this run: the probe
@@ -868,13 +901,16 @@ func (d *driver) uncheck(step, why string) {
 // runCheck runs one command of a check in the worktree, bounded by timeout. why is ""
 // for a pass; otherwise what failed. A check that leaves tracked files
 // changed has failed: it must not change the commit it checks.
-func runCheck(wtPath, run string, timeout time.Duration) (why, output string) {
+func runCheck(wtPath, run string, timeout time.Duration, full io.Writer) (why, output string) {
 	cmd := exec.Command("sh", "-c", run)
 	cmd.Dir = wtPath
-	cmd.Env = stepEnviron()
+	cmd.Env = stepEnvironIn(wtPath)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	timedOut, code, err := git.RunBounded(timeout, cmd)
+	if full != nil {
+		_, _ = full.Write(out.Bytes())
+	}
 	output = tailLines(strings.TrimSpace(out.String()), checkTail)
 	var exit *exec.ExitError
 	switch {
@@ -919,14 +955,17 @@ func trackedChanges(wtPath string) ([]string, error) {
 // that left tracked files changed is not retried: the retry would start on
 // a tree the step has already broken.
 func runEachCommit(wtPath string, s EachCommit, timeout time.Duration) (why, output string, retried bool) {
-	why, output = runCheck(wtPath, s.Run, timeout)
+	why, output = runCheck(wtPath, s.Run, timeout, s.full)
 	if why == "" || s.Retry == "" {
 		return why, output, false
 	}
 	if files, err := trackedChanges(wtPath); err != nil || len(files) > 0 {
 		return why, output, false
 	}
-	rwhy, routput := runCheck(wtPath, s.Retry, timeout)
+	if s.full != nil {
+		fmt.Fprintf(s.full, "--- retry: %s\n", s.Retry)
+	}
+	rwhy, routput := runCheck(wtPath, s.Retry, timeout, s.full)
 	if rwhy == "" {
 		return "", routput, true
 	}

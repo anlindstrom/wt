@@ -150,7 +150,7 @@ func runStep(wtPath, run string, timeout time.Duration) (output string, elapsed 
 	start := time.Now()
 	cmd := exec.Command("sh", "-c", run)
 	cmd.Dir = wtPath
-	cmd.Env = stepEnviron()
+	cmd.Env = stepEnvironIn(wtPath)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	// timedOut wins over ErrWaitDelay: a step that finished cleanly but

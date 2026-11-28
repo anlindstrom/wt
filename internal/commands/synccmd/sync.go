@@ -5,6 +5,7 @@
 package synccmd
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -72,6 +73,10 @@ type StackLook struct {
 	NoSideBranches bool
 	// Alone looks at the line as --alone runs it: no side branch would move.
 	Alone bool
+	// EachCommit is targets to replay the run's checks on a scratch copy of
+	// the repository (--each-commit=targets); "" runs nothing. It takes
+	// everything as last fetched.
+	EachCommit string
 }
 
 // shownFiles is how many files a stop names in the overview before it counts
@@ -205,9 +210,21 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	if err != nil {
 		return err
 	}
-	onto, cfg, listed, own, target, err := syncInputsTo(ctx, opts, w, []string{wt.Branch})
+	if opts.Stack.replaysChecks() {
+		if err := tempOutside(ctx); err != nil {
+			return err
+		}
+	}
+	// A look that replays the checks writes nothing here, a fetch included.
+	opts.NoFetch = opts.NoFetch || opts.Stack.replaysChecks()
+	onto, sha, cfg, listed, own, target, err := syncInputsTo(ctx, opts, w, []string{wt.Branch})
 	if err != nil {
 		return err
+	}
+	// The replay reads the line and the strategy scripts at the commit the
+	// declaration came from, though trunk moves meanwhile.
+	if opts.Stack.replaysChecks() {
+		onto = sha
 	}
 	work := kit.WorktreeName(ctx, wt.Branch, wt.Path)
 	tgt, base, against := wtsync.Target{Onto: onto}, onto, onto
@@ -222,7 +239,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	var look *StackLook
 	if opts.Stack != nil {
 		look = &StackLook{Work: arg, Layers: opts.Stack.Layers, Autosquash: opts.Stack.Autosquash,
-			NoSideBranches: opts.Stack.NoSideBranches, Alone: opts.Alone || opts.Stack.Alone}
+			NoSideBranches: opts.Stack.NoSideBranches, Alone: opts.Alone || opts.Stack.Alone, EachCommit: opts.Stack.EachCommit}
 	}
 	remote := syncrun.OwnStateOf(own, wt.Branch)
 	// Ahead of the slow phases, so a refusal is known at once.
@@ -246,6 +263,9 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 			}
 			return err
 		}
+		if fold == nil && look.replaysChecks() {
+			return noMoveUsage()
+		}
 		// The run refuses a line with no layer after the declaration and
 		// before anything it assesses.
 		if tgt.InPlace && cfg != nil && cfg.StackFoldRefusal() == "" && len(stack.Layers) == 0 {
@@ -254,7 +274,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	}
 	// What the fold may run is read before it is shown: an unmet need
 	// refuses it, as a fixup the run cannot take does.
-	prober := syncrun.StepOptions{Probes: opts.Probes}.Prober()
+	prober := opts.prober(cfg)
 	var refusal string
 	var folded wtsync.Due
 	var checks checkView
@@ -303,7 +323,7 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 	}
 	if opts.Stack != nil {
 		if stack == nil {
-			if stack, err = stackLookAt(ctx, base, onto, cfg, target, look, listed, progress); err != nil {
+			if stack, _, err = stackLookAt(ctx, base, onto, cfg, target, look, listed, progress); err != nil {
 				return err
 			}
 		}
@@ -331,7 +351,17 @@ func SyncWorktree(ctx *kit.Context, arg string, opts SyncOptions, w io.Writer) e
 		printChecks(w, checks, due)
 		printNeeds(w, needProbes(cfg, []wtsync.Due{due}, prober))
 	}
-	return nil
+	if !look.replaysChecks() {
+		return nil
+	}
+	res, why, outcome := replayChecks(w, opts.Progress, wt.Path, onto, cfg, stack, target, fold)
+	switch {
+	case res != nil && fold.Refusal == nil:
+		printReplayedChecks(w, res, why)
+	case why != "":
+		fmt.Fprintf(w, "\n%s\n", why)
+	}
+	return outcome
 }
 
 // noTrunkError is TrunkTip's answer for a trunk that is not there.
@@ -354,16 +384,19 @@ func TrunkTip(ctx *kit.Context) (onto, sha string, err error) {
 }
 
 // SyncDeclaration is what every assessment is made against, read from trunk
-// as it is now: the ref, its commit, and the declaration on it, nil when
-// trunk declares nothing.
+// as it is now: the ref, its commit, and the declaration on that commit, nil
+// when trunk declares nothing.
 func SyncDeclaration(ctx *kit.Context) (onto, sha string, cfg *wtsync.Config, err error) {
-	cfg, err = wtsync.LoadFromTrunk(ctx.Repo.MainRoot, ctx.Config.MainBranch)
+	onto, sha, tipErr := TrunkTip(ctx)
+	if tipErr != nil {
+		sha = ""
+	}
+	cfg, err = wtsync.LoadFromRef(ctx.Repo.MainRoot, cmp.Or(sha, onto))
 	if err != nil && !errors.Is(err, wtsync.ErrUndeclared) {
 		return "", "", nil, err
 	}
-	onto, sha, err = TrunkTip(ctx)
-	if err != nil {
-		return "", "", nil, err
+	if tipErr != nil {
+		return "", "", nil, tipErr
 	}
 	return onto, sha, cfg, nil
 }
@@ -383,19 +416,19 @@ func UndeclaredNotice(ctx *kit.Context, onto string) string {
 // at all is an error. A branch whose own remote alone could not be fetched
 // says so on its row.
 func syncInputs(ctx *kit.Context, opts SyncOptions, w io.Writer, branches []string) (onto string, cfg *wtsync.Config, listed []agents.Agent, own *wtsync.Own, err error) {
-	onto, cfg, listed, own, _, err = syncInputsTo(ctx, opts, w, branches)
+	onto, _, cfg, listed, own, _, err = syncInputsTo(ctx, opts, w, branches)
 	return onto, cfg, listed, own, err
 }
 
 // syncInputsTo is syncInputs with the target --onto names read too, after
 // its fetch when it is a remote-tracking ref: nil without --onto. The
 // header then names the target, and trunk as where the declaration is read.
-func syncInputsTo(ctx *kit.Context, opts SyncOptions, w io.Writer, branches []string) (onto string, cfg *wtsync.Config, listed []agents.Agent, own *wtsync.Own, target *OntoTarget, err error) {
+func syncInputsTo(ctx *kit.Context, opts SyncOptions, w io.Writer, branches []string) (onto, sha string, cfg *wtsync.Config, listed []agents.Agent, own *wtsync.Own, target *OntoTarget, err error) {
 	if err := ctx.NoTrunk(); err != nil {
-		return "", nil, nil, nil, nil, err
+		return "", "", nil, nil, nil, nil, err
 	}
 	if opts.Upstream != "" && opts.Onto == "" {
-		return "", nil, nil, nil, nil, errors.New("--upstream needs --onto: it says where the commits rebased onto --onto's ref start")
+		return "", "", nil, nil, nil, nil, errors.New("--upstream needs --onto: it says where the commits rebased onto --onto's ref start")
 	}
 	// Read before fetching: git empties FETCH_HEAD as a fetch starts, so a
 	// fetch that fails has already lost the age of the last one that did not.
@@ -407,25 +440,25 @@ func syncInputsTo(ctx *kit.Context, opts SyncOptions, w io.Writer, branches []st
 		opts.progress().phase("fetching")
 		own, fetchErr = syncrun.FetchRemotes(ctx, syncFetchTimeout, branches)
 	}
-	onto, sha, cfg, err := SyncDeclaration(ctx)
+	onto, sha, cfg, err = SyncDeclaration(ctx)
 	if err != nil {
 		var noTrunk noTrunkError
 		if fetchErr != nil && !errors.As(err, &noTrunk) {
 			fmt.Fprintf(w, "fetch failed: %s\n", kit.FetchReason(fetchErr))
 		}
-		return "", nil, nil, nil, nil, err
+		return "", "", nil, nil, nil, nil, err
 	}
 	var ontoFetch error
 	if opts.Onto != "" {
 		if src, remote, err := remoteSource(ctx, opts.Onto); remote && !opts.NoFetch {
 			if err != nil {
-				return "", nil, nil, nil, nil, err
+				return "", "", nil, nil, nil, nil, err
 			}
 			ontoFetch = fetchOnto(ctx, src, syncFetchTimeout)
 		}
 		t, err := resolveOnto(ctx, opts.Onto, opts.Upstream)
 		if err != nil {
-			return "", nil, nil, nil, nil, err
+			return "", "", nil, nil, nil, nil, err
 		}
 		target = &t
 	}
@@ -463,7 +496,7 @@ func syncInputsTo(ctx *kit.Context, opts SyncOptions, w io.Writer, branches []st
 	default:
 		fmt.Fprintf(w, "against %s\n", ref)
 	}
-	return onto, cfg, listed, own, target, nil
+	return onto, sha, cfg, listed, own, target, nil
 }
 
 // LastFetched is "as last fetched" and how long ago, or that when is not

@@ -131,6 +131,8 @@ type EachCommit struct {
 	Needs []string `yaml:"needs"`
 	// Retry runs, as Run does, only when Run fails.
 	Retry string `yaml:"retry"`
+	// full takes all a run of it prints, not only the tail.
+	full io.Writer
 }
 
 // Config is one repository's .wt-sync.yaml.

@@ -124,34 +124,35 @@ func readLookLine(ctx *kit.Context, base, trunkSHA string, target *OntoTarget, l
 
 // stackLookAt is the look at the stack held on the line of the worktree
 // look names, read as readLookLine reads it: its layers, bottom first, and
-// what holds each.
-func stackLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent, progress lookProgress) (*syncrun.Stack, error) {
+// what holds each, with the fork points of the side branches read with it.
+func stackLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent, progress lookProgress) (stack *syncrun.Stack, forks []string, err error) {
 	line, path, err := readLookLine(ctx, base, trunkSHA, target, look)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	holders, err := syncrun.ReadHolders(ctx, line, listed)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	s := syncrun.StackOf(line, look.Autosquash, holders, path)
 	if !look.NoSideBranches {
 		progress.phase("reading side branches")
 		sides, err := readSides(ctx, line, trunkSHA, target)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		sideHolders, err := syncrun.ReadSideHolders(ctx, sides, listed)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		syncrun.SetSides(s, sides, sideHolders, aloneSides(look.Alone))
+		forks = wtsync.ForkPoints(sides)
 	}
 	if look.Autosquash {
 		progress.phase("analysing fixup context")
 		syncrun.ContextGaps(path, line, s, cfg, target == nil)
 	}
-	return s, nil
+	return s, forks, nil
 }
 
 // editOnLine resolves rev, what --edit names, to the one commit of line it

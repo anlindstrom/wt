@@ -1,10 +1,13 @@
 package syncfix
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -161,5 +164,50 @@ func TestResumeUnderTargetsChecksEveryRewrittenCommitAfterAFold(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "after a fold the checks cover every rewritten commit") {
 		t.Errorf("the summary does not say so:\n%s", out.String())
+	}
+}
+
+// A look under --each-commit=targets goes through the per-layer folds the run
+// makes: it checks the same commits in the same order, the rechecks after each
+// fold too, and names each recheck by the commit of the line.
+func TestTargetsLookChecksAgainAfterEachFoldAsTheRunDoes(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration: a stack over real repositories and worktrees")
+	}
+	logPath := filepath.Join(t.TempDir(), "checked.log")
+	testkit.WriteFile(t, filepath.Dir(logPath), "checked.log.pass", "")
+	ctx, work := overlapLine(t, logPath)
+	var out bytes.Buffer
+	look := synccmd.SyncOptions{Stack: &synccmd.StackLook{Work: work, Autosquash: true, EachCommit: "targets"}, Probes: synccmdtest.DockerUp()}
+	if err := synccmd.SyncJSON(ctx, look, &out); err != nil {
+		t.Fatalf("look: %v\n%s", err, out.String())
+	}
+	testkit.ValidateJSON(t, "sync", out.Bytes())
+	var o synccmd.SyncOverview
+	if err := json.Unmarshal(out.Bytes(), &o); err != nil {
+		t.Fatal(err)
+	}
+	looked := synccmdtest.CheckedSubjects(t, logPath)
+	var listed, rechecked []string
+	for _, c := range o.Fold.Checks {
+		listed = append(listed, *c.TargetSubject)
+		if c.Kind == "recheck" && c.AfterStep != nil && c.Target != nil {
+			rechecked = append(rechecked, *c.TargetSubject+" is "+testkit.GitOut(t, ctx.Repo.MainRoot, "log", "-1", "--format=%s", *c.Target))
+		}
+	}
+	if !slices.Equal(listed, looked) || !slices.Contains(rechecked, "feat: t is feat: t") {
+		t.Errorf("listed %q, ran %q, rechecks %q", listed, looked, rechecked)
+	}
+	if err := os.Remove(logPath); err != nil {
+		t.Fatal(err)
+	}
+	opts := runAt(200, &synccmd.StackOptions{Autosquash: true})
+	opts.EachCommit = "targets"
+	if _, human, err := synccmdtest.StackRun(t, ctx, work, opts); err != nil {
+		t.Fatalf("run: %v\n%s", err, human)
+	}
+	if got := synccmdtest.CheckedSubjects(t, logPath); !slices.Equal(got, looked) {
+		t.Errorf("the run checked %q, the look %q", got, looked)
 	}
 }

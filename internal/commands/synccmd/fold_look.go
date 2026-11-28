@@ -44,6 +44,14 @@ type FoldLook struct {
 	// Held is the layers the run leaves on their old commits although the
 	// fold changes them: a worktree holds them, or --alone.
 	Held []FoldLookHeld `json:"held"`
+	// Checks is what the replayed checks came to, in the order the rebase
+	// made them; null for a look that replayed none.
+	Checks []FoldLookCheck `json:"checks"`
+	// HooksNotRun is the active hooks the run would run and the replay did
+	// not; null for a look that replayed no check.
+	HooksNotRun []string `json:"hooksNotRun"`
+	// forks is the line's side branches' fork points, as read with the stack.
+	forks []string
 }
 
 // FoldLookSummary counts the fixup commits of Folds, no move! commit, by
@@ -240,7 +248,7 @@ func runStopsAhead(cfg *wtsync.Config, line wtsync.Line, path string, listed []a
 // foldLookAt reads the stack of look and the fold a run of it makes; a nil
 // fold for a run onto target with no move! commit on the line.
 func foldLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, target *OntoTarget, look *StackLook, listed []agents.Agent, progress lookProgress) (*syncrun.Stack, *FoldLook, error) {
-	s, err := stackLookAt(ctx, base, trunkSHA, cfg, target, look, listed, progress)
+	s, forks, err := stackLookAt(ctx, base, trunkSHA, cfg, target, look, listed, progress)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -249,7 +257,7 @@ func foldLookAt(ctx *kit.Context, base, trunkSHA string, cfg *wtsync.Config, tar
 		return nil, nil, err
 	}
 	if fl != nil {
-		fl.look = look
+		fl.look, fl.forks = look, forks
 	}
 	return s, fl, nil
 }
@@ -507,7 +515,7 @@ func foldCommand(work string, target *OntoTarget, look *StackLook, moves bool) s
 			flags += " --no-side-branches"
 		}
 	}
-	if moves {
+	if moves || look.replaysChecks() {
 		flags += " --each-commit=targets"
 	}
 	return fmt.Sprintf("wt sync rebase %s %s %s", work, flags, does)

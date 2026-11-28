@@ -29,6 +29,9 @@ type Conflict struct {
 	// a submodule). Assess refuses such a conflict before any strategy sees
 	// it: a file one side deleted or renamed is a person's call.
 	Incomplete string
+	// helpers is the directory a merge of it makes its own under; "" is the
+	// system's.
+	helpers string
 }
 
 // Refusal is a strategy declining a conflict it does not own completely. It

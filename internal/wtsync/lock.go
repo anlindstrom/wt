@@ -168,6 +168,17 @@ func lockHeld(l *Lock, now time.Time) *LockHeld {
 	return &LockHeld{Lock: *l, Running: now.Sub(l.Started) >= LockExpiry}
 }
 
+// Held is the LockHeld Acquire would refuse with for the worktree whose git
+// dir is gitDir, or why its lock cannot be read; nil when none holds it.
+// Nothing is written.
+func Held(gitDir string, now time.Time) error {
+	l, ok, err := ReadLock(gitDir)
+	if err != nil || !ok || !LockLive(l, now) {
+		return err
+	}
+	return lockHeld(l, now)
+}
+
 // GitDir is the worktree's own git dir, absolute.
 func GitDir(wtPath string) (string, error) {
 	return gitEnv(wtPath, nil, nil, "rev-parse", "--absolute-git-dir")

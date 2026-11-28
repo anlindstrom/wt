@@ -160,7 +160,7 @@ generating types from it:
 | `wt status --json` | [`schema/status.v1.json`](../schema/status.v1.json) | 1.12.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/status.v1.json` |
 | `wt sweep --yes --json` | [`schema/sweep.v1.json`](../schema/sweep.v1.json) | 1.5.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep.v1.json` |
 | `wt sweep --dry-run --json` | [`schema/sweep-plan.v1.json`](../schema/sweep-plan.v1.json) | 1.7.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sweep-plan.v1.json` |
-| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.20.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
+| `wt sync --json` | [`schema/sync.v1.json`](../schema/sync.v1.json) | 1.21.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync.v1.json` |
 | `wt sync fixup --json` | [`schema/sync-fixup.v1.json`](../schema/sync-fixup.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-fixup.v1.json` |
 | `wt sync move --json` | [`schema/sync-move.v1.json`](../schema/sync-move.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-move.v1.json` |
 | `wt sync owner --json` | [`schema/sync-owner.v1.json`](../schema/sync-owner.v1.json) | 1.0.0 | `https://raw.githubusercontent.com/anlindstrom/wt/main/schema/sync-owner.v1.json` |
@@ -1809,6 +1809,24 @@ is what it does. Without `--autosquash` `fold` is null, and with `--onto` too,
 except (since 1.19.0) for a line with a `move!` commit: then `fold` is what the
 run does as it replays the line onto the target `onto` names, `fold.base` the
 line's own base, and every layer is re-pointed or held.
+Since 1.21.0, `wt sync <work> --stack --autosquash --each-commit=targets`
+replays the fold on a scratch copy of the repository and fills `fold.checks`
+with what the checks of `wt sync rebase ... --each-commit=targets` come to:
+the same stops, steps and per-layer steps, going on past a failed check. The
+look then fetches nothing (`fetched` is false), `needs` holds only what that
+run needs, and the exit status says the outcome, the object printed either way:
+
+| Exit | When |
+|---|---|
+| 0 | every due step passed, or none is due |
+| 4 | a step failed, whatever else happened |
+| 2 | `--onto` on a line with no `move!` commit, which the run refuses |
+| 1 | the fold is refused (`fold.refusal`; `error` null), a step is owed (`error` null), or the checks are incomplete (`error` says why): a conflict that is yours, a hook the run would run that could refuse or change it (`pre-rebase`; once a per-layer step comes to commit, the hooks of a commit), a scratch copy that could not be made, `TMPDIR` inside a checkout of the repository or its git dir (`fold` null) |
+
+The checkout is fresh, without the worktree's untracked and ignored files, and
+hooks do not run; `fold.hooksNotRun` names the ones the run would run. Git there
+reads no global or system configuration. A check can read the repository's objects and must not write
+outside its checkout.
 Since 1.20.0 `fold` also sums up the fixups, one per `fixup!`, `squash!` or
 `amend!` commit of `fold.folds` (`fold.fixups`; a `move!` commit is none), by
 what the analysis behind `stack.contextGaps` finds of each: `appliesAtTarget`,
@@ -1870,7 +1888,7 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `eachCommitDeclared[].step` | string | yes | Its run line: the string deferred[].step carries for it in wt sync rebase --json. |
 | `eachCommitDeclared[].paths` | array of string | yes | The globs that gate it, as declared. For a deferred step: empty, it runs after every finished rebase; otherwise only when the rebase changed a path one of them matches, which is not known before the rebase. For an each_commit step: empty, it runs at every replayed commit; otherwise at each one changing a path one of them matches. |
 | `eachCommitDeclared[].needs` | array of string, matching `^(docker\|env:[A-Za-z_][A-Za-z0-9_]*)$` | yes | Since 1.6.0 (env:<NAME> since 1.10.0). What the step cannot run without, as declared; the overview's needs says what each probe answered. |
-| `needs` | array of object | yes | Since 1.6.0. Every need a declared step has, once each, with what its probe said. A need is probed only when a step with it would run for some worktree of the overview: an each_commit step with a commit to check, or a deferred step whose paths match a path the rebase may change. A run probes the same way before it moves anything, and refuses a worktree whose step needs one that did not answer, unless started with --allow-owed. |
+| `needs` | array of object | yes | Since 1.6.0. Every need a declared step has, once each, with what its probe said; since 1.21.0, for a look with --each-commit=targets, only the needs of the steps the run of that fold may run, each env: need probed against the environment its checks get. A need is probed only when a step with it would run for some worktree of the overview: an each_commit step with a commit to check, or a deferred step whose paths match a path the rebase may change. A run probes the same way before it moves anything, and refuses a worktree whose step needs one that did not answer, unless started with --allow-owed. |
 | `needs[].need` | string, matching `^(docker\|env:[A-Za-z_][A-Za-z0-9_]*)$` | yes | A declared need: docker, or env:<NAME> for an environment variable that must be set and not empty (since 1.10.0). |
 | `needs[].probed` | boolean | yes | The probe ran: some worktree has a step with this need that would run. |
 | `needs[].ok` | boolean | yes | The probe answered. False when it did not, or was not run. |
@@ -2061,6 +2079,19 @@ object with `error` set and no worktrees, and the exit code is non-zero.
 | `fold.held` | array of object | yes | The layers the fold would change that the run leaves on their old commits: one a worktree holds (dirty, a process, a rebase), or every layer with --alone. |
 | `fold.held[].branch` | string | yes |  |
 | `fold.held[].why` | string | yes |  |
+| `fold.hooksNotRun` | array of string \| null | yes | Since 1.21.0: for --each-commit=targets, the active hooks the run would run and the replay did not, files and configured ones. pre-rebase, and once a per-layer step came to commit pre-commit, prepare-commit-msg and commit-msg, make the checks incomplete (the overview's error says so, exit 1); the others change no outcome. Empty when there is none, and when the fold is refused. Null for a look without that flag. |
+| `fold.checks` | array of object \| null | yes | Since 1.21.0: what the checks of the fold came to, replayed on a scratch copy of the repository, for --each-commit=targets: one entry per stop that ran or owed a step, in the order the rebase made them, a commit visited twice twice. Null for a look without that flag. Empty when the fold is refused (refusal) or no check is due. A stop the run skips is not listed, nor one after a conflict (the overview's error says so). |
+| `fold.checks[].kind` | `"stop"` \| `"recheck"` \| `"layerStep"` | yes | stop: a stop the rebase made to run each_commit steps. recheck: a commit checked again after a per-layer step folded its output. layerStep: a per-layer step that failed or is owed. |
+| `fold.checks[].target` | string \| null, matching `^[0-9a-f]{40,64}$` | yes | The commit of the line the visit is for, by the id it has now: folds[].target for a fold target, else a layer's tip or a move's source. Null for a layerStep, and for the recheck of a commit a per-layer step made. |
+| `fold.checks[].targetSubject` | string \| null | yes | Its subject, or that of the commit a per-layer step made. Null for a layerStep. |
+| `fold.checks[].layer` | string | yes | The layer branch, or the line's own branch above the top layer. |
+| `fold.checks[].fixups` | array of string, matching `^[0-9a-f]{40,64}$` | yes | The fixup!, squash!, amend! and move! commits folded into target. Empty for a commit nothing is folded into, and for a layerStep. |
+| `fold.checks[].afterStep` | string \| null | yes | For a recheck, the per-layer step whose fold it follows. Null otherwise. |
+| `fold.checks[].steps` | array of object | yes | The visit's steps, in the order declared. |
+| `fold.checks[].steps[].run` | string | yes | The step's run line from .wt-sync.yaml. |
+| `fold.checks[].steps[].result` | `"pass"` \| `"fail"` \| `"owed"` \| `"notRun"` \| `"indeterminate"` | yes | pass. fail. owed: not run, as the run would owe it. notRun: an earlier step of the visit failed. indeterminate: run after a failed step whose changes the look could not take back, so it says nothing. |
+| `fold.checks[].steps[].why` | string \| null | yes | Why a step failed, is owed or is indeterminate. Null for pass and notRun. |
+| `fold.checks[].steps[].log` | string \| null | yes | For fail, the absolute path of a file with everything the step printed, kept after wt exits. Null otherwise, and where that file could not be written (the overview's error says why). |
 <!-- json-docs:end -->
 
 A worktree its own remote refuses (`ownRemote.blocks` set, or its fetch failed)
@@ -3523,3 +3554,4 @@ change made it.
 | `sync-run` 2.1.0 | no new field: `stack.push.branches[].old` is the lease the push went over, which is the newest run's, no longer always the oldest's, where [the recorded runs' leases differ](#push--a-stacks-push) and the remote is at the newest |
 | `sync-owner` 1.0.0 | `wt sync owner --json`, the commits of the line that own some lines, and whether a change there folds into one |
 | `sync-fixup` 1.0.0 | `wt sync fixup <rev> --json`, the fixup committed, the one `--dry-run` would commit, or why none was |
+| `sync` 1.21.0 | `checks` and `hooksNotRun` on the look's `fold`: for `--each-commit=targets`, what each stop's steps come to on a scratch copy of the repository; null without the flag |
