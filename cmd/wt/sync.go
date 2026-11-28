@@ -172,18 +172,19 @@ func newSyncCmd() *cobra.Command {
 			"  wt sync rebase . --if-ready   # rebase it only if it needs nothing from you\n" +
 			"  wt sync login-crash --onto test_wt/integration  # against another branch\n" +
 			"  wt sync top --stack --autosquash --layer 'feat/*'  # a stack held on one line\n" +
+			"  wt sync top --stack --autosquash --each-commit=targets  # run the fold's checks, move nothing\n" +
 			"  wt sync rebase --all --if-ready  # every ready worktree, every repository\n" +
 			"  wt sync --profile api         # the overview of a profile's repositories",
 		ValidArgsFunction: completeWork,
 	}
 	var asJSON, stack, autosquash, alone, noSides bool
-	var onto, upstream string
+	var onto, upstream, eachCommit string
 	var layers []string
 	var sel selectionFlags
 	sync.Args = cobra.MaximumNArgs(1)
 	sync.RunE = func(cmd *cobra.Command, args []string) error {
 		f := runFlags{noFetch: noFetch, json: asJSON, stack: stack, layers: layers, autosquash: autosquash,
-			onto: onto, upstream: upstream, alone: alone, noSides: noSides}
+			onto: onto, upstream: upstream, alone: alone, noSides: noSides, eachCommit: eachCommit}
 		if err := f.check(true); err != nil {
 			return err
 		}
@@ -214,7 +215,7 @@ func newSyncCmd() *cobra.Command {
 		opts := synccmd.SyncOptions{NoFetch: noFetch, Onto: onto, Upstream: upstream, Alone: alone,
 			Progress: cmd.ErrOrStderr()}
 		if f.stack {
-			opts.Stack = &synccmd.StackLook{Work: args[0], Layers: layers, Autosquash: autosquash, NoSideBranches: noSides}
+			opts.Stack = &synccmd.StackLook{Work: args[0], Layers: layers, Autosquash: autosquash, NoSideBranches: noSides, EachCommit: eachCommit}
 		}
 		if len(args) == 1 {
 			return synccmd.SyncWorktree(ctx, args[0], opts, cmd.OutOrStdout())
@@ -228,6 +229,8 @@ func newSyncCmd() *cobra.Command {
 	sync.Flags().BoolVar(&alone, "alone", false, "look at the one worktree named without the rest of its stack: which of it a run of it alone would leave")
 	sync.Flags().BoolVar(&autosquash, "autosquash", false, "with --stack: name the fixups a fold moves ahead of their context")
 	sync.Flags().BoolVar(&noSides, "no-side-branches", false, "with --stack: leave out the branches that fork from the line or sit above its top; a run then never moves them")
+	sync.Flags().StringVar(&eachCommit, "each-commit", "", "with --stack --autosquash: targets replays the fold on a scratch copy of the repository and runs the checks --each-commit=targets runs, going on past a failure (exit 4); the checkout has no untracked files, git there reads no global or system configuration, hooks are named and not run, nothing is fetched or moved, and a check must write only inside its checkout, though it can read this repository's objects")
+	_ = sync.RegisterFlagCompletionFunc("each-commit", cobra.FixedCompletions([]string{"targets"}, cobra.ShellCompDirectiveNoFileComp))
 	addOntoFlags(sync, &onto, &upstream, "look at the worktree named against <ref> instead of trunk")
 	sel.add(sync, true)
 	sync.AddCommand(newSyncRebaseCmd(), newSyncResumeCmd(), newSyncUndoCmd(), newSyncPushCmd(), newSyncStepsCmd(), newSyncWaitCmd(), newSyncPushToCmd(), newSyncMoveCmd(), newSyncOwnerCmd(), newSyncFixupCmd(), newSyncDoctorCmd(), newSyncKeepCmd())
@@ -293,6 +296,8 @@ func (f runFlags) check(look bool) error {
 		return usagef("%s", wtsync.TargetsRefusal(f.edit != ""))
 	case f.eachCommit == wtsync.EachTips && f.edit != "":
 		return usagef("--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after")
+	case look && f.eachCommit != "" && f.eachCommit != wtsync.EachTargets:
+		return usagef("the look runs checks only with --each-commit=targets; --each-commit=%s is for wt sync rebase", f.eachCommit)
 	case look && f.alone && f.json:
 		return usagef("--alone with --json needs wt sync rebase: the look has no JSON of it")
 	case f.alone && f.edit != "":
@@ -356,7 +361,7 @@ func (f runFlags) stackOptions() *synccmd.StackOptions {
 func syncOverviewJSON(cmd *cobra.Command, args []string, sel reposel.Selection, f runFlags) error {
 	opts := synccmd.SyncOptions{NoFetch: f.noFetch, Onto: f.onto, Upstream: f.upstream}
 	if f.stack {
-		opts.Stack = &synccmd.StackLook{Work: args[0], Layers: f.layers, Autosquash: f.autosquash, NoSideBranches: f.noSides}
+		opts.Stack = &synccmd.StackLook{Work: args[0], Layers: f.layers, Autosquash: f.autosquash, NoSideBranches: f.noSides, EachCommit: f.eachCommit}
 	}
 	if f.onto != "" {
 		opts.Work = args[0]

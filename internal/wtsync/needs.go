@@ -3,6 +3,7 @@ package wtsync
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -53,8 +54,26 @@ func envNeedName(need string) (name string, ok bool) {
 func stepEnviron() []string { return stepEnvironIn("") }
 
 // stepEnvironIn is stepEnviron for a command run in dir.
-func stepEnvironIn(dir string) []string {
-	return git.EnvironIn(dir, append([]string{"NO_COLOR=1"}, rebaseEnv...)...)
+func stepEnvironIn(dir string) []string { return git.EnvironIn(dir, stepOverrides()...) }
+
+func stepOverrides() []string { return append([]string{"NO_COLOR=1"}, rebaseEnv...) }
+
+// LookProbes is probes, with each env need of cfg they do not answer probed
+// against the environment a look's checks get on its scratch copy.
+func LookProbes(cfg *Config, probes map[string]func() error) map[string]func() error {
+	if probes == nil {
+		probes = KnownNeeds
+	}
+	out := maps.Clone(probes)
+	if cfg == nil {
+		return out
+	}
+	for _, need := range cfg.DeclaredNeeds() {
+		if name, ok := envNeedName(need); ok && out[need] == nil {
+			out[need] = func() error { return probeEnvIn(git.ConfinedEnviron(stepOverrides()...), name) }
+		}
+	}
+	return out
 }
 
 // probeEnv answers whether name is set and not empty in stepEnviron. The

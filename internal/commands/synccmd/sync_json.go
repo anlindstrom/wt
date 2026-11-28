@@ -194,9 +194,12 @@ type OverviewFile struct {
 // the returned one.
 func SyncJSON(ctx *kit.Context, opts SyncOptions, w io.Writer) error {
 	defer syncrun.WatchSignals(os.Stderr, nil)()
-	o := OverviewOf(ctx, opts)
+	o, outcome := overviewOf(ctx, opts)
 	if err := jsonout.WriteJSON(w, o); err != nil {
 		return err
+	}
+	if outcome != nil {
+		return outcome
 	}
 	if o.Error != nil {
 		return fmt.Errorf("%s", *o.Error)
@@ -251,16 +254,30 @@ func newOverview(name, mainRoot string) SyncOverview {
 
 // OverviewOf is what wt sync would print for ctx's repository, as data.
 func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
-	o := newOverview(ctx.Repo.Name, ctx.Repo.MainRoot)
+	o, _ := overviewOf(ctx, opts)
+	return o
+}
+
+// overviewOf is OverviewOf with the status a look that replays checks ends
+// with, which the object's error alone does not say; nil for any other look.
+func overviewOf(ctx *kit.Context, opts SyncOptions) (o SyncOverview, outcome error) {
+	opts.NoFetch = opts.NoFetch || opts.Stack.replaysChecks()
+	o = newOverview(ctx.Repo.Name, ctx.Repo.MainRoot)
 	if err := ctx.NoTrunk(); err != nil {
 		o.Error = jsonout.Strp(err.Error())
-		return o
+		return o, nil
 	}
 	trunk := ctx.Config.MainBranch
+	if opts.Stack.replaysChecks() {
+		if err := tempOutside(ctx); err != nil {
+			o.Error = jsonout.Strp(err.Error())
+			return o, nil
+		}
+	}
 	o.Trunk, o.TrunkRef, o.TrunkSource = jsonout.Strp(trunk), jsonout.Strp("origin/"+trunk), ctx.TrunkSource()
 	if opts.Upstream != "" && opts.Onto == "" {
 		o.Error = jsonout.Strp("--upstream needs --onto: it says where the commits rebased onto --onto's ref start")
-		return o
+		return o, nil
 	}
 	// Trunk, and with it the own remote of every worktree's branch. One
 	// that could not be fetched is as last fetched, which its
@@ -285,7 +302,7 @@ func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
 	_, sha, err := TrunkTip(ctx)
 	if err != nil {
 		o.Error = jsonout.Strp(err.Error())
-		return o
+		return o, nil
 	}
 	cfg, err := wtsync.LoadFromRef(ctx.Repo.MainRoot, sha)
 	switch {
@@ -293,7 +310,7 @@ func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
 		cfg = nil
 	case err != nil:
 		o.Error = jsonout.Strp(err.Error())
-		return o
+		return o, nil
 	}
 	o.Declared = cfg != nil
 	if opts.Onto == "" {
@@ -304,7 +321,7 @@ func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
 		if src, remote, err := remoteSource(ctx, opts.Onto); remote && !opts.NoFetch {
 			if err != nil {
 				o.Error = jsonout.Strp(err.Error())
-				return o
+				return o, nil
 			}
 			if err := fetchOnto(ctx, src, syncFetchTimeout); err != nil {
 				o.FetchError, o.Fetched = jsonout.Strp(kit.FetchReason(err)), false
@@ -313,7 +330,7 @@ func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
 		t, err := resolveOnto(ctx, opts.Onto, opts.Upstream)
 		if err != nil {
 			o.Error = jsonout.Strp(err.Error())
-			return o
+			return o, nil
 		}
 		target = &t
 		o.Onto, o.Target = jsonout.Strp(t.SHA), &syncrun.RunTarget{Ref: t.Ref, Upstream: jsonout.Strp(t.Upstream)}
@@ -330,42 +347,75 @@ func OverviewOf(ctx *kit.Context, opts SyncOptions) SyncOverview {
 	}
 	if err != nil {
 		o.Error = jsonout.Strp(err.Error())
-		return o
+		return o, nil
 	}
 	o.Worktrees = sv.Rows
 	o.EachCommitDeclared = eachCommitSteps(cfg)
-	o.Needs = needProbes(cfg, sv.dues, syncrun.StepOptions{Probes: opts.Probes}.Prober())
+	prober := opts.prober(cfg)
+	// A look that replays checks needs what its own run needs, and no more.
+	if !opts.Stack.replaysChecks() {
+		o.Needs = needProbes(cfg, sv.dues, prober)
+	}
 	if o.Token, err = sv.Token(ctx, trunk, sha); err != nil {
 		o.Error = jsonout.Strp(err.Error())
 	}
 	if opts.Stack != nil {
+		var forks []string
 		base := sha
 		if target != nil {
 			base = target.cutoff()
 		}
-		if o.Stack, err = stackLookAt(ctx, base, sha, cfg, target, opts.Stack, listed, lookProgress{}); err != nil {
+		if o.Stack, forks, err = stackLookAt(ctx, base, sha, cfg, target, opts.Stack, listed, lookProgress{}); err != nil {
 			o.Error = jsonout.Strp(err.Error())
 		} else if opts.Stack.Autosquash {
 			if o.Fold, err = foldLookFor(ctx.Repo.MainRoot, cfg, o.Stack, target, opts.Stack.Alone || opts.Alone); err != nil {
 				o.Error = jsonout.Strp(err.Error())
-			} else if err := refuseFoldLook(ctx, opts, sha, cfg, o.Stack, target, sv, listed, own, o.Fold); err != nil {
+				return o, nil
+			}
+			if o.Fold != nil {
+				o.Fold.look, o.Fold.forks = opts.Stack, forks
+			} else if opts.Stack.replaysChecks() {
+				usage := noMoveUsage()
+				o.Error = jsonout.Strp(usage.Error())
+				return o, usage
+			}
+			due, err := refuseFoldLook(ctx, opts, sha, cfg, o.Stack, target, sv, listed, own, prober, o.Fold)
+			if err != nil {
 				o.Error = jsonout.Strp(err.Error())
+			} else if opts.Stack.replaysChecks() {
+				o.Needs = dueNeeds(cfg, due, prober)
+				outcome = replayJSON(ctx, &o, opts, sha, cfg, target)
 			}
 		}
 	}
-	return o
+	return o, outcome
+}
+
+// replayJSON replays the checks of the fold o shows, for its fold object.
+func replayJSON(ctx *kit.Context, o *SyncOverview, opts SyncOptions, trunkSHA string, cfg *wtsync.Config, target *OntoTarget) error {
+	wt, err := kit.LocateBranch(ctx, opts.Stack.Work)
+	if err != nil {
+		o.Error = jsonout.Strp(err.Error())
+		return err
+	}
+	_, why, outcome := replayChecks(os.Stderr, opts.Progress, wt.Path, trunkSHA, cfg, o.Stack, target, o.Fold)
+	if why != "" {
+		o.Error = jsonout.Strp(why)
+	}
+	return outcome
 }
 
 // refuseFoldLook puts on fl why the run refuses the fold's worktree: the
 // run's verdict, which for a fold in place is not the survey's, as it never
 // meets trunk. The rows and the token stay the survey's.
-func refuseFoldLook(ctx *kit.Context, opts SyncOptions, trunkSHA string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoTarget, sv Survey, listed []agents.Agent, own *wtsync.Own, fl *FoldLook) error {
+func refuseFoldLook(ctx *kit.Context, opts SyncOptions, trunkSHA string, cfg *wtsync.Config, s *syncrun.Stack, target *OntoTarget, sv Survey, listed []agents.Agent, own *wtsync.Own, prober *syncrun.Prober, fl *FoldLook) (wtsync.Due, error) {
+	var due wtsync.Due
 	if fl == nil {
-		return nil
+		return due, nil
 	}
 	wt, err := kit.LocateBranch(ctx, opts.Stack.Work)
 	if err != nil {
-		return err
+		return due, err
 	}
 	a, ok := sv.assessed[wt.Branch]
 	if target == nil || !ok {
@@ -373,16 +423,15 @@ func refuseFoldLook(ctx *kit.Context, opts SyncOptions, trunkSHA string, cfg *wt
 	}
 	why := stackRefusal(cfg, s, kit.BranchWorkName(ctx, wt.Branch), a)
 	if why == "" && fl.Refusal == nil {
-		due, _, _, err := foldDue(ctx.Repo.MainRoot, wt.Path, cfg, s, target, fl)
-		if err != nil {
-			return err
+		if due, _, _, err = foldDue(ctx.Repo.MainRoot, wt.Path, cfg, s, target, fl); err != nil {
+			return due, err
 		}
-		why = needRefusal(syncrun.StepOptions{Probes: opts.Probes}.Prober(), due)
+		why = needRefusal(prober, due)
 	}
 	if why != "" {
 		fl.refuse(why)
 	}
-	return nil
+	return due, nil
 }
 
 // Survey is every worktree of a repository assessed against one trunk

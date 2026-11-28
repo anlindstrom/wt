@@ -68,6 +68,7 @@ func (t *RebaseTracker) Get() *RebaseInFlight {
 func WatchSignals(w io.Writer, t *RebaseTracker) func() {
 	return kit.WatchSignals(w, func(w io.Writer) string {
 		at := t.Get()
+		wtsync.CloseTempDirs()
 		OnInterrupt(w, wtsync.HeldLocks(), at)
 		if at == nil {
 			return ""
@@ -121,7 +122,7 @@ func OnInterrupt(w io.Writer, locks []*wtsync.Lock, at *RebaseInFlight) {
 // where the run would have lifted it. A list that cannot be edited at this
 // moment is said so, in the same breath as the way out.
 func marksLeftNote(path string) string {
-	if err := wtsync.StripMarks(path); err != nil {
+	if err := wtsync.StripMarksOnExit(path); err != nil {
 		return "; " + wtsync.MarksLeft(err)
 	}
 	return ""

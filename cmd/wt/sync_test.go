@@ -106,6 +106,10 @@ func TestRunFlagsRefuseFlagsThatDoNotGoTogether(t *testing.T) {
 			"--each-commit=tips and --edit are two runs: an edit run's checks sit at the commits above the edit; use --each-commit=off, or edit first and check after"},
 		{runFlags{stack: true, edit: "a1b2c3d", eachCommit: "off"}, false, ""},
 		{runFlags{stack: true, autosquash: true, eachCommit: "targets"}, false, ""},
+		{runFlags{stack: true, autosquash: true, eachCommit: "targets"}, true, ""},
+		{runFlags{stack: true, eachCommit: "targets"}, true, wtsync.TargetsRefusal(false)},
+		{runFlags{stack: true, autosquash: true, eachCommit: "tips"}, true,
+			"the look runs checks only with --each-commit=targets; --each-commit=tips is for wt sync rebase"},
 		{runFlags{stack: true, eachCommit: "targets"}, false, wtsync.TargetsRefusal(false)},
 		// Onto another commit the line decides: a run takes it for a move! commit.
 		{runFlags{stack: true, autosquash: true, onto: "main", eachCommit: "targets"}, false, ""},

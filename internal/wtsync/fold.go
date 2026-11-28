@@ -1,6 +1,7 @@
 package wtsync
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -238,6 +239,9 @@ func (d *driver) atLayerEnd(n int) error {
 			continue
 		}
 		r := LayerStep{Layer: n, Layers: total, Branch: branch, Step: step}
+		// For a look, the checkout and HEAD ahead of a step that runs.
+		var snap *snapshot
+		var before string
 		switch below, failed := d.stepFailed[step.Run]; {
 		case sameTip:
 			r.Result, r.Why = LayerUntouched, "the run left this layer's tip as it was; the step did not run"
@@ -253,8 +257,18 @@ func (d *driver) atLayerEnd(n int) error {
 			if err != nil {
 				return err
 			}
+			if l := d.req.look; l != nil {
+				if before, err = d.git("rev-parse", "HEAD"); err != nil {
+					return err
+				}
+				snap = l.before(d)
+			}
 			if err := d.runLayerStep(&r, now, touched); err != nil {
-				return err
+				// A look records a step that failed whatever cleaning
+				// up after it came to, and puts the checkout back itself.
+				if d.req.look == nil || r.Result != LayerFailed {
+					return err
+				}
 			}
 		}
 		if r.Owed() {
@@ -265,6 +279,16 @@ func (d *driver) atLayerEnd(n int) error {
 		}
 		d.logLayerStep(r)
 		d.res.LayerSteps = append(d.res.LayerSteps, r)
+		if l := d.req.look; l != nil {
+			l.layerStep(r)
+			switch {
+			case before == "":
+			case r.Result == LayerFailed:
+				l.restore(d, snap, before, step.Run)
+			default:
+				l.drop(snap)
+			}
+		}
 	}
 	if skippedHere {
 		d.noteUntouched(n)
@@ -386,6 +410,9 @@ func (d *driver) runLayerStep(r *LayerStep, commits []string, touched map[string
 		fmt.Fprintf(d.log, "  ▸ step %s layer %d/%d %s\n", step.Run, r.Layer, r.Layers, r.Branch)
 	}
 	r.Ran = true
+	if d.req.look != nil {
+		d.req.look.step = step.Run
+	}
 	r.Why = "a listed path changed in this layer"
 	if d.req.ForceSteps {
 		r.Why = "asked for"
@@ -427,6 +454,9 @@ func (d *driver) runLayerStep(r *LayerStep, commits []string, touched map[string
 	case step.Commit != "":
 		if _, err := d.git(append([]string{"--literal-pathspecs", "add", "-A", "--"}, files...)...); err != nil {
 			return err
+		}
+		if d.req.look != nil {
+			d.req.look.committed = true
 		}
 		if _, err := d.git("commit", "--no-gpg-sign", "-q", "-m", step.Commit); err != nil {
 			return refuse("commit failed: " + kitOneLine(err.Error()))
@@ -608,6 +638,11 @@ func (d *driver) foldInto(r *LayerStep, run, files []string, head string) error 
 			return err
 		}
 	}
+	if d.req.look != nil {
+		if err := d.req.look.recommitted(d, rewritten, run); err != nil {
+			return err
+		}
+	}
 	if f, err := d.recheckFold(rewritten, files); err != nil {
 		return err
 	} else if f != nil {
@@ -678,17 +713,40 @@ func (d *driver) recheckFold(rewritten, files []string) (*CheckFailure, error) {
 		if _, err := d.git("reset", "-q", "--hard", c); err != nil {
 			return nil, err
 		}
+		var visit *LookVisit
+		if l := d.req.look; l != nil {
+			v, err := l.rechecked(d, c, steps)
+			if err != nil {
+				return nil, err
+			}
+			visit = v
+		}
 		announced := false
-		for _, s := range steps {
-			if d.unavailable(s.Needs) != "" {
+		for i, s := range steps {
+			if why := d.unavailable(s.Needs); why != "" {
+				d.lookOwed(visit, i, why)
 				continue
 			}
 			if !announced && d.log != nil {
 				announced = true
 				fmt.Fprintf(d.log, "  ▸ recheck %s\n", git.ShortID(c, 7))
 			}
+			var full bytes.Buffer
+			var snap *snapshot
+			if l := d.req.look; l != nil {
+				snap = l.before(d)
+				s.full = &full
+			}
 			why, output, retried, took := runTimed(d.res.Timings, git.ShortID(c, 7)+" (recheck)", d.req.Path, s, EachCommitTimeout)
 			logCheck(d.log, d.cfg, s, why, retried, took)
+			if l := d.req.look; l != nil {
+				l.ran(visit, i, why, full.Bytes())
+				if why != "" {
+					l.restore(d, snap, c, s.Run)
+				} else {
+					l.drop(snap)
+				}
+			}
 			if why != "" {
 				if d.log != nil {
 					for _, line := range lastOutputLines(output, 5) {
