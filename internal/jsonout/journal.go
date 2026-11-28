@@ -48,6 +48,8 @@ type JournalRules[R any] struct {
 	// parks the git a returning run is reading with and the handler must
 	// still be able to write.
 	Snapshot func(r R, signalled bool, recovery string) any
+	// Compact writes the object on one line rather than indented.
+	Compact bool
 }
 
 // NewJournal is a journal that writes its object to out, starting from res.
@@ -176,7 +178,7 @@ func (j *Journal[R]) write(signalled bool, inFlight, recovery string) {
 		r := j.Res
 		j.mu.Unlock()
 		o := j.rules.Snapshot(r, signalled, recovery)
-		j.once.Do(func() { _ = WriteJSON(j.out, o) })
+		j.once.Do(func() { j.encode(o) })
 		return
 	}
 	j.once.Do(func() {
@@ -188,6 +190,14 @@ func (j *Journal[R]) write(signalled bool, inFlight, recovery string) {
 			}
 			j.rules.Caught(&j.Res, inFlight, recovery)
 		}
-		_ = WriteJSON(j.out, j.rules.Close(&j.Res, signalled, recovery))
+		j.encode(j.rules.Close(&j.Res, signalled, recovery))
 	})
+}
+
+func (j *Journal[R]) encode(o any) {
+	if j.rules.Compact {
+		_ = WriteCompactJSON(j.out, o)
+		return
+	}
+	_ = WriteJSON(j.out, o)
 }

@@ -514,6 +514,30 @@ func ForgetPushRecordOfRun(mainRoot string, epoch int64) error {
 // from or a run wrote: a later run replaced it, or a push took it.
 var ErrPushRecordReplaced = errors.New("the line's push record is no longer the one pushed from; it is left as it is")
 
+// PushRecordStands is nil while the line's record is still rec, read under
+// the flock, and ErrPushRecordReplaced once it is not.
+func PushRecordStands(mainRoot string, rec *PushRecord) error {
+	unlock, err := lockPushRecords(mainRoot)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return stillRecorded(mainRoot, rec)
+}
+
+// stillRecorded is PushRecordStands for a caller that holds the flock: the
+// same run, the same time and the same revision.
+func stillRecorded(mainRoot string, rec *PushRecord) error {
+	cur, ok, err := ReadPushRecord(mainRoot, rec.Branch)
+	if err != nil {
+		return err
+	}
+	if !ok || cur.Rev != rec.Rev || cur.Epoch != rec.Epoch || !cur.Written.Equal(rec.Written) {
+		return ErrPushRecordReplaced
+	}
+	return nil
+}
+
 // ReplacePushRecord replaces from, the record a push was made from, with to
 // (nil deletes it), and only while the line's record is still from: the same
 // run, the same time and the same revision. Any other is left, and an error
@@ -524,12 +548,8 @@ func ReplacePushRecord(mainRoot string, from, to *PushRecord) error {
 		return err
 	}
 	defer unlock()
-	cur, ok, err := ReadPushRecord(mainRoot, from.Branch)
-	if err != nil {
+	if err := stillRecorded(mainRoot, from); err != nil {
 		return err
-	}
-	if !ok || cur.Rev != from.Rev || cur.Epoch != from.Epoch || !cur.Written.Equal(from.Written) {
-		return ErrPushRecordReplaced
 	}
 	pushRecordBeforeChange()
 	if to == nil {

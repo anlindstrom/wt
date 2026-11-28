@@ -225,8 +225,8 @@ setup() {
     run --separate-stderr wt sync rebase --no-fetch --json
     [ "$status" -eq 0 ]
     [[ "$output" == "{"*"}" ]]
-    [[ "$output" == *'"outcome": "refused"'* ]]
-    [[ "$output" == *'"error": "not confirmed: nothing rebased"'* ]]
+    [[ "$output" == *'"outcome":"refused"'* ]]
+    [[ "$output" == *'"error":"not confirmed: nothing rebased"'* ]]
     [[ "$stderr" == *"Pass --yes to rebase bump."* ]]
 
     run --separate-stderr wt sync --no-fetch --json
@@ -235,22 +235,22 @@ setup() {
 
     run --separate-stderr wt sync rebase --no-fetch --yes --no-push --json --expect 1:0000
     [ "$status" -ne 0 ]
-    [[ "$output" == *'"outcome": "refused"'* ]]
-    [[ "$output" == *'"worktrees": []'* ]]
+    [[ "$output" == *'"outcome":"refused"'* ]]
+    [[ "$output" == *'"worktrees":[]'* ]]
 
     run --separate-stderr wt sync rebase --no-fetch --yes --no-push --json --expect "$token"
     [ "$status" -eq 0 ]
-    [[ "$output" == *'"command": "sync rebase"'* ]]
-    [[ "$output" == *'"outcome": "done"'* ]]
-    [[ "$output" == *'"result": "rebased"'* ]]
-    [[ "$output" == *'"pushed": false'* ]]
-    [[ "$output" == *'"undoCommand": ['*'"undo",'*'"bump"'* ]]
+    [[ "$output" == *'"command":"sync rebase"'* ]]
+    [[ "$output" == *'"outcome":"done"'* ]]
+    [[ "$output" == *'"result":"rebased"'* ]]
+    [[ "$output" == *'"pushed":false'* ]]
+    [[ "$output" == *'"undoCommand":['*'"undo",'*'"bump"'* ]]
     [[ "$stderr" == *"rebased 1 commit"* ]]
 
     run --separate-stderr wt sync undo bump --json
     [ "$status" -eq 0 ]
-    [[ "$output" == *'"command": "sync undo"'* ]]
-    [[ "$output" == *'"result": "undone"'* ]]
+    [[ "$output" == *'"command":"sync undo"'* ]]
+    [[ "$output" == *'"result":"undone"'* ]]
 
     run --separate-stderr wt sync rebase --all --json
     [ "$status" -ne 0 ]

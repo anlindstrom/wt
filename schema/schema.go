@@ -6,10 +6,11 @@ import (
 	"embed"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 )
 
-//go:embed *.v1.json
+//go:embed *.v*.json
 var files embed.FS
 
 // Doc is one schema: the command whose --json output it describes, and its
@@ -20,19 +21,35 @@ type Doc struct {
 	Bytes []byte
 }
 
-// All is every schema, by name.
+// All is every schema, by name, each at its newest major. The files of
+// earlier majors stay beside it, unedited, for results saved under them.
 func All() []Doc {
 	entries, _ := files.ReadDir(".")
-	var out []Doc
+	newest := map[string]Doc{}
 	for _, e := range entries {
 		data, err := files.ReadFile(e.Name())
 		if err != nil {
 			continue
 		}
-		out = append(out, Doc{Name: strings.SplitN(e.Name(), ".", 2)[0], File: e.Name(), Bytes: data})
+		d := Doc{Name: strings.SplitN(e.Name(), ".", 2)[0], File: e.Name(), Bytes: data}
+		if have, ok := newest[d.Name]; !ok || Major(d.Version()) > Major(have.Version()) {
+			newest[d.Name] = d
+		}
+	}
+	out := make([]Doc, 0, len(newest))
+	for _, d := range newest {
+		out = append(out, d)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// Major is the major number of a MAJOR.MINOR.PATCH version, 0 when it is
+// not one.
+func Major(version string) int {
+	major, _, _ := strings.Cut(version, ".")
+	n, _ := strconv.Atoi(major)
+	return n
 }
 
 // ID is the schema's $id: where it is published.

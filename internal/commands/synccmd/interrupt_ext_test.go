@@ -11,9 +11,11 @@ import (
 	"github.com/anlindstrom/wt/internal/commands/provision/provisiontest"
 	"github.com/anlindstrom/wt/internal/commands/synccmd"
 	"github.com/anlindstrom/wt/internal/commands/synccmd/synccmdtest"
+	"github.com/anlindstrom/wt/internal/commands/syncrun"
 	"github.com/anlindstrom/wt/internal/commands/testkit"
 	"github.com/anlindstrom/wt/internal/git"
 	"github.com/anlindstrom/wt/internal/gittest"
+	"github.com/anlindstrom/wt/internal/jsonout"
 	"github.com/anlindstrom/wt/internal/wtsync"
 )
 
@@ -75,8 +77,25 @@ func TestSyncRunInterruptedWhileHandingOverSaysHowToPutItBack(t *testing.T) {
 	}
 	if os.Getenv(testkit.InterruptChild) == "" {
 		out, status := testkit.InterruptedChild(t)
-		if status != kit.InterruptStatus || !strings.Contains(out, "interrupted while rebasing bump") || !strings.Contains(out, "rebase --abort") {
+		// The --json summary the signal handler wrote, among what was said.
+		before, object, found := strings.Cut(out, `{"schema":`)
+		if !found {
+			t.Fatalf("no result object:\n%s", out)
+		}
+		line, after, _ := strings.Cut(`{"schema":`+object, "\n")
+		said := before + after
+		if status != kit.InterruptStatus || !strings.Contains(said, "interrupted while rebasing bump") || !strings.Contains(said, "rebase --abort") {
 			t.Fatalf("status %d; the interrupt did not say how to put bump back:\n%s", status, out)
+		}
+		r := synccmdtest.DecodeSyncRun(t, []byte(line))
+		p := synccmdtest.Participant(t, r, "feat_wt/bump")
+		if r.Detail != syncrun.DetailSummary || r.Outcome != jsonout.OutcomeInterrupted || p.Result != syncrun.ResultInterrupted {
+			t.Errorf("detail %q outcome %q result %q", r.Detail, r.Outcome, p.Result)
+		}
+		for what, recovery := range map[string]*string{"the run's": r.Recovery, "bump's": p.Recovery} {
+			if recovery == nil || !strings.Contains(*recovery, "rebase --abort") {
+				t.Errorf("%s recovery %v does not say how to put bump back", what, recovery)
+			}
 		}
 		return
 	}
@@ -89,6 +108,9 @@ func TestSyncRunInterruptedWhileHandingOverSaysHowToPutItBack(t *testing.T) {
 		_, err := os.Stat(wtsync.PlanPath(gitDir))
 		return err == nil
 	})
-	err = synccmd.SyncRebase(ctx, []string{"bump"}, synccmdtest.NoAgents(), os.Stdout)
+	opts := synccmdtest.NoAgents()
+	opts.Journal = syncrun.NewSyncRunJournal(os.Stdout, "sync rebase")
+	opts.Journal.Summarize()
+	err = synccmd.SyncRebase(ctx, []string{"bump"}, opts, os.Stdout)
 	t.Fatalf("the run returned (%v) instead of being interrupted", err)
 }

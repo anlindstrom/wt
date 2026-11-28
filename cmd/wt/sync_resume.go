@@ -8,7 +8,8 @@ import (
 )
 
 func newSyncResumeCmd() *cobra.Command {
-	var yes, allowOwed, adopt, allowDropped, asJSON bool
+	var yes, allowOwed, adopt, allowDropped bool
+	var form jsonForm
 	var drop string
 	var push func() syncrun.PushMode
 	resume := &cobra.Command{
@@ -101,7 +102,7 @@ func newSyncResumeCmd() *cobra.Command {
 			"it refuses, puts the rebase back and keeps what it came to under\n" +
 			"refs/wt-sync-kept/<branch>/<epoch>.\n\n" +
 			"--json prints one result object on stdout and the rest on stderr, as\n" +
-			"wt sync rebase --json does.",
+			"wt sync rebase --json does: a summary, or every row with --full.",
 		Example: "  wt sync resume login-crash            # continue what the run handed you\n" +
 			"  wt sync resume fix/login-crash --json # by branch; the result as JSON\n" +
 			"  wt sync resume login-crash --no-push  # then print the push command\n" +
@@ -113,7 +114,7 @@ func newSyncResumeCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeWork,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withVerbContext(cmd, args, "sync resume", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
+			return withVerbContext(cmd, args, "sync resume", form, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				return syncResume(cmd, args[0], ctx, yes, allowOwed, adopt, allowDropped, drop, push(), j)
 			})
 		},
@@ -125,7 +126,7 @@ func newSyncResumeCmd() *cobra.Command {
 	resume.Flags().BoolVar(&adopt, "adopt", false, "take over a rebase finished by hand with commits made on top, when its reflog proves that")
 	resume.Flags().BoolVar(&allowDropped, "allow-dropped", false, "go on past a resolution that drops lines of a fixup moved ahead of its context, when the drop is meant")
 	resume.Flags().StringVar(&drop, "drop", "", "the commit a stop is at, when trunk carries it reworked: take trunk's side of the files both change")
-	resume.Flags().BoolVar(&asJSON, "json", false, "print one result object on stdout, the rest on stderr")
+	form.addFlags(resume, "print one result object on stdout, the rest on stderr")
 	return resume
 }
 

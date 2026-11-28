@@ -29,10 +29,12 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/anlindstrom/wt/schema"
 )
 
 func main() {
-	schemaDir := flag.String("schema", "schema", "directory holding the *.v1.json schemas")
+	schemaDir := flag.String("schema", "schema", "directory holding the *.v*.json schemas")
 	docPath := flag.String("doc", "docs/json.md", "the document whose regions are rewritten")
 	check := flag.Bool("check", false, "write nothing; exit 1 when the document is out of date with the schemas")
 	flag.Parse()
@@ -73,12 +75,12 @@ type schemaDoc struct {
 }
 
 func loadSchemas(dir string) (map[string]*schemaDoc, error) {
-	files, err := filepath.Glob(filepath.Join(dir, "*.v1.json"))
+	files, err := filepath.Glob(filepath.Join(dir, "*.v*.json"))
 	if err != nil {
 		return nil, err
 	}
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no *.v1.json in %s", dir)
+		return nil, fmt.Errorf("no *.v*.json in %s", dir)
 	}
 	out := map[string]*schemaDoc{}
 	for _, f := range files {
@@ -95,7 +97,11 @@ func loadSchemas(dir string) (map[string]*schemaDoc, error) {
 		}
 		base := filepath.Base(f)
 		name := strings.SplitN(base, ".", 2)[0]
-		out[name] = &schemaDoc{name: name, file: base, root: root}
+		d := &schemaDoc{name: name, file: base, root: root}
+		// The newest major is the one documented.
+		if have, ok := out[name]; !ok || schema.Major(d.str("x-version")) > schema.Major(have.str("x-version")) {
+			out[name] = d
+		}
 	}
 	return out, nil
 }
@@ -160,7 +166,7 @@ func render(names []string, schemas map[string]*schemaDoc) (string, error) {
 		n = strings.TrimSpace(n)
 		s, ok := schemas[n]
 		if !ok {
-			return "", fmt.Errorf("json-docs region names %q: no schema/%s.v1.json", n, n)
+			return "", fmt.Errorf("json-docs region names %q: no schema/%s.v*.json", n, n)
 		}
 		if i > 0 {
 			b.WriteString("\n")
