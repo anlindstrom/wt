@@ -186,18 +186,19 @@ func TestFoldNamesTheFixupsAheadOfTheirContext(t *testing.T) {
 func probeUnchecked(t *testing.T) string {
 	t.Helper()
 	line := "probe: not analysed"
-	was := syncrun.ContextGapsOf
-	syncrun.ContextGapsOf = func(dir string, commits []string, cfg *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
-		gaps, unchecked, err := was(dir, commits, cfg)
-		return gaps, append(unchecked, line), err
+	was := syncrun.AnalyseFixupsOf
+	syncrun.AnalyseFixupsOf = func(dir string, commits []string, cfg *wtsync.Config) (wtsync.FixupAnalysis, error) {
+		a, err := was(dir, commits, cfg)
+		a.Unchecked = append(a.Unchecked, line)
+		return a, err
 	}
-	t.Cleanup(func() { syncrun.ContextGapsOf = was })
+	t.Cleanup(func() { syncrun.AnalyseFixupsOf = was })
 	return line
 }
 
 // A finished fold keeps, in its report, what it could not analyse.
 func TestAFinishedFoldKeepsWhatItCouldNotAnalyse(t *testing.T) {
-	// Not parallel: it swaps syncrun.ContextGapsOf.
+	// Not parallel: it swaps syncrun.AnalyseFixupsOf.
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
@@ -372,16 +373,16 @@ func TestUndoAfterARefusedResumePutsTheLineBack(t *testing.T) {
 // --json has the failure in contextUnchecked, not an empty contextGaps
 // that reads as nothing found.
 func TestTheLookSaysWhenItCannotTellTheContext(t *testing.T) {
-	// Not parallel: it swaps syncrun.ContextGapsOf.
+	// Not parallel: it swaps syncrun.AnalyseFixupsOf.
 	if testing.Short() {
 		t.Skip("integration: a stack over real repositories and worktrees")
 	}
 	ctx, _ := synccmdtest.ContextLine(t, false)
-	was := syncrun.ContextGapsOf
-	syncrun.ContextGapsOf = func(string, []string, *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
-		return nil, nil, errors.New("merge-tree: out of cheese")
+	was := syncrun.AnalyseFixupsOf
+	syncrun.AnalyseFixupsOf = func(string, []string, *wtsync.Config) (wtsync.FixupAnalysis, error) {
+		return wtsync.FixupAnalysis{}, errors.New("merge-tree: out of cheese")
 	}
-	t.Cleanup(func() { syncrun.ContextGapsOf = was })
+	t.Cleanup(func() { syncrun.AnalyseFixupsOf = was })
 	look := synccmd.SyncOptions{NoFetch: true, Stack: &synccmd.StackLook{Work: gittest.ContextTmp, Autosquash: true}}
 	note := "which fixups lack their context could not be read: merge-tree: out of cheese"
 	st := synccmdtest.OverviewJSONWith(t, ctx, look).Stack

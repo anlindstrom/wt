@@ -22,6 +22,12 @@ func contextLine(t *testing.T, both bool) (*gittest.ContextLine, []string) {
 	return s, strings.Fields(gitIn(t, dir, "rev-list", "--reverse", s.Base+".."+gittest.ContextTmp))
 }
 
+// ContextGaps is the gaps AnalyseFixups finds, and its notes.
+func ContextGaps(dir string, commits []string, cfg *Config) ([]ContextGap, []string, error) {
+	a, err := AnalyseFixups(dir, commits, cfg)
+	return a.Gaps, a.Unchecked, err
+}
+
 // Both fixups of the case are named, each with its hunk and the first later
 // commit that carries its context; the hunk of the first fixup whose context
 // its target has (size:) is not.

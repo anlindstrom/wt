@@ -409,14 +409,14 @@ func ReadSideHolders(ctx *kit.Context, sides []wtsync.SideBranch, listed []agent
 // warning, and read is false. PrintLayers says both, and for a fold in place,
 // inPlace, which gaps are of fixups it applies.
 func ContextGaps(dir string, line wtsync.Line, s *Stack, cfg *wtsync.Config, inPlace bool) (read []wtsync.ContextGap, ok bool) {
-	gaps, unchecked, err := ContextGapsOf(dir, line.Commits, cfg)
+	a, err := AnalyseFixupsOf(dir, line.Commits, cfg)
 	if err != nil {
 		s.ContextUnchecked = append(s.ContextUnchecked, "which fixups lack their context could not be read: "+err.Error())
 		return nil, false
 	}
-	s.ContextGaps = GapsJSON(gaps)
-	s.ContextUnchecked = append(s.ContextUnchecked, unchecked...)
-	for _, g := range gaps {
+	s.ContextGaps = GapsJSON(a.Gaps)
+	s.ContextUnchecked = append(s.ContextUnchecked, a.Unchecked...)
+	for _, g := range a.Gaps {
 		if inPlace && g.Applies {
 			if s.applied == nil {
 				s.applied = map[string]bool{}
@@ -424,11 +424,17 @@ func ContextGaps(dir string, line wtsync.Line, s *Stack, cfg *wtsync.Config, inP
 			s.applied[g.Fixup] = true
 		}
 	}
-	return gaps, true
+	return a.Gaps, true
 }
 
-// ContextGapsOf is wtsync.ContextGaps, replaced in a test.
-var ContextGapsOf = wtsync.ContextGaps
+// AnalyseFixupsOf is wtsync.AnalyseFixups, replaced in a test.
+var AnalyseFixupsOf = wtsync.AnalyseFixups
+
+// ContextGapsOf is the gaps AnalyseFixupsOf finds, and its notes.
+func ContextGapsOf(dir string, commits []string, cfg *wtsync.Config) ([]wtsync.ContextGap, []string, error) {
+	a, err := AnalyseFixupsOf(dir, commits, cfg)
+	return a.Gaps, a.Unchecked, err
+}
 
 // GapsJSON is gaps as --json reports them.
 func GapsJSON(gaps []wtsync.ContextGap) []StackContextGap {

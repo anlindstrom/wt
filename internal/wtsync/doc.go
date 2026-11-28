@@ -53,7 +53,7 @@
 //
 // Used from outside: AssessOwn, AssessTo, Assessment, Target,
 // FileOutcome, KeyGroup, KeyCounts, LandingList, Dropped, ReplayPlan,
-// ContextGaps, GapsAt, BehindAhead, PlanMoves, PlanMovesOnto, HasMoves, PartMove, MoveName, LineRange,
+// AnalyseFixups, GapsAt, BehindAhead, PlanMoves, PlanMovesOnto, HasMoves, PartMove, MoveName, LineRange,
 // ParseLineRange, MoveWhat.
 //
 // # 3. Rebase driver
