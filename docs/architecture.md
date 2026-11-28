@@ -250,7 +250,16 @@ on it (in a worktree or not), moved by one rebase of the top. A `--stack`,
    ref over a `--force-with-lease` on the commit the record holds for it
    (`StackRecord.Pushes`, read from `Own` before anything moved, so a resume
    leases on the run's value, not on a later fetch). What it leaves out goes to
-   `OfferPush` as before; with `--no-push` or nobody to ask it does nothing. It
+   `OfferPush` as before, less the line's own branch where a push of it would
+   create a remote branch nothing asked for (the run saw no remote branch
+   at that remote, name and push URL, `BranchPush.SawAt`; nothing recorded; no
+   `--push-line`); with `--no-push` or nobody to ask it pushes
+   nothing. A run or resume that leaves a record ends with `push: wt sync push
+   <work> --stack` (`syncrun.SayPushLater`). A moved layer with nowhere to push
+   whose siblings' records follow one pattern is told the `wt sync push-to`
+   command (`Own.SiblingPushTo`); nothing is recorded, and the line that counts what is
+   left names every moved layer nothing says where to push. A record whose runs
+   disagree on a destination ends pointing at `--dry-run` instead. It
    refuses the whole push, printing the per-branch commands, when the line was
    not left pushable, the record has no leases, the line's branch has no safe
    push, a layer the run left unchanged is not level with its remote branch

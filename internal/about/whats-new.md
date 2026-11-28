@@ -17,6 +17,12 @@ run's, `wt sync push --stack` (and a run's own push) now goes over that lease an
 line. Anything else is refused in one line, printed once; `--dry-run` lists the branches, and now
 asks git for a dry run of the push and fails where git would refuse it.
 
+## 2026-11-28 09:43 — A `--stack` run no longer prints a push that publishes your local top branch
+
+The run ends with `push: wt sync push <work> --stack`. A `git push` of the line's own branch is
+printed only when the run saw its remote branch, a destination is recorded, or with `--push-line`.
+A record no push takes ends pointing at `--dry-run` instead.
+
 ## 2026-11-28 09:43 — A new layer with no push target is told the command its siblings imply
 
 When the other layers' recorded targets follow one pattern and the matching remote branch exists,

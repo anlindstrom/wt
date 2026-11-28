@@ -37,6 +37,28 @@ type BranchPush struct {
 	Why      string `json:"why,omitempty"`
 	// Rule is what decided where it pushes: recorded, or its own name.
 	Rule string `json:"rule,omitempty"`
+	// Seen is the remote branch that was there when this was read, whether or
+	// not a push over it is safe; zero when none was.
+	Seen SeenBranch `json:"seen,omitzero"`
+}
+
+// SeenBranch is a remote branch: its remote, its name there and the one URL
+// the remote pushed to, "" for a remote with no or several.
+type SeenBranch struct {
+	Remote   string `json:"remote"`
+	Branch   string `json:"branch"`
+	Endpoint string `json:"endpoint"`
+}
+
+// SawAt reports that the remote branch a push to endpoint would write, branch
+// of remote, was there when b was read.
+func (b BranchPush) SawAt(remote, branch, endpoint string) bool {
+	seen := b.Seen
+	if seen == (SeenBranch{}) && b.Lease != "" {
+		// A record that kept only the lease.
+		seen = SeenBranch{b.Remote, b.RemoteBranch, b.Endpoint}
+	}
+	return endpoint != "" && seen == SeenBranch{remote, branch, endpoint}
 }
 
 // Pushes reports that the branch has a safe push.
@@ -67,6 +89,15 @@ func (o *Own) BranchPush(branch string, top bool) BranchPush {
 		return bp
 	}
 	st := o.State(branch)
+	switch st.State {
+	case OwnInSync, OwnAhead, OwnRebased, OwnBehind, OwnDiverged:
+		bp.Seen = SeenBranch{Remote: to.Remote, Branch: to.Branch}
+		if o.remotes[to.Remote] != nil {
+			if urls := o.urls(to.Remote).pushURLs; len(urls) == 1 {
+				bp.Seen.Endpoint = urls[0]
+			}
+		}
+	}
 	switch st.State {
 	case OwnInSync, OwnAhead:
 		bp.Lease = st.Commit

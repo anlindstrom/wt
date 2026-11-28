@@ -103,7 +103,8 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 			fmt.Fprintf(w, "  note: the record of what is left for a later push could not be %s (%v)\n", doing, err)
 		}
 		if mine {
-			s.recordNote = fmt.Sprintf("the line's push record %s; wt sync push %s --stack --dry-run shows what is left to push now", why, s.work)
+			s.recordNote = fmt.Sprintf("the line's push record %s; %s shows what is left to push now", why, stackPushCommand(s.work, "--dry-run"))
+			fmt.Fprintf(w, "  note: %s\n", s.recordNote)
 		}
 		return
 	}
@@ -120,11 +121,58 @@ func SettleStackPush(ctx *kit.Context, w io.Writer, s *Stack) {
 	}
 }
 
+// SayPushLater ends what a run or a resume prints about its push with the
+// command that pushes what it left in the record, once SettleStackPush has
+// checked there is a record and it holds something that command sends; for a
+// record no push takes, with the command that says why.
+func SayPushLater(w io.Writer, s *Stack) {
+	switch {
+	case s == nil:
+	case s.blocked:
+		fmt.Fprintf(w, "no push takes the record: %s lists why\n", stackPushCommand(s.work, "--dry-run"))
+	case s.pushLater != nil:
+		fmt.Fprintf(w, "push: %s\n", stackPushCommand(s.work))
+	}
+}
+
+// stackPushCommand is wt sync push <work> --stack with flags, as printed for
+// pasting into a shell. A work name that reads as a flag goes last, after --.
+func stackPushCommand(work string, flags ...string) string {
+	args := append([]string{"--stack"}, flags...)
+	if strings.HasPrefix(work, "-") {
+		args = append(args, "--", workArg(work))
+	} else {
+		args = append([]string{workArg(work)}, args...)
+	}
+	return "wt sync push " + strings.Join(args, " ")
+}
+
+// undoCommand is wt sync undo <work>, as stackPushCommand prints a command.
+func undoCommand(work string) string {
+	if strings.HasPrefix(work, "-") {
+		return "wt sync undo -- " + workArg(work)
+	}
+	return "wt sync undo " + workArg(work)
+}
+
+// workArg is a work name as a printed command takes it: quoted where a shell
+// would read it as anything but itself.
+func workArg(work string) string {
+	plain := func(r rune) bool {
+		return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_./@+=:,-", r)
+	}
+	// zsh expands a word that starts with = to a command's path.
+	if work != "" && !strings.HasPrefix(work, "=") && strings.IndexFunc(work, func(r rune) bool { return !plain(r) }) < 0 {
+		return work
+	}
+	return kit.ShellQuote(work)
+}
+
 // recoveryNote is what a reader of the result has to be told about a record
 // the result cannot name, "" when there is nothing.
 func (s *Stack) recoveryNote() string {
 	if s.kept != nil && !s.settled {
-		return fmt.Sprintf("the run ended before it settled its push; wt sync push %s --stack --dry-run shows what is left to push", s.work)
+		return fmt.Sprintf("the run ended before it settled its push; %s shows what is left to push", stackPushCommand(s.work, "--dry-run"))
 	}
 	return s.recordNote
 }
@@ -133,13 +181,18 @@ func (s *Stack) recoveryNote() string {
 // that push sends: the line's own branch, left out when it would create its
 // remote branch, is named with the flag that includes it.
 func (s *Stack) laterLine(next *wtsync.PushRecord, left []string) string {
+	var line string
 	sends := laterSends(next, left)
-	if len(sends) == 0 {
-		return fmt.Sprintf("%s kept for wt sync push %s --stack --push-line", next.Branch, s.work) + s.nowhereClause()
-	}
-	line := fmt.Sprintf("%s: wt sync push %s --stack pushes %s later", s.unpushedLine(sends), s.work, itOrThem(len(sends)))
-	if len(sends) < len(left) {
-		line += fmt.Sprintf("; the line's own branch, %s, goes with --push-line", next.Branch)
+	switch conflicts := destinationConflicts(next); {
+	case len(conflicts) > 0:
+		line = fmt.Sprintf("%s: the recorded runs push %s to different remote branches or endpoints", s.unpushedLine(left), strings.Join(conflicts, ", "))
+	case len(sends) == 0:
+		line = fmt.Sprintf("%s kept for %s", next.Branch, stackPushCommand(s.work, "--push-line"))
+	default:
+		line = fmt.Sprintf("%s: %s pushes %s later", s.unpushedLine(sends), stackPushCommand(s.work), itOrThem(len(sends)))
+		if len(sends) < len(left) {
+			line += fmt.Sprintf("; the line's own branch, %s, goes with --push-line", next.Branch)
+		}
 	}
 	return line + s.nowhereClause()
 }
@@ -151,6 +204,16 @@ func (s *Stack) nowhereClause() string {
 		return ""
 	}
 	return fmt.Sprintf("; %d more with nowhere to push: %s", len(s.nowhere), strings.Join(s.nowhere, ", "))
+}
+
+// destinationConflicts is the branches rec's runs push to more than one place.
+func destinationConflicts(rec *wtsync.PushRecord) []string {
+	_, conflicts := rec.Merged()
+	out := make([]string, len(conflicts))
+	for i, c := range conflicts {
+		out[i] = c.Branch
+	}
+	return out
 }
 
 // laterSends is what of left a plain wt sync push --stack sends: all of it
@@ -168,6 +231,7 @@ func laterSends(next *wtsync.PushRecord, left []string) []string {
 // there is no command, and the push says it is left out, unless it tried that
 // branch.
 func (s *Stack) nameLater(rec *wtsync.PushRecord, left []string) {
+	s.blocked = len(destinationConflicts(rec)) > 0
 	if len(laterSends(rec, left)) > 0 {
 		s.pushLater = []string{"wt", "sync", "push", s.work, "--stack"}
 		return
@@ -517,14 +581,14 @@ func recordedItems(ctx *kit.Context, rec *wtsync.PushRecord) recordedPush {
 	}
 	reasons = append(reasons, unsentLayers(ctx, rec, merged, conflicts)...)
 	if unread := runsWithoutLayers(rec); len(unread) > 0 {
-		reasons = append(reasons, "the record of "+strings.Join(unread, ", ")+" was written by a wt that did not keep the line's layers, so it cannot show that every moved layer is in it; push the layers it names by hand over the leases it recorded, or wt sync push "+rec.Work+" --stack --forget drops the record, and a fresh --no-push run records the line again")
+		reasons = append(reasons, "the record of "+strings.Join(unread, ", ")+" was written by a wt that did not keep the line's layers, so it cannot show that every moved layer is in it; push the layers it names by hand over the leases it recorded, or "+stackPushCommand(rec.Work, "--forget")+" drops the record, and a fresh --no-push run records the line again")
 	}
 	out := recordedPush{items: make([]stackItem, len(merged)), merged: merged, conflicts: conflicts}
 	for i, it := range merged {
 		out.items[i] = stackItem{BranchPush: it.BranchPush, New: it.New, Top: it.Top}
 	}
 	if len(conflicts) > 0 {
-		reasons = append(reasons, "wt sync push "+rec.Work+" --stack --dry-run lists them")
+		reasons = append(reasons, stackPushCommand(rec.Work, "--dry-run")+" lists them")
 	}
 	if len(reasons) > 0 {
 		out.why = strings.Join(reasons, "; ")
@@ -577,7 +641,7 @@ func (p *recordedPush) settleLeases(main, work string) {
 		}
 	}
 	const differ = "the recorded runs' leases differ and"
-	list := "wt sync push " + work + " --stack --dry-run lists them"
+	list := stackPushCommand(work, "--dry-run") + " lists them"
 	switch {
 	case off > 0:
 		p.why = fmt.Sprintf("%s: %s the remote is not at the newest run's", kit.Count(off, "branch", "branches"), differ)
@@ -601,7 +665,7 @@ func leaseWhere(at string) string {
 }
 
 func forgetAndRunAgain(work string) string {
-	return "wt sync push " + work + " --stack --forget, then a fresh --no-push run"
+	return stackPushCommand(work, "--forget") + ", then a fresh --no-push run"
 }
 
 func itOrThem(n int) string {
@@ -637,7 +701,7 @@ func unsentLayers(ctx *kit.Context, rec *wtsync.PushRecord, merged []wtsync.Merg
 			if l.Branch == rec.Branch || leftNow || conflicted || slices.ContainsFunc(merged, func(m wtsync.MergedItem) bool { return m.Branch == l.Branch }) {
 				continue
 			}
-			way := "push " + l.Branch + " first, then push again, or wt sync push " + rec.Work + " --stack --forget drops the record"
+			way := "push " + l.Branch + " first, then push again, or " + stackPushCommand(rec.Work, "--forget") + " drops the record"
 			if why := unsentLayer(ctx, own, l, "the run of "+runLabel(runs[i].Written),
 				"the runs left it unchanged, so it was already off its remote branch before them", way); why != "" {
 				reasons = append(reasons, why)

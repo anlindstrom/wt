@@ -210,7 +210,14 @@ func newSyncRebaseCmd() *cobra.Command {
 			"also moves a layer only an idle session or a process holds, never a dirty\n" +
 			"one. wt sync undo <work> puts back the line and every layer it moved.\n" +
 			"Without --push each moved layer gets its push command, with a lease on\n" +
-			"the commit last fetched for it, and is not pushed. With --push (or a yes\n" +
+			"the commit last fetched for it, and is not pushed; the run ends with\n" +
+			"push: wt sync push <work> --stack, which pushes them over the run's\n" +
+			"leases. A git push of the line's own branch is printed too only when\n" +
+			"that branch has a remote branch or a recorded destination (wt sync\n" +
+			"push-to), or with --push-line. A moved layer with nowhere to push, whose\n" +
+			"siblings' records follow one pattern, is told the wt sync push-to command\n" +
+			"that pattern gives; nothing is recorded, and the line counting what is\n" +
+			"left unpushed names every such layer. With --push (or a yes\n" +
 			"to the question) every moved layer and the line's branch go in one\n" +
 			"git push --atomic per remote, each over that lease: the commit the\n" +
 			"remote branch held when the run began, kept in the run's record. If a\n" +
@@ -359,7 +366,7 @@ func newSyncRebaseCmd() *cobra.Command {
 	rebase.Flags().StringVar(&edit, "edit", "", "with --stack: stop at this commit of the line for you to amend, and replay the rest onto it, in place")
 	addOntoFlags(rebase, &onto, &upstream, "rebase the worktrees named onto <ref> instead of trunk: a branch, origin/<branch>, a tag or a commit")
 	sel.add(rebase, true)
-	rebase.Flags().BoolVar(&pushLine, "push-line", false, "with --stack and a push: include the line's own branch when that would create its remote branch (left out otherwise, and named)")
+	rebase.Flags().BoolVar(&pushLine, "push-line", false, "with --stack: include the line's own branch when that would create its remote branch, in the push or in the push commands printed")
 	push = addPushFlags(rebase, "push the worktrees that finish, without asking",
 		"neither push nor ask; print the push command")
 	return rebase

@@ -170,6 +170,8 @@ type Stack struct {
 	// nil until the record is verified, and when it holds nothing of the
 	// run's for that command.
 	pushLater []string
+	// blocked says the record the push left is one no push takes.
+	blocked bool
 	// unsaved says the record could not be saved; settled that the saved one
 	// was settled; recordNote why it could not be verified then.
 	unsaved, settled bool

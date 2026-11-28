@@ -104,6 +104,9 @@ func TestPushLaterCommandNeverPublishesTheLinesOwnBranch(t *testing.T) {
 		m.onlyTheLineMoves(t)
 		s, human := m.summaryRun(t, syncrun.PushNever, true)
 		lineAlone(t, m, s, human)
+		if got := pushLines(human); len(got) != 0 || !strings.Contains(human, "tmp/x kept for wt sync push tmp/x --stack --push-line") {
+			t.Errorf("push lines %q, want none and the line named as kept\n%s", got, human)
+		}
 	})
 }
 

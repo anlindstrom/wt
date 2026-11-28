@@ -80,7 +80,7 @@ type StackPushed struct {
 // LineLeftOutWhy is why a stack push leaves the line's own branch out, and the
 // flag that includes it.
 func LineLeftOutWhy(bp wtsync.BranchPush, work string) string {
-	return fmt.Sprintf("pushing it would create %s/%s on %s; wt sync push %s --stack --push-line, or --push-line on the run, pushes it", bp.Remote, bp.RemoteBranch, bp.Remote, work)
+	return fmt.Sprintf("pushing it would create %s/%s on %s; %s, or --push-line on the run, pushes it", bp.Remote, bp.RemoteBranch, bp.Remote, stackPushCommand(work, "--push-line"))
 }
 
 // stackItem is one branch that goes into a stack's push.
@@ -134,6 +134,8 @@ func (s *Stack) HasPush() bool {
 // returned are for OfferPush, with the mode to offer them in.
 func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s *Stack, targets []PushTarget) (rest []PushTarget, restMode PushMode, pushed, failed []string) {
 	rest, restMode = targets, mode
+	// Whatever way this ends, what is left to print or ask about.
+	defer func() { rest = s.withoutUnwanted(ctx, w, ask.PushLine, rest) }()
 	asking := mode == PushAsk && ask.ConfirmPush != nil
 	if s == nil || mode == PushNever || mode == PushAsk && !asking {
 		return
@@ -227,6 +229,32 @@ func PushStack(ctx *kit.Context, w io.Writer, mode PushMode, ask PushOptions, s 
 	return rest, restMode, pushed, failed
 }
 
+// withoutUnwanted is targets without the line's own branch when a push of it
+// could create a remote branch nobody asked for: the run did not see one,
+// nothing records where it goes, and --push-line was not given. A run with no
+// record to name it says so here.
+func (s *Stack) withoutUnwanted(ctx *kit.Context, w io.Writer, pushLine bool, targets []PushTarget) []PushTarget {
+	if s == nil || pushLine {
+		return targets
+	}
+	return slices.DeleteFunc(slices.Clone(targets), func(t PushTarget) bool {
+		if t.Branch != s.Branch {
+			return false
+		}
+		to := PushOf(ctx, t)
+		if to.Remote == "" || to.Rule == "recorded" {
+			return false
+		}
+		if endpoint, err := wtsync.PushEndpoint(ctx.Repo.MainRoot, to.Remote); err == nil && s.top != nil && s.top.SawAt(to.Remote, to.Branch, endpoint) {
+			return false
+		}
+		if s.kept == nil {
+			fmt.Fprintf(w, "  = %s not pushed, and no push of it is printed: the run saw no remote branch %s; --push-line on a run, or wt sync %s, says to push it\n", t.Branch, to.Ref(), PushToName)
+		}
+		return true
+	})
+}
+
 // settleLayerPushes takes the push command off each layer the push sent: a
 // layer carries one only while its push is still owed.
 func (s *Stack) settleLayerPushes() {
@@ -282,7 +310,7 @@ func (s *Stack) unkeptRecord(ctx *kit.Context) string {
 		return ""
 	}
 	return "this run could not be added to the record of what earlier runs left unpushed (" + strings.Join(rec.Branches(), ", ") +
-		"), so pushing only this run's branches could leave theirs behind on the remote; wt sync undo " + s.work + " puts this run back, and wt sync push " + s.work + " --stack then pushes the record"
+		"), so pushing only this run's branches could leave theirs behind on the remote; " + undoCommand(s.work) + " puts this run back, and " + stackPushCommand(s.work) + " then pushes the record"
 }
 
 // unchangedOffRemote is why a layer the run left unchanged stops the push of
@@ -295,7 +323,7 @@ func (s *Stack) unchangedOffRemote(ctx *kit.Context) string {
 			continue
 		}
 		pl := wtsync.PushLayer{Branch: l.Branch, Result: wtsync.MoveUnchanged, Tip: l.OldTip}
-		way := "push " + l.Branch + " first, then wt sync push " + s.work + " --stack"
+		way := "push " + l.Branch + " first, then " + stackPushCommand(s.work)
 		if why := unsentLayer(ctx, own, pl, "this run", "the run left it unchanged, so it was already off its remote branch before it", way); why != "" {
 			return why
 		}
@@ -392,7 +420,7 @@ func pushGroup(ctx *kit.Context, w io.Writer, remote string, group []stackItem, 
 		}
 		return out, true
 	}
-	undo := fmt.Sprintf("every local branch stays where the rebase put it; wt sync undo %s puts back the line and every layer moved", work)
+	undo := fmt.Sprintf("every local branch stays where the rebase put it; %s puts back the line and every layer moved", undoCommand(work))
 	reasons := refusals(err)
 	if len(reasons) == 0 && !strings.Contains(err.Error(), noAtomic) {
 		reconcile(ctx, w, remote, endpoint, group, err, record, undo)

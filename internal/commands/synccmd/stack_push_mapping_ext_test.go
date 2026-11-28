@@ -31,13 +31,19 @@ const mappedTop = "tmp/x"
 
 func newMappedLine(t *testing.T) *mappedLine {
 	t.Helper()
+	return newMappedLineNamed(t, mappedTop)
+}
+
+// newMappedLineNamed is newMappedLine with top for the line's own branch.
+func newMappedLineNamed(t *testing.T, top string) *mappedLine {
+	t.Helper()
 	m := &mappedLine{tips: map[string]string{}}
 	var main string
 	ctx, main := synccmdtest.OpenLine(t, func(main, wtDir string) {
 		gittest.WriteFile(t, filepath.Join(main, "t.txt"), "t\n")
 		gittest.Git(t, main, "add", "-A")
 		gittest.Git(t, main, "commit", "-q", "--no-verify", "-m", "base")
-		gittest.Git(t, main, "checkout", "-q", "-b", mappedTop)
+		gittest.Git(t, main, "checkout", "-q", "-b", top)
 		for _, l := range mappedLayers {
 			gittest.WriteFile(t, filepath.Join(main, l+".txt"), l+"\n")
 			gittest.Git(t, main, "add", "-A")
@@ -45,7 +51,7 @@ func newMappedLine(t *testing.T) *mappedLine {
 			gittest.Git(t, main, "branch", "tmp/layer/"+l)
 			m.tips[l] = gittest.Git(t, main, "rev-parse", "HEAD")
 		}
-		m.tips[mappedTop] = m.tips["c"]
+		m.tips[top] = m.tips["c"]
 		gittest.Git(t, main, "checkout", "-q", "main")
 		gittest.WriteFile(t, filepath.Join(main, ".wt-sync.yaml"), "conflicts: []\n")
 		gittest.Git(t, main, "add", "-A")
@@ -61,7 +67,7 @@ func newMappedLine(t *testing.T) *mappedLine {
 		}
 		gittest.Git(t, main, "remote", "add", "origin", m.bare)
 		gittest.Git(t, main, "fetch", "-q", "origin")
-		gittest.Git(t, main, "worktree", "add", "-q", filepath.Join(wtDir, "x"), mappedTop)
+		gittest.Git(t, main, "worktree", "add", "-q", filepath.Join(wtDir, "x"), top)
 	})
 	m.ctx = ctx
 	// The mapping a person records by hand, until wt sync push-to --branch.
