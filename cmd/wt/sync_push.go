@@ -45,6 +45,8 @@ func newSyncPushCmd() *cobra.Command {
 			"named.\n\n" +
 			"--forget drops the line's record, and only that: no ref moves and nothing\n" +
 			"is pushed. It says what it dropped; with --dry-run it says what it would.\n" +
+			"It never asks, so --yes is accepted and changes nothing; it does not take\n" +
+			"--push-line, since it pushes nothing.\n" +
 			"Use it after a push made by hand, which leaves leases out of date.\n\n" +
 			"It asks first on a terminal (default no); --yes skips the question, and\n" +
 			"with no terminal and no --yes nothing is pushed. --dry-run says what each\n" +
@@ -62,8 +64,8 @@ func newSyncPushCmd() *cobra.Command {
 			if !stack {
 				return usagef("wt sync push pushes a --stack line: add --stack")
 			}
-			if forget && (yes || pushLine) {
-				return usagef("--forget pushes nothing: it takes neither --yes nor --push-line")
+			if forget && pushLine {
+				return usagef("--forget pushes nothing: it does not take --push-line")
 			}
 			return withVerbContext(cmd, args, "sync push", asJSON, func(ctx *kit.Context, j *syncrun.RunJournal) error {
 				opts := syncfix.PushLaterOptions{DryRun: dryRun, Forget: forget, Journal: j}
